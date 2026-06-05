@@ -17,7 +17,7 @@ public:
     void processBlock (juce::AudioBuffer<float>& buffer);
     void reset();
 
-    void addProcessor (std::unique_ptr<AudioProcessorBase> processor);
+    AudioProcessorBase* addProcessor (std::unique_ptr<AudioProcessorBase> processor);
     void clear();
 
     void setBypassed (bool shouldBypass) noexcept;

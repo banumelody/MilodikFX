@@ -3,6 +3,7 @@
 #include <JuceHeader.h>
 
 #include "audio/AudioEngine.h"
+#include "dsp/GainProcessor.h"
 
 class MainComponent final : public juce::Component,
                             private juce::AudioIODeviceCallback,
@@ -22,6 +23,8 @@ private:
     static constexpr const char* kKeyRoutingModeId = "ui.routingModeId";
     static constexpr const char* kKeyMonitorGainDb = "ui.monitorGainDb";
     static constexpr const char* kKeyGlobalBypass = "ui.globalBypass";
+    static constexpr const char* kKeyCleanBoostEnabled = "dsp.cleanBoost.enabled";
+    static constexpr const char* kKeyCleanBoostGainDb = "dsp.cleanBoost.gainDb";
     static constexpr const char* kKeyAudioDeviceStateXml = "audio.deviceStateXml";
 
     bool initialiseAudioWithFallback (const juce::XmlElement* savedState);
@@ -78,17 +81,21 @@ private:
     juce::GroupComponent deviceGroup;
     juce::GroupComponent monitorGroup;
     juce::GroupComponent dspChainGroup;
+    juce::GroupComponent cleanBoostGroup;
 
     juce::Label monitorNoteLabel;
     juce::Label inputLevelLabel;
     juce::Label outputLevelLabel;
     juce::Label dspChainNoteLabel;
+    juce::Label cleanBoostGainLabel;
 
     juce::ToggleButton monitorEnabledToggle;
     juce::ToggleButton muteToggle;
     juce::ComboBox routingModeCombo;
     juce::Slider monitorGainSlider;
     juce::ToggleButton globalBypassToggle;
+    juce::Slider cleanBoostGainSlider;
+    juce::ToggleButton cleanBoostToggle;
 
     juce::TextButton retryAudioButton { "Retry audio" };
 
@@ -112,6 +119,10 @@ private:
     std::atomic<float> monitorGainLinear { 1.0f };
     std::atomic<float> monitorGainDb { 0.0f };
     std::atomic<bool> globalBypass { false };
+    std::atomic<float> cleanBoostGainDb { 0.0f };
+    std::atomic<bool> cleanBoostEnabled { true };
+
+    milodikfx::dsp::GainProcessor* cleanBoostProcessor = nullptr;
 
     float peakHoldDb = -100.0f;
     uint32_t peakHoldLastUpdateMs = 0;

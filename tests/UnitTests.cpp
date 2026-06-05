@@ -3,6 +3,7 @@
 #include <cmath>
 
 #include "dsp/DSPChainManager.h"
+#include "dsp/GainProcessor.h"
 
 class SettingsPersistenceTests final : public juce::UnitTest
 {
@@ -144,6 +145,35 @@ public:
 
         for (int i = 0; i < buffer.getNumSamples(); ++i)
             expect (std::abs (buffer.getSample (0, i) - 0.5f) < 0.0001f);
+
+        beginTest ("Gain processor applies dB gain");
+
+        milodikfx::dsp::GainProcessor gain;
+        gain.setEnabled (true);
+        gain.setGainDb (6.0f);
+        gain.prepareToPlay (48000.0, 32, 1);
+
+        juce::AudioBuffer<float> gainBuffer (1, 4);
+        gainBuffer.clear();
+        for (int i = 0; i < gainBuffer.getNumSamples(); ++i)
+            gainBuffer.setSample (0, i, 1.0f);
+
+        gain.processBlock (gainBuffer);
+
+        const auto expected = juce::Decibels::decibelsToGain (6.0f);
+        for (int i = 0; i < gainBuffer.getNumSamples(); ++i)
+            expect (std::abs (gainBuffer.getSample (0, i) - expected) < 0.0001f);
+
+        beginTest ("Gain processor bypasses when disabled");
+
+        gain.setEnabled (false);
+        for (int i = 0; i < gainBuffer.getNumSamples(); ++i)
+            gainBuffer.setSample (0, i, 0.25f);
+
+        gain.processBlock (gainBuffer);
+
+        for (int i = 0; i < gainBuffer.getNumSamples(); ++i)
+            expect (std::abs (gainBuffer.getSample (0, i) - 0.25f) < 0.0001f);
     }
 };
 

@@ -218,6 +218,8 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     int persistedRouting = 1;
     double persistedGainDb = 0.0;
     bool persistedGlobalBypass = false;
+    double persistedCleanBoostGainDb = 0.0;
+    bool persistedCleanBoostEnabled = true;
     juce::String persistedAudioXml;
 
     persistedMonitor = settingsFile.getBoolValue (kKeyMonitorEnabled, true);
@@ -225,10 +227,13 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     persistedRouting = settingsFile.getIntValue (kKeyRoutingModeId, 1);
     persistedGainDb = settingsFile.getDoubleValue (kKeyMonitorGainDb, 0.0);
     persistedGlobalBypass = settingsFile.getBoolValue (kKeyGlobalBypass, false);
+    persistedCleanBoostGainDb = settingsFile.getDoubleValue (kKeyCleanBoostGainDb, 0.0);
+    persistedCleanBoostEnabled = settingsFile.getBoolValue (kKeyCleanBoostEnabled, true);
     persistedAudioXml = settingsFile.getValue (kKeyAudioDeviceStateXml);
 
     persistedRouting = juce::jlimit (1, 4, persistedRouting);
     persistedGainDb = juce::jlimit (-24.0, 12.0, persistedGainDb);
+    persistedCleanBoostGainDb = juce::jlimit (0.0, 24.0, persistedCleanBoostGainDb);
 
     monitorEnabled.store (persistedMonitor, std::memory_order_relaxed);
     muted.store (persistedMute, std::memory_order_relaxed);
@@ -236,7 +241,18 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     monitorGainDb.store ((float) persistedGainDb, std::memory_order_relaxed);
     monitorGainLinear.store (juce::Decibels::decibelsToGain ((float) persistedGainDb), std::memory_order_relaxed);
     globalBypass.store (persistedGlobalBypass, std::memory_order_relaxed);
+    cleanBoostGainDb.store ((float) persistedCleanBoostGainDb, std::memory_order_relaxed);
+    cleanBoostEnabled.store (persistedCleanBoostEnabled, std::memory_order_relaxed);
     audioEngine.setBypassed (persistedGlobalBypass);
+
+    if (auto* processor = audioEngine.getChain().addProcessor (std::make_unique<milodikfx::dsp::GainProcessor>()))
+        cleanBoostProcessor = dynamic_cast<milodikfx::dsp::GainProcessor*> (processor);
+
+    if (cleanBoostProcessor != nullptr)
+    {
+        cleanBoostProcessor->setGainDb ((float) persistedCleanBoostGainDb);
+        cleanBoostProcessor->setEnabled (persistedCleanBoostEnabled);
+    }
 
     std::unique_ptr<juce::XmlElement> persistedAudioState;
     if (persistedAudioXml.isNotEmpty())
@@ -248,6 +264,8 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     settingsFile.setValue (kKeyRoutingModeId, persistedRouting);
     settingsFile.setValue (kKeyMonitorGainDb, persistedGainDb);
     settingsFile.setValue (kKeyGlobalBypass, persistedGlobalBypass);
+    settingsFile.setValue (kKeyCleanBoostGainDb, persistedCleanBoostGainDb);
+    settingsFile.setValue (kKeyCleanBoostEnabled, persistedCleanBoostEnabled);
     markSettingsDirty();
     saveSettingsIfNeeded (true);
 
@@ -277,6 +295,9 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     dspChainGroup.setText ("DSP Chain");
     addAndMakeVisible (dspChainGroup);
 
+    cleanBoostGroup.setText ("Clean Boost");
+    addAndMakeVisible (cleanBoostGroup);
+
     monitorNoteLabel.setText ("Passthrough: input -> output", juce::dontSendNotification);
     monitorNoteLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (monitorNoteLabel);
@@ -287,9 +308,13 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     outputLevelLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (outputLevelLabel);
 
-    dspChainNoteLabel.setText ("DSP Chain: (empty)", juce::dontSendNotification);
+    dspChainNoteLabel.setText ("DSP Chain: Clean Boost", juce::dontSendNotification);
     dspChainNoteLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (dspChainNoteLabel);
+
+    cleanBoostGainLabel.setText ("Gain", juce::dontSendNotification);
+    cleanBoostGainLabel.setJustificationType (juce::Justification::centredLeft);
+    addAndMakeVisible (cleanBoostGainLabel);
 
     monitorEnabledToggle.setButtonText ("Monitor");
     monitorEnabledToggle.setToggleState (persistedMonitor, juce::dontSendNotification);
@@ -359,6 +384,37 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     };
     addAndMakeVisible (globalBypassToggle);
 
+    cleanBoostGainSlider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
+    cleanBoostGainSlider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 70, 18);
+    cleanBoostGainSlider.setTextValueSuffix (" dB");
+    cleanBoostGainSlider.setRange (0.0, 24.0, 0.1);
+    cleanBoostGainSlider.setValue (persistedCleanBoostGainDb, juce::dontSendNotification);
+    cleanBoostGainSlider.onValueChange = [this]
+    {
+        const auto db = (float) cleanBoostGainSlider.getValue();
+        cleanBoostGainDb.store (db, std::memory_order_relaxed);
+        if (cleanBoostProcessor != nullptr)
+            cleanBoostProcessor->setGainDb (db);
+
+        settingsFile.setValue (kKeyCleanBoostGainDb, (double) db);
+        markSettingsDirty();
+    };
+    addAndMakeVisible (cleanBoostGainSlider);
+
+    cleanBoostToggle.setButtonText ("ON");
+    cleanBoostToggle.setToggleState (persistedCleanBoostEnabled, juce::dontSendNotification);
+    cleanBoostToggle.onClick = [this]
+    {
+        const auto v = cleanBoostToggle.getToggleState();
+        cleanBoostEnabled.store (v, std::memory_order_relaxed);
+        if (cleanBoostProcessor != nullptr)
+            cleanBoostProcessor->setEnabled (v);
+
+        settingsFile.setValue (kKeyCleanBoostEnabled, v);
+        markSettingsDirty();
+    };
+    addAndMakeVisible (cleanBoostToggle);
+
     retryAudioButton.onClick = [this]
     {
         initialiseAudioWithFallback (nullptr);
@@ -385,6 +441,7 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     deviceGroup.toBack();
     monitorGroup.toBack();
     dspChainGroup.toBack();
+    cleanBoostGroup.toBack();
 
     startTimerHz (30);
 }
@@ -468,9 +525,24 @@ void MainComponent::resized()
 
         auto chainHeader = chainArea.removeFromTop (26);
         globalBypassToggle.setBounds (chainHeader.removeFromRight (160).reduced (0, 2));
+        dspChainNoteLabel.setBounds (chainHeader);
 
-        chainArea.removeFromTop (6);
-        dspChainNoteLabel.setBounds (chainArea.removeFromTop (24));
+        chainArea.removeFromTop (8);
+        auto cardArea = chainArea.removeFromLeft (220);
+        cleanBoostGroup.setBounds (cardArea);
+
+        auto cardContent = cleanBoostGroup.getBounds().reduced (12);
+        cardContent.removeFromTop (22);
+
+        cleanBoostGainLabel.setBounds (cardContent.removeFromTop (18));
+        cardContent.removeFromTop (6);
+
+        auto knobArea = cardContent.removeFromTop (110);
+        cleanBoostGainSlider.setBounds (knobArea);
+
+        cardContent.removeFromTop (6);
+        cleanBoostToggle.setBounds (cardContent.removeFromTop (24));
+
     }
 }
 
@@ -812,6 +884,18 @@ void MainComponent::timerCallback()
         note += " | Gain " + juce::String (gainDb, 1) + " dB";
 
         monitorNoteLabel.setText (note, juce::dontSendNotification);
+    }
+
+    {
+        const auto bypassed = globalBypass.load (std::memory_order_relaxed);
+        const auto boostOn = cleanBoostEnabled.load (std::memory_order_relaxed);
+        const auto boostDb = cleanBoostGainDb.load (std::memory_order_relaxed);
+
+        juce::String chain = bypassed ? "Bypassed"
+                                      : "Clean Boost " + juce::String (boostOn ? "ON" : "OFF")
+                                            + " | Gain " + juce::String (boostDb, 1) + " dB";
+
+        dspChainNoteLabel.setText ("DSP Chain: " + chain, juce::dontSendNotification);
     }
 
     const auto rms = inputRms.load (std::memory_order_relaxed);

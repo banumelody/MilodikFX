@@ -31,15 +31,17 @@ void DSPChainManager::reset()
             processor->reset();
 }
 
-void DSPChainManager::addProcessor (std::unique_ptr<AudioProcessorBase> processor)
+AudioProcessorBase* DSPChainManager::addProcessor (std::unique_ptr<AudioProcessorBase> processor)
 {
     if (processor == nullptr)
-        return;
+        return nullptr;
 
     if (prepared)
         processor->prepareToPlay (currentSampleRate, currentSamplesPerBlock, currentNumChannels);
 
+    auto* raw = processor.get();
     processors.push_back (std::move (processor));
+    return raw;
 }
 
 void DSPChainManager::clear()
