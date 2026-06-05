@@ -6,6 +6,7 @@
 #include "dsp/GainProcessor.h"
 #include "dsp/OverdriveProcessor.h"
 #include "dsp/EQProcessor.h"
+#include "preset/PresetManager.h"
 
 class SettingsPersistenceTests final : public juce::UnitTest
 {
@@ -47,6 +48,69 @@ public:
 };
 
 static SettingsPersistenceTests settingsPersistenceTests;
+
+class PresetManagerTests final : public juce::UnitTest
+{
+public:
+    PresetManagerTests()
+        : juce::UnitTest ("PresetManager")
+    {
+    }
+
+    void runTest() override
+    {
+        beginTest ("Save/Load/Delete preset roundtrip");
+
+        auto tempDir = juce::File::getSpecialLocation (juce::File::tempDirectory);
+        auto presetDir = tempDir.getNonexistentChildFile ("MilodikFXPresetsTest", "", false);
+        presetDir.createDirectory();
+
+        milodikfx::preset::PresetManager mgr (presetDir);
+
+        milodikfx::preset::PresetState s;
+        s.globalBypass = true;
+        s.cleanBoostEnabled = false;
+        s.cleanBoostGainDb = 12.3f;
+        s.overdriveEnabled = true;
+        s.overdriveDrivePct = 77.0f;
+        s.overdriveLevelPct = 42.0f;
+        s.eqEnabled = true;
+        s.eqBassDb = 3.0f;
+        s.eqMidDb = -2.5f;
+        s.eqTrebleDb = 6.0f;
+
+        const auto saveOk = mgr.savePreset ("My Preset", s);
+        expect (saveOk);
+
+        auto names = mgr.listPresets();
+        expect (names.contains ("My Preset"));
+
+        milodikfx::preset::PresetState loaded;
+        const auto loadOk = mgr.loadPreset ("My Preset", loaded);
+        expect (loadOk);
+
+        expect (loaded.globalBypass == s.globalBypass);
+        expect (loaded.cleanBoostEnabled == s.cleanBoostEnabled);
+        expect (std::abs (loaded.cleanBoostGainDb - s.cleanBoostGainDb) < 0.0001f);
+        expect (loaded.overdriveEnabled == s.overdriveEnabled);
+        expect (std::abs (loaded.overdriveDrivePct - s.overdriveDrivePct) < 0.0001f);
+        expect (std::abs (loaded.overdriveLevelPct - s.overdriveLevelPct) < 0.0001f);
+        expect (loaded.eqEnabled == s.eqEnabled);
+        expect (std::abs (loaded.eqBassDb - s.eqBassDb) < 0.0001f);
+        expect (std::abs (loaded.eqMidDb - s.eqMidDb) < 0.0001f);
+        expect (std::abs (loaded.eqTrebleDb - s.eqTrebleDb) < 0.0001f);
+
+        const auto delOk = mgr.deletePreset ("My Preset");
+        expect (delOk);
+
+        names = mgr.listPresets();
+        expect (! names.contains ("My Preset"));
+
+        presetDir.deleteRecursively();
+    }
+};
+
+static PresetManagerTests presetManagerTests;
 
 namespace
 {

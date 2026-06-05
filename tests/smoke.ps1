@@ -47,7 +47,8 @@ $requiredKeys = @(
     'dsp.eq.enabled',
     'dsp.eq.bassDb',
     'dsp.eq.midDb',
-    'dsp.eq.trebleDb'
+    'dsp.eq.trebleDb',
+    'ui.preset.selectedName'
 )
 
 foreach ($k in $requiredKeys) {
@@ -56,6 +57,13 @@ foreach ($k in $requiredKeys) {
         Write-Error "$k not found in settings file"
         exit 1
     }
+}
+
+$presetDir = Join-Path $env:APPDATA 'MilodikFX\Presets'
+$defaultPreset = Join-Path $presetDir 'Default Clean.json'
+if (-not (Test-Path $defaultPreset)) {
+    Write-Error "Default preset not created: $defaultPreset"
+    exit 1
 }
 
 Write-Host "Smoke test passed"

@@ -6,6 +6,7 @@
 #include "dsp/GainProcessor.h"
 #include "dsp/OverdriveProcessor.h"
 #include "dsp/EQProcessor.h"
+#include "preset/PresetManager.h"
 
 class MainComponent final : public juce::Component,
                             private juce::AudioIODeviceCallback,
@@ -39,6 +40,8 @@ private:
     static constexpr const char* kKeyEqTrebleDb = "dsp.eq.trebleDb";
 
     static constexpr const char* kKeyAudioDeviceStateXml = "audio.deviceStateXml";
+
+    static constexpr const char* kKeySelectedPresetName = "ui.preset.selectedName";
 
     bool initialiseAudioWithFallback (const juce::XmlElement* savedState);
     void rebuildDeviceSelector();
@@ -116,7 +119,13 @@ private:
         juce::Colour accent { juce::Colours::white };
     };
 
+    milodikfx::preset::PresetState capturePresetState() const;
+    void applyPresetState (const milodikfx::preset::PresetState& preset);
+    void refreshPresetList (const juce::String& selectPresetName);
+
     juce::PropertiesFile& settingsFile;
+    milodikfx::preset::PresetManager presetManager;
+
     bool settingsDirty = false;
     uint32_t lastSettingsSaveMs = 0;
     uint32_t lastDeviceStatePersistTryMs = 0;
@@ -133,6 +142,12 @@ private:
     juce::Label titleLabel;
     juce::Label versionLabel;
     juce::Label deviceStatusLabel;
+
+    juce::Label presetLabel;
+    juce::ComboBox presetCombo;
+    juce::TextButton presetSaveButton { "Save" };
+    juce::TextButton presetLoadButton { "Load" };
+    juce::TextButton presetDeleteButton { "Delete" };
 
     juce::GroupComponent deviceGroup;
     juce::GroupComponent monitorGroup;

@@ -412,8 +412,144 @@ void MainComponent::changeListenerCallback (juce::ChangeBroadcaster*)
     updateAudioDeviceStateInSettings();
 }
 
+milodikfx::preset::PresetState MainComponent::capturePresetState() const
+{
+    milodikfx::preset::PresetState s;
+
+    s.globalBypass = globalBypass.load (std::memory_order_relaxed);
+
+    s.cleanBoostEnabled = cleanBoostEnabled.load (std::memory_order_relaxed);
+    s.cleanBoostGainDb = cleanBoostGainDb.load (std::memory_order_relaxed);
+
+    s.overdriveEnabled = overdriveEnabled.load (std::memory_order_relaxed);
+    s.overdriveDrivePct = overdriveDrivePct.load (std::memory_order_relaxed);
+    s.overdriveLevelPct = overdriveLevelPct.load (std::memory_order_relaxed);
+
+    s.eqEnabled = eqEnabled.load (std::memory_order_relaxed);
+    s.eqBassDb = eqBassDb.load (std::memory_order_relaxed);
+    s.eqMidDb = eqMidDb.load (std::memory_order_relaxed);
+    s.eqTrebleDb = eqTrebleDb.load (std::memory_order_relaxed);
+
+    return s;
+}
+
+void MainComponent::applyPresetState (const milodikfx::preset::PresetState& p)
+{
+    const auto cleanAccent = juce::Colour (0xff6ee04a);
+    const auto odAccent = juce::Colour (0xffff9a1f);
+    const auto eqAccent = juce::Colour (0xff3aa3ff);
+
+    auto setEffectStateUi = [] (EffectCard& card, juce::Label& stateLabel, bool isOn, juce::Colour accent)
+    {
+        card.setEnabledState (isOn);
+        stateLabel.setText (isOn ? "ON" : "OFF", juce::dontSendNotification);
+        stateLabel.setColour (juce::Label::textColourId,
+                              isOn ? accent : juce::Colours::white.withAlpha (0.5f));
+    };
+
+    globalBypass.store (p.globalBypass, std::memory_order_relaxed);
+    audioEngine.setBypassed (p.globalBypass);
+    globalBypassToggle.setToggleState (p.globalBypass, juce::dontSendNotification);
+    settingsFile.setValue (kKeyGlobalBypass, p.globalBypass);
+
+    cleanBoostGainSlider.setValue (p.cleanBoostGainDb, juce::dontSendNotification);
+    cleanBoostGainDb.store (p.cleanBoostGainDb, std::memory_order_relaxed);
+    if (cleanBoostProcessor != nullptr)
+        cleanBoostProcessor->setGainDb (p.cleanBoostGainDb);
+    settingsFile.setValue (kKeyCleanBoostGainDb, (double) p.cleanBoostGainDb);
+
+    cleanBoostToggle.setToggleState (p.cleanBoostEnabled, juce::dontSendNotification);
+    cleanBoostEnabled.store (p.cleanBoostEnabled, std::memory_order_relaxed);
+    if (cleanBoostProcessor != nullptr)
+        cleanBoostProcessor->setEnabled (p.cleanBoostEnabled);
+    settingsFile.setValue (kKeyCleanBoostEnabled, p.cleanBoostEnabled);
+    setEffectStateUi (cleanBoostCard, cleanBoostStateLabel, p.cleanBoostEnabled, cleanAccent);
+
+    overdriveDriveSlider.setValue (p.overdriveDrivePct, juce::dontSendNotification);
+    overdriveDrivePct.store (p.overdriveDrivePct, std::memory_order_relaxed);
+    if (overdriveProcessor != nullptr)
+        overdriveProcessor->setDrivePercent (p.overdriveDrivePct);
+    settingsFile.setValue (kKeyOverdriveDrivePct, (double) p.overdriveDrivePct);
+
+    overdriveLevelSlider.setValue (p.overdriveLevelPct, juce::dontSendNotification);
+    overdriveLevelPct.store (p.overdriveLevelPct, std::memory_order_relaxed);
+    if (overdriveProcessor != nullptr)
+        overdriveProcessor->setLevelPercent (p.overdriveLevelPct);
+    settingsFile.setValue (kKeyOverdriveLevelPct, (double) p.overdriveLevelPct);
+
+    overdriveToggle.setToggleState (p.overdriveEnabled, juce::dontSendNotification);
+    overdriveEnabled.store (p.overdriveEnabled, std::memory_order_relaxed);
+    if (overdriveProcessor != nullptr)
+        overdriveProcessor->setEnabled (p.overdriveEnabled);
+    settingsFile.setValue (kKeyOverdriveEnabled, p.overdriveEnabled);
+    setEffectStateUi (overdriveCard, overdriveStateLabel, p.overdriveEnabled, odAccent);
+
+    eqBassSlider.setValue (p.eqBassDb, juce::dontSendNotification);
+    eqBassDb.store (p.eqBassDb, std::memory_order_relaxed);
+    if (eqProcessor != nullptr)
+        eqProcessor->setBassDb (p.eqBassDb);
+    settingsFile.setValue (kKeyEqBassDb, (double) p.eqBassDb);
+
+    eqMidSlider.setValue (p.eqMidDb, juce::dontSendNotification);
+    eqMidDb.store (p.eqMidDb, std::memory_order_relaxed);
+    if (eqProcessor != nullptr)
+        eqProcessor->setMidDb (p.eqMidDb);
+    settingsFile.setValue (kKeyEqMidDb, (double) p.eqMidDb);
+
+    eqTrebleSlider.setValue (p.eqTrebleDb, juce::dontSendNotification);
+    eqTrebleDb.store (p.eqTrebleDb, std::memory_order_relaxed);
+    if (eqProcessor != nullptr)
+        eqProcessor->setTrebleDb (p.eqTrebleDb);
+    settingsFile.setValue (kKeyEqTrebleDb, (double) p.eqTrebleDb);
+
+    eqToggle.setToggleState (p.eqEnabled, juce::dontSendNotification);
+    eqEnabled.store (p.eqEnabled, std::memory_order_relaxed);
+    if (eqProcessor != nullptr)
+        eqProcessor->setEnabled (p.eqEnabled);
+    settingsFile.setValue (kKeyEqEnabled, p.eqEnabled);
+    setEffectStateUi (eqCard, eqStateLabel, p.eqEnabled, eqAccent);
+
+    markSettingsDirty();
+    saveSettingsIfNeeded (true);
+}
+
+void MainComponent::refreshPresetList (const juce::String& selectPresetName)
+{
+    const auto names = presetManager.listPresets();
+
+    presetCombo.clear();
+
+    int id = 1;
+    for (const auto& n : names)
+        presetCombo.addItem (n, id++);
+
+    juce::String toSelect = selectPresetName;
+    if (toSelect.isEmpty() && names.size() > 0)
+        toSelect = names[0];
+
+    int selectedId = 0;
+    for (int i = 0; i < presetCombo.getNumItems(); ++i)
+        if (presetCombo.getItemText (i) == toSelect)
+            selectedId = presetCombo.getItemId (i);
+
+    if (selectedId == 0 && presetCombo.getNumItems() > 0)
+        selectedId = presetCombo.getItemId (0);
+
+    if (selectedId != 0)
+        presetCombo.setSelectedId (selectedId, juce::dontSendNotification);
+
+    const auto hasSelection = presetCombo.getNumItems() > 0 && presetCombo.getSelectedId() != 0;
+    presetLoadButton.setEnabled (hasSelection);
+
+    const auto selName = presetCombo.getText();
+    presetDeleteButton.setEnabled (hasSelection && selName != "Default Clean");
+}
+
 MainComponent::MainComponent (juce::PropertiesFile& settings)
-    : settingsFile (settings)
+    : settingsFile (settings),
+      presetManager (juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+                         .getChildFile ("MilodikFX")
+                         .getChildFile ("Presets"))
 {
     bool persistedMonitor = true;
     bool persistedMute = false;
@@ -434,6 +570,7 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     bool persistedEqEnabled = true;
 
     juce::String persistedAudioXml;
+    juce::String persistedPresetName;
 
     persistedMonitor = settingsFile.getBoolValue (kKeyMonitorEnabled, true);
     persistedMute = settingsFile.getBoolValue (kKeyMuted, false);
@@ -454,6 +591,7 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     persistedEqEnabled = settingsFile.getBoolValue (kKeyEqEnabled, true);
 
     persistedAudioXml = settingsFile.getValue (kKeyAudioDeviceStateXml);
+    persistedPresetName = settingsFile.getValue (kKeySelectedPresetName, "Default Clean");
 
     persistedRouting = juce::jlimit (1, 4, persistedRouting);
     persistedGainDb = juce::jlimit (-24.0, 12.0, persistedGainDb);
@@ -536,6 +674,7 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     settingsFile.setValue (kKeyEqMidDb, persistedEqMidDb);
     settingsFile.setValue (kKeyEqTrebleDb, persistedEqTrebleDb);
     settingsFile.setValue (kKeyEqEnabled, persistedEqEnabled);
+    settingsFile.setValue (kKeySelectedPresetName, persistedPresetName);
     markSettingsDirty();
     saveSettingsIfNeeded (true);
 
@@ -555,6 +694,128 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
 
     deviceStatusLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (deviceStatusLabel);
+
+    presetLabel.setText ("Preset:", juce::dontSendNotification);
+    presetLabel.setJustificationType (juce::Justification::centredLeft);
+    addAndMakeVisible (presetLabel);
+
+    presetCombo.setTextWhenNothingSelected ("(No presets)");
+    presetCombo.onChange = [this]
+    {
+        const auto safe = milodikfx::preset::PresetManager::sanitisePresetName (presetCombo.getText());
+        if (safe.isNotEmpty())
+        {
+            settingsFile.setValue (kKeySelectedPresetName, juce::var (safe));
+            markSettingsDirty();
+        }
+
+        const auto hasSelection = presetCombo.getNumItems() > 0 && presetCombo.getSelectedId() != 0;
+        presetLoadButton.setEnabled (hasSelection);
+        presetDeleteButton.setEnabled (hasSelection && presetCombo.getText() != "Default Clean");
+    };
+    addAndMakeVisible (presetCombo);
+
+    presetSaveButton.onClick = [this]
+    {
+        const auto initial = presetCombo.getText().isNotEmpty() ? presetCombo.getText() : juce::String ("My Preset");
+        juce::Component::SafePointer<MainComponent> self (this);
+
+        auto* w = new juce::AlertWindow ("Save Preset", "Preset name:", juce::AlertWindow::QuestionIcon, this);
+        w->addTextEditor ("name", initial, "Name");
+        w->addButton ("Save", 1);
+        w->addButton ("Cancel", 0);
+
+        w->enterModalState (true,
+                            juce::ModalCallbackFunction::create ([self, w] (int result)
+                            {
+                                if (self == nullptr)
+                                    return;
+
+                                if (result != 1)
+                                    return;
+
+                                auto name = w->getTextEditorContents ("name");
+                                name = milodikfx::preset::PresetManager::sanitisePresetName (name);
+                                if (name.isEmpty())
+                                    return;
+
+                                const auto ok = self->presetManager.savePreset (name, self->capturePresetState());
+                                if (! ok)
+                                {
+                                    juce::AlertWindow::showMessageBoxAsync (juce::AlertWindow::WarningIcon,
+                                                                            "Save Preset",
+                                                                            "Failed to save preset.");
+                                    return;
+                                }
+
+                                self->refreshPresetList (name);
+                                self->settingsFile.setValue (kKeySelectedPresetName, juce::var (name));
+                                self->markSettingsDirty();
+                                self->saveSettingsIfNeeded (true);
+                            }),
+                            true);
+    };
+    addAndMakeVisible (presetSaveButton);
+
+    presetLoadButton.onClick = [this]
+    {
+        const auto name = presetCombo.getText();
+        milodikfx::preset::PresetState loaded;
+
+        if (! presetManager.loadPreset (name, loaded))
+        {
+            juce::AlertWindow::showMessageBoxAsync (juce::AlertWindow::WarningIcon,
+                                                    "Load Preset",
+                                                    "Failed to load preset.");
+            return;
+        }
+
+        applyPresetState (loaded);
+        settingsFile.setValue (kKeySelectedPresetName, juce::var (name));
+        markSettingsDirty();
+        saveSettingsIfNeeded (true);
+    };
+    addAndMakeVisible (presetLoadButton);
+
+    presetDeleteButton.onClick = [this]
+    {
+        const auto name = presetCombo.getText();
+        if (name == "Default Clean")
+            return;
+
+        juce::Component::SafePointer<MainComponent> self (this);
+
+        juce::AlertWindow::showOkCancelBox (juce::AlertWindow::WarningIcon,
+                                            "Delete Preset",
+                                            "Delete preset '" + name + "'?",
+                                            "Delete",
+                                            "Cancel",
+                                            this,
+                                            juce::ModalCallbackFunction::create ([self, name] (int result)
+                                            {
+                                                if (self == nullptr)
+                                                    return;
+
+                                                if (result != 1)
+                                                    return;
+
+                                                self->presetManager.deletePreset (name);
+
+                                                milodikfx::preset::PresetState defaultPreset;
+                                                self->presetManager.ensurePresetExists ("Default Clean", defaultPreset);
+
+                                                self->refreshPresetList ("Default Clean");
+
+                                                milodikfx::preset::PresetState loaded;
+                                                if (self->presetManager.loadPreset ("Default Clean", loaded))
+                                                    self->applyPresetState (loaded);
+
+                                                self->settingsFile.setValue (kKeySelectedPresetName, juce::var ("Default Clean"));
+                                                self->markSettingsDirty();
+                                                self->saveSettingsIfNeeded (true);
+                                            }));
+    };
+    addAndMakeVisible (presetDeleteButton);
 
     deviceGroup.setText ("Audio Device");
     addAndMakeVisible (deviceGroup);
@@ -898,6 +1159,16 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     addAndMakeVisible (inputMeter);
     addAndMakeVisible (outputMeter);
 
+    // Sprint 5: presets
+    milodikfx::preset::PresetState defaultPreset;
+    presetManager.ensurePresetExists ("Default Clean", defaultPreset);
+    refreshPresetList (persistedPresetName);
+
+    milodikfx::preset::PresetState startupPreset;
+    const auto startupName = presetCombo.getText();
+    if (startupName.isNotEmpty() && presetManager.loadPreset (startupName, startupPreset))
+        applyPresetState (startupPreset);
+
     // Sprint 0: input -> output monitoring + device selection UI
     initialiseAudioWithFallback (persistedAudioState.get());
     deviceManager.addChangeListener (this);
@@ -962,6 +1233,30 @@ void MainComponent::resized()
     versionLabel.setBounds (titleArea);
     retryAudioButton.setBounds (takeRight (header, 120));
     deviceStatusLabel.setBounds (header);
+
+    auto presetBar = takeTop (bounds, 44);
+    {
+        auto presetArea = presetBar.reduced (0, 8);
+
+        presetLabel.setBounds (takeLeft (presetArea, juce::jmin (60, presetArea.getWidth())));
+
+        constexpr int kBtnW = 64;
+        constexpr int kBtnGap = 8;
+        const int desiredButtonsW = kBtnW * 3 + kBtnGap * 2;
+
+        auto buttons = takeRight (presetArea, juce::jmin (desiredButtonsW, presetArea.getWidth()));
+        presetCombo.setBounds (presetArea.reduced (0, 2));
+
+        auto saveArea = takeLeft (buttons, juce::jmin (kBtnW, buttons.getWidth()));
+        takeLeft (buttons, juce::jmin (kBtnGap, buttons.getWidth()));
+        auto loadArea = takeLeft (buttons, juce::jmin (kBtnW, buttons.getWidth()));
+        takeLeft (buttons, juce::jmin (kBtnGap, buttons.getWidth()));
+        auto deleteArea = buttons;
+
+        presetSaveButton.setBounds (saveArea.reduced (0, 2));
+        presetLoadButton.setBounds (loadArea.reduced (0, 2));
+        presetDeleteButton.setBounds (deleteArea.reduced (0, 2));
+    }
 
     auto content = bounds;
 

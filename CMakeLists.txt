@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(MilodikFX VERSION 0.4.0 LANGUAGES CXX)
+project(MilodikFX VERSION 0.5.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -61,6 +61,8 @@ target_sources(MilodikFX
     src/dsp/EQProcessor.cpp
     src/dsp/DSPChainManager.h
     src/dsp/DSPChainManager.cpp
+    src/preset/PresetManager.h
+    src/preset/PresetManager.cpp
 )
 
 target_include_directories(MilodikFX
@@ -114,6 +116,7 @@ target_sources(MilodikFX_tests
     src/dsp/GainProcessor.cpp
     src/dsp/OverdriveProcessor.cpp
     src/dsp/EQProcessor.cpp
+    src/preset/PresetManager.cpp
 )
 
 target_compile_definitions(MilodikFX_tests
