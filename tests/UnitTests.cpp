@@ -4,6 +4,7 @@
 
 #include "dsp/DSPChainManager.h"
 #include "dsp/GainProcessor.h"
+#include "dsp/OverdriveProcessor.h"
 
 class SettingsPersistenceTests final : public juce::UnitTest
 {
@@ -178,6 +179,85 @@ public:
 };
 
 static DSPChainManagerTests dspChainManagerTests;
+
+class OverdriveProcessorTests final : public juce::UnitTest
+{
+public:
+    OverdriveProcessorTests()
+        : juce::UnitTest ("OverdriveProcessor")
+    {
+    }
+
+    void runTest() override
+    {
+        beginTest ("Drive 0, Level 100 is clean");
+
+        milodikfx::dsp::OverdriveProcessor od;
+        od.setEnabled (true);
+        od.setDrivePercent (0.0f);
+        od.setLevelPercent (100.0f);
+        od.prepareToPlay (48000.0, 32, 1);
+
+        juce::AudioBuffer<float> buffer (1, 4);
+        buffer.setSample (0, 0, 0.25f);
+        buffer.setSample (0, 1, -0.5f);
+        buffer.setSample (0, 2, 0.0f);
+        buffer.setSample (0, 3, 0.9f);
+
+        od.processBlock (buffer);
+
+        expect (std::abs (buffer.getSample (0, 0) - 0.25f) < 0.000001f);
+        expect (std::abs (buffer.getSample (0, 1) - (-0.5f)) < 0.000001f);
+        expect (std::abs (buffer.getSample (0, 2) - 0.0f) < 0.000001f);
+        expect (std::abs (buffer.getSample (0, 3) - 0.9f) < 0.000001f);
+
+        beginTest ("Disabled is passthrough");
+
+        milodikfx::dsp::OverdriveProcessor odDisabled;
+        odDisabled.setEnabled (false);
+        odDisabled.setDrivePercent (100.0f);
+        odDisabled.setLevelPercent (0.0f);
+        odDisabled.prepareToPlay (48000.0, 32, 1);
+
+        juce::AudioBuffer<float> buffer2 (1, 4);
+        buffer2.clear();
+        for (int i = 0; i < buffer2.getNumSamples(); ++i)
+            buffer2.setSample (0, i, 0.2f);
+
+        odDisabled.processBlock (buffer2);
+
+        for (int i = 0; i < buffer2.getNumSamples(); ++i)
+            expect (std::abs (buffer2.getSample (0, i) - 0.2f) < 0.000001f);
+
+        beginTest ("Level scales output after drive");
+
+        milodikfx::dsp::OverdriveProcessor odLevel;
+        odLevel.setEnabled (true);
+        odLevel.setDrivePercent (100.0f);
+        odLevel.setLevelPercent (100.0f);
+        odLevel.prepareToPlay (48000.0, 32, 1);
+
+        juce::AudioBuffer<float> buffer3 (1, 4);
+        for (int i = 0; i < buffer3.getNumSamples(); ++i)
+            buffer3.setSample (0, i, 0.5f);
+
+        odLevel.processBlock (buffer3);
+        const auto out100 = buffer3.getSample (0, 0);
+
+        // Re-run with level 50% on the same input.
+        odLevel.setLevelPercent (50.0f);
+        for (int i = 0; i < buffer3.getNumSamples(); ++i)
+            buffer3.setSample (0, i, 0.5f);
+
+        odLevel.processBlock (buffer3);
+        const auto out50 = buffer3.getSample (0, 0);
+
+        expect (std::abs (out50 - (out100 * 0.5f)) < 0.0001f);
+        expect (std::abs (out50) <= 1.0f);
+    }
+};
+
+static OverdriveProcessorTests overdriveProcessorTests;
 
 int main()
 {

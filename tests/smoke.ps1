@@ -37,11 +37,21 @@ if (-not (Test-Path $settingsPath)) {
     exit 1
 }
 
-$hasAudioKey = Select-String -Path $settingsPath -Pattern 'audio.deviceStateXml' -SimpleMatch -Quiet
+$requiredKeys = @(
+    'audio.deviceStateXml',
+    'dsp.cleanBoost.enabled',
+    'dsp.cleanBoost.gainDb',
+    'dsp.overdrive.enabled',
+    'dsp.overdrive.drivePct',
+    'dsp.overdrive.levelPct'
+)
 
-if (-not $hasAudioKey) {
-    Write-Error "audio.deviceStateXml not found in settings file"
-    exit 1
+foreach ($k in $requiredKeys) {
+    $hasKey = Select-String -Path $settingsPath -Pattern $k -SimpleMatch -Quiet
+    if (-not $hasKey) {
+        Write-Error "$k not found in settings file"
+        exit 1
+    }
 }
 
 Write-Host "Smoke test passed"

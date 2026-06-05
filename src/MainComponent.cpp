@@ -7,6 +7,84 @@ static float rmsToDb (float rms)
     return juce::Decibels::gainToDecibels (rms, -100.0f);
 }
 
+MainComponent::KnobLookAndFeel::KnobLookAndFeel()
+{
+    setColourScheme (juce::LookAndFeel_V4::getDarkColourScheme());
+}
+
+void MainComponent::KnobLookAndFeel::drawRotarySlider (juce::Graphics& g,
+                                                      int x,
+                                                      int y,
+                                                      int width,
+                                                      int height,
+                                                      float sliderPosProportional,
+                                                      float rotaryStartAngle,
+                                                      float rotaryEndAngle,
+                                                      juce::Slider& slider)
+{
+    const auto bounds = juce::Rectangle<float> ((float) x, (float) y, (float) width, (float) height).reduced (6.0f);
+    const auto size = juce::jmin (bounds.getWidth(), bounds.getHeight());
+
+    const auto radius = (size * 0.5f) - 2.0f;
+    const auto cx = bounds.getCentreX();
+    const auto cy = bounds.getCentreY();
+
+    const auto angle = rotaryStartAngle + sliderPosProportional * (rotaryEndAngle - rotaryStartAngle);
+
+    const auto fill = slider.findColour (juce::Slider::rotarySliderFillColourId);
+    const auto outline = slider.findColour (juce::Slider::rotarySliderOutlineColourId);
+
+    const auto knobArea = juce::Rectangle<float> (cx - radius, cy - radius, radius * 2.0f, radius * 2.0f);
+
+    // Knob body
+    {
+        juce::ColourGradient grad (juce::Colour (0xff2c2f33), cx, cy - radius,
+                                  juce::Colour (0xff0f1113), cx, cy + radius, false);
+        g.setGradientFill (grad);
+        g.fillEllipse (knobArea);
+
+        g.setColour (juce::Colours::black.withAlpha (0.7f));
+        g.drawEllipse (knobArea, 1.5f);
+
+        g.setColour (juce::Colours::white.withAlpha (0.08f));
+        g.drawEllipse (knobArea.reduced (2.0f), 1.0f);
+    }
+
+    // Arc ring
+    {
+        const auto arcRadius = radius + 3.0f;
+        const auto arcThickness = 4.0f;
+
+        juce::Path bgArc;
+        bgArc.addCentredArc (cx, cy, arcRadius, arcRadius, 0.0f, rotaryStartAngle, rotaryEndAngle, true);
+        g.setColour (outline.withAlpha (0.35f));
+        g.strokePath (bgArc, juce::PathStrokeType (arcThickness, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+        juce::Path valueArc;
+        valueArc.addCentredArc (cx, cy, arcRadius, arcRadius, 0.0f, rotaryStartAngle, angle, true);
+        g.setColour (fill);
+        g.strokePath (valueArc, juce::PathStrokeType (arcThickness + 0.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    }
+
+    // Pointer
+    {
+        const auto pointerLen = radius * 0.75f;
+        const auto pointerThickness = 2.0f;
+
+        const auto dx = std::cos (angle - juce::MathConstants<float>::halfPi);
+        const auto dy = std::sin (angle - juce::MathConstants<float>::halfPi);
+
+        const auto x2 = cx + pointerLen * dx;
+        const auto y2 = cy + pointerLen * dy;
+
+        g.setColour (juce::Colours::white.withAlpha (0.85f));
+        g.drawLine (cx, cy, x2, y2, pointerThickness);
+
+        g.setColour (juce::Colours::black.withAlpha (0.5f));
+        g.fillEllipse (juce::Rectangle<float> (cx - 3.5f, cy - 3.5f, 7.0f, 7.0f));
+    }
+}
+
 void MainComponent::LevelMeter::setLevelsDb (float newRmsDb, float newPeakHoldDb, bool isClipped)
 {
     rmsDb = juce::jlimit (-100.0f, 0.0f, newRmsDb);
@@ -218,8 +296,14 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     int persistedRouting = 1;
     double persistedGainDb = 0.0;
     bool persistedGlobalBypass = false;
+
     double persistedCleanBoostGainDb = 0.0;
     bool persistedCleanBoostEnabled = true;
+
+    double persistedOverdriveDrivePct = 0.0;
+    double persistedOverdriveLevelPct = 100.0;
+    bool persistedOverdriveEnabled = true;
+
     juce::String persistedAudioXml;
 
     persistedMonitor = settingsFile.getBoolValue (kKeyMonitorEnabled, true);
@@ -227,31 +311,56 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     persistedRouting = settingsFile.getIntValue (kKeyRoutingModeId, 1);
     persistedGainDb = settingsFile.getDoubleValue (kKeyMonitorGainDb, 0.0);
     persistedGlobalBypass = settingsFile.getBoolValue (kKeyGlobalBypass, false);
+
     persistedCleanBoostGainDb = settingsFile.getDoubleValue (kKeyCleanBoostGainDb, 0.0);
     persistedCleanBoostEnabled = settingsFile.getBoolValue (kKeyCleanBoostEnabled, true);
+
+    persistedOverdriveDrivePct = settingsFile.getDoubleValue (kKeyOverdriveDrivePct, 0.0);
+    persistedOverdriveLevelPct = settingsFile.getDoubleValue (kKeyOverdriveLevelPct, 100.0);
+    persistedOverdriveEnabled = settingsFile.getBoolValue (kKeyOverdriveEnabled, true);
+
     persistedAudioXml = settingsFile.getValue (kKeyAudioDeviceStateXml);
 
     persistedRouting = juce::jlimit (1, 4, persistedRouting);
     persistedGainDb = juce::jlimit (-24.0, 12.0, persistedGainDb);
     persistedCleanBoostGainDb = juce::jlimit (0.0, 24.0, persistedCleanBoostGainDb);
 
+    persistedOverdriveDrivePct = juce::jlimit (0.0, 100.0, persistedOverdriveDrivePct);
+    persistedOverdriveLevelPct = juce::jlimit (0.0, 100.0, persistedOverdriveLevelPct);
+
     monitorEnabled.store (persistedMonitor, std::memory_order_relaxed);
     muted.store (persistedMute, std::memory_order_relaxed);
     routingMode.store (persistedRouting, std::memory_order_relaxed);
     monitorGainDb.store ((float) persistedGainDb, std::memory_order_relaxed);
     monitorGainLinear.store (juce::Decibels::decibelsToGain ((float) persistedGainDb), std::memory_order_relaxed);
+
     globalBypass.store (persistedGlobalBypass, std::memory_order_relaxed);
+    audioEngine.setBypassed (persistedGlobalBypass);
+
     cleanBoostGainDb.store ((float) persistedCleanBoostGainDb, std::memory_order_relaxed);
     cleanBoostEnabled.store (persistedCleanBoostEnabled, std::memory_order_relaxed);
-    audioEngine.setBypassed (persistedGlobalBypass);
+
+    overdriveDrivePct.store ((float) persistedOverdriveDrivePct, std::memory_order_relaxed);
+    overdriveLevelPct.store ((float) persistedOverdriveLevelPct, std::memory_order_relaxed);
+    overdriveEnabled.store (persistedOverdriveEnabled, std::memory_order_relaxed);
 
     if (auto* processor = audioEngine.getChain().addProcessor (std::make_unique<milodikfx::dsp::GainProcessor>()))
         cleanBoostProcessor = dynamic_cast<milodikfx::dsp::GainProcessor*> (processor);
+
+    if (auto* processor = audioEngine.getChain().addProcessor (std::make_unique<milodikfx::dsp::OverdriveProcessor>()))
+        overdriveProcessor = dynamic_cast<milodikfx::dsp::OverdriveProcessor*> (processor);
 
     if (cleanBoostProcessor != nullptr)
     {
         cleanBoostProcessor->setGainDb ((float) persistedCleanBoostGainDb);
         cleanBoostProcessor->setEnabled (persistedCleanBoostEnabled);
+    }
+
+    if (overdriveProcessor != nullptr)
+    {
+        overdriveProcessor->setDrivePercent ((float) persistedOverdriveDrivePct);
+        overdriveProcessor->setLevelPercent ((float) persistedOverdriveLevelPct);
+        overdriveProcessor->setEnabled (persistedOverdriveEnabled);
     }
 
     std::unique_ptr<juce::XmlElement> persistedAudioState;
@@ -266,6 +375,9 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     settingsFile.setValue (kKeyGlobalBypass, persistedGlobalBypass);
     settingsFile.setValue (kKeyCleanBoostGainDb, persistedCleanBoostGainDb);
     settingsFile.setValue (kKeyCleanBoostEnabled, persistedCleanBoostEnabled);
+    settingsFile.setValue (kKeyOverdriveDrivePct, persistedOverdriveDrivePct);
+    settingsFile.setValue (kKeyOverdriveLevelPct, persistedOverdriveLevelPct);
+    settingsFile.setValue (kKeyOverdriveEnabled, persistedOverdriveEnabled);
     markSettingsDirty();
     saveSettingsIfNeeded (true);
 
@@ -296,7 +408,14 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     addAndMakeVisible (dspChainGroup);
 
     cleanBoostGroup.setText ("Clean Boost");
+    cleanBoostGroup.setColour (juce::GroupComponent::textColourId, juce::Colour (0xff6ee04a));
+    cleanBoostGroup.setColour (juce::GroupComponent::outlineColourId, juce::Colour (0xff6ee04a).withAlpha (0.35f));
     addAndMakeVisible (cleanBoostGroup);
+
+    overdriveGroup.setText ("Overdrive");
+    overdriveGroup.setColour (juce::GroupComponent::textColourId, juce::Colour (0xffff9a1f));
+    overdriveGroup.setColour (juce::GroupComponent::outlineColourId, juce::Colour (0xffff9a1f).withAlpha (0.35f));
+    addAndMakeVisible (overdriveGroup);
 
     monitorNoteLabel.setText ("Passthrough: input -> output", juce::dontSendNotification);
     monitorNoteLabel.setJustificationType (juce::Justification::centredLeft);
@@ -308,13 +427,21 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     outputLevelLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (outputLevelLabel);
 
-    dspChainNoteLabel.setText ("DSP Chain: Clean Boost", juce::dontSendNotification);
+    dspChainNoteLabel.setText ("DSP Chain: Clean Boost -> Overdrive", juce::dontSendNotification);
     dspChainNoteLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (dspChainNoteLabel);
 
     cleanBoostGainLabel.setText ("Gain", juce::dontSendNotification);
     cleanBoostGainLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (cleanBoostGainLabel);
+
+    overdriveDriveLabel.setText ("Drive", juce::dontSendNotification);
+    overdriveDriveLabel.setJustificationType (juce::Justification::centredLeft);
+    addAndMakeVisible (overdriveDriveLabel);
+
+    overdriveLevelLabel.setText ("Level", juce::dontSendNotification);
+    overdriveLevelLabel.setJustificationType (juce::Justification::centredLeft);
+    addAndMakeVisible (overdriveLevelLabel);
 
     monitorEnabledToggle.setButtonText ("Monitor");
     monitorEnabledToggle.setToggleState (persistedMonitor, juce::dontSendNotification);
@@ -384,8 +511,26 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     };
     addAndMakeVisible (globalBypassToggle);
 
-    cleanBoostGainSlider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-    cleanBoostGainSlider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 70, 18);
+    auto configureKnob = [this] (juce::Slider& s, juce::Colour accent)
+    {
+        s.setLookAndFeel (&knobLookAndFeel);
+        s.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
+        s.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 70, 18);
+        s.setColour (juce::Slider::rotarySliderFillColourId, accent);
+        s.setColour (juce::Slider::rotarySliderOutlineColourId, juce::Colours::white.withAlpha (0.22f));
+        s.setColour (juce::Slider::textBoxBackgroundColourId, juce::Colour (0xff0f1113));
+        s.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::black.withAlpha (0.65f));
+        s.setColour (juce::Slider::textBoxTextColourId, juce::Colours::white.withAlpha (0.9f));
+    };
+
+    auto stylePowerToggle = [] (juce::ToggleButton& b, juce::Colour onColour)
+    {
+        b.setButtonText (b.getToggleState() ? "ON" : "OFF");
+        b.setColour (juce::ToggleButton::textColourId,
+                     b.getToggleState() ? onColour : juce::Colours::white.withAlpha (0.5f));
+    };
+
+    configureKnob (cleanBoostGainSlider, juce::Colour (0xff6ee04a));
     cleanBoostGainSlider.setTextValueSuffix (" dB");
     cleanBoostGainSlider.setRange (0.0, 24.0, 0.1);
     cleanBoostGainSlider.setValue (persistedCleanBoostGainDb, juce::dontSendNotification);
@@ -401,9 +546,9 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     };
     addAndMakeVisible (cleanBoostGainSlider);
 
-    cleanBoostToggle.setButtonText ("ON");
     cleanBoostToggle.setToggleState (persistedCleanBoostEnabled, juce::dontSendNotification);
-    cleanBoostToggle.onClick = [this]
+    stylePowerToggle (cleanBoostToggle, juce::Colour (0xff6ee04a));
+    cleanBoostToggle.onClick = [this, stylePowerToggle]
     {
         const auto v = cleanBoostToggle.getToggleState();
         cleanBoostEnabled.store (v, std::memory_order_relaxed);
@@ -412,8 +557,58 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
 
         settingsFile.setValue (kKeyCleanBoostEnabled, v);
         markSettingsDirty();
+        stylePowerToggle (cleanBoostToggle, juce::Colour (0xff6ee04a));
     };
     addAndMakeVisible (cleanBoostToggle);
+
+    configureKnob (overdriveDriveSlider, juce::Colour (0xffff9a1f));
+    overdriveDriveSlider.setTextValueSuffix (" %");
+    overdriveDriveSlider.setNumDecimalPlacesToDisplay (0);
+    overdriveDriveSlider.setRange (0.0, 100.0, 1.0);
+    overdriveDriveSlider.setValue (persistedOverdriveDrivePct, juce::dontSendNotification);
+    overdriveDriveSlider.onValueChange = [this]
+    {
+        const auto pct = (float) overdriveDriveSlider.getValue();
+        overdriveDrivePct.store (pct, std::memory_order_relaxed);
+        if (overdriveProcessor != nullptr)
+            overdriveProcessor->setDrivePercent (pct);
+
+        settingsFile.setValue (kKeyOverdriveDrivePct, (double) pct);
+        markSettingsDirty();
+    };
+    addAndMakeVisible (overdriveDriveSlider);
+
+    configureKnob (overdriveLevelSlider, juce::Colour (0xffff9a1f));
+    overdriveLevelSlider.setTextValueSuffix (" %");
+    overdriveLevelSlider.setNumDecimalPlacesToDisplay (0);
+    overdriveLevelSlider.setRange (0.0, 100.0, 1.0);
+    overdriveLevelSlider.setValue (persistedOverdriveLevelPct, juce::dontSendNotification);
+    overdriveLevelSlider.onValueChange = [this]
+    {
+        const auto pct = (float) overdriveLevelSlider.getValue();
+        overdriveLevelPct.store (pct, std::memory_order_relaxed);
+        if (overdriveProcessor != nullptr)
+            overdriveProcessor->setLevelPercent (pct);
+
+        settingsFile.setValue (kKeyOverdriveLevelPct, (double) pct);
+        markSettingsDirty();
+    };
+    addAndMakeVisible (overdriveLevelSlider);
+
+    overdriveToggle.setToggleState (persistedOverdriveEnabled, juce::dontSendNotification);
+    stylePowerToggle (overdriveToggle, juce::Colour (0xffff9a1f));
+    overdriveToggle.onClick = [this, stylePowerToggle]
+    {
+        const auto v = overdriveToggle.getToggleState();
+        overdriveEnabled.store (v, std::memory_order_relaxed);
+        if (overdriveProcessor != nullptr)
+            overdriveProcessor->setEnabled (v);
+
+        settingsFile.setValue (kKeyOverdriveEnabled, v);
+        markSettingsDirty();
+        stylePowerToggle (overdriveToggle, juce::Colour (0xffff9a1f));
+    };
+    addAndMakeVisible (overdriveToggle);
 
     retryAudioButton.onClick = [this]
     {
@@ -442,6 +637,7 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     monitorGroup.toBack();
     dspChainGroup.toBack();
     cleanBoostGroup.toBack();
+    overdriveGroup.toBack();
 
     startTimerHz (30);
 }
@@ -528,20 +724,50 @@ void MainComponent::resized()
         dspChainNoteLabel.setBounds (chainHeader);
 
         chainArea.removeFromTop (8);
-        auto cardArea = chainArea.removeFromLeft (220);
-        cleanBoostGroup.setBounds (cardArea);
 
-        auto cardContent = cleanBoostGroup.getBounds().reduced (12);
-        cardContent.removeFromTop (22);
+        constexpr int kCardWidth = 220;
+        constexpr int kCardGap = 12;
 
-        cleanBoostGainLabel.setBounds (cardContent.removeFromTop (18));
-        cardContent.removeFromTop (6);
+        auto cleanArea = chainArea.removeFromLeft (kCardWidth);
+        cleanBoostGroup.setBounds (cleanArea);
 
-        auto knobArea = cardContent.removeFromTop (110);
-        cleanBoostGainSlider.setBounds (knobArea);
+        chainArea.removeFromLeft (kCardGap);
 
-        cardContent.removeFromTop (6);
-        cleanBoostToggle.setBounds (cardContent.removeFromTop (24));
+        auto overdriveArea = chainArea.removeFromLeft (kCardWidth);
+        overdriveGroup.setBounds (overdriveArea);
+
+        {
+            auto cardContent = cleanBoostGroup.getBounds().reduced (12);
+            cardContent.removeFromTop (22);
+
+            cleanBoostGainLabel.setBounds (cardContent.removeFromTop (18));
+            cardContent.removeFromTop (6);
+
+            auto knobArea = cardContent.removeFromTop (110);
+            cleanBoostGainSlider.setBounds (knobArea);
+
+            cardContent.removeFromTop (6);
+            cleanBoostToggle.setBounds (cardContent.removeFromTop (24));
+        }
+
+        {
+            auto cardContent = overdriveGroup.getBounds().reduced (12);
+            cardContent.removeFromTop (22);
+
+            auto labelsRow = cardContent.removeFromTop (18);
+            overdriveDriveLabel.setBounds (labelsRow.removeFromLeft (labelsRow.getWidth() / 2));
+            overdriveLevelLabel.setBounds (labelsRow);
+
+            cardContent.removeFromTop (6);
+
+            auto knobsRow = cardContent.removeFromTop (110);
+            auto leftKnob = knobsRow.removeFromLeft (knobsRow.getWidth() / 2);
+            overdriveDriveSlider.setBounds (leftKnob);
+            overdriveLevelSlider.setBounds (knobsRow);
+
+            cardContent.removeFromTop (6);
+            overdriveToggle.setBounds (cardContent.removeFromTop (24));
+        }
 
     }
 }
@@ -891,9 +1117,16 @@ void MainComponent::timerCallback()
         const auto boostOn = cleanBoostEnabled.load (std::memory_order_relaxed);
         const auto boostDb = cleanBoostGainDb.load (std::memory_order_relaxed);
 
+        const auto odOn = overdriveEnabled.load (std::memory_order_relaxed);
+        const auto odDrive = overdriveDrivePct.load (std::memory_order_relaxed);
+        const auto odLevel = overdriveLevelPct.load (std::memory_order_relaxed);
+
         juce::String chain = bypassed ? "Bypassed"
                                       : "Clean Boost " + juce::String (boostOn ? "ON" : "OFF")
-                                            + " | Gain " + juce::String (boostDb, 1) + " dB";
+                                            + " | Gain " + juce::String (boostDb, 1) + " dB"
+                                            + " -> Overdrive " + juce::String (odOn ? "ON" : "OFF")
+                                            + " | Drive " + juce::String (odDrive, 0) + "%"
+                                            + " | Level " + juce::String (odLevel, 0) + "%";
 
         dspChainNoteLabel.setText ("DSP Chain: " + chain, juce::dontSendNotification);
     }

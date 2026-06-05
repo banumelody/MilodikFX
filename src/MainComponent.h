@@ -4,6 +4,7 @@
 
 #include "audio/AudioEngine.h"
 #include "dsp/GainProcessor.h"
+#include "dsp/OverdriveProcessor.h"
 
 class MainComponent final : public juce::Component,
                             private juce::AudioIODeviceCallback,
@@ -23,8 +24,14 @@ private:
     static constexpr const char* kKeyRoutingModeId = "ui.routingModeId";
     static constexpr const char* kKeyMonitorGainDb = "ui.monitorGainDb";
     static constexpr const char* kKeyGlobalBypass = "ui.globalBypass";
+
     static constexpr const char* kKeyCleanBoostEnabled = "dsp.cleanBoost.enabled";
     static constexpr const char* kKeyCleanBoostGainDb = "dsp.cleanBoost.gainDb";
+
+    static constexpr const char* kKeyOverdriveEnabled = "dsp.overdrive.enabled";
+    static constexpr const char* kKeyOverdriveDrivePct = "dsp.overdrive.drivePct";
+    static constexpr const char* kKeyOverdriveLevelPct = "dsp.overdrive.levelPct";
+
     static constexpr const char* kKeyAudioDeviceStateXml = "audio.deviceStateXml";
 
     bool initialiseAudioWithFallback (const juce::XmlElement* savedState);
@@ -62,6 +69,21 @@ private:
         bool clipped = false;
     };
 
+    struct KnobLookAndFeel final : public juce::LookAndFeel_V4
+    {
+        KnobLookAndFeel();
+
+        void drawRotarySlider (juce::Graphics& g,
+                              int x,
+                              int y,
+                              int width,
+                              int height,
+                              float sliderPosProportional,
+                              float rotaryStartAngle,
+                              float rotaryEndAngle,
+                              juce::Slider& slider) override;
+    };
+
     juce::PropertiesFile& settingsFile;
     bool settingsDirty = false;
     uint32_t lastSettingsSaveMs = 0;
@@ -73,6 +95,7 @@ private:
     milodikfx::audio::AudioEngine audioEngine;
 
     juce::LookAndFeel_V4 lookAndFeel;
+    KnobLookAndFeel knobLookAndFeel;
 
     juce::Label titleLabel;
     juce::Label versionLabel;
@@ -82,20 +105,30 @@ private:
     juce::GroupComponent monitorGroup;
     juce::GroupComponent dspChainGroup;
     juce::GroupComponent cleanBoostGroup;
+    juce::GroupComponent overdriveGroup;
 
     juce::Label monitorNoteLabel;
     juce::Label inputLevelLabel;
     juce::Label outputLevelLabel;
     juce::Label dspChainNoteLabel;
+
     juce::Label cleanBoostGainLabel;
+
+    juce::Label overdriveDriveLabel;
+    juce::Label overdriveLevelLabel;
 
     juce::ToggleButton monitorEnabledToggle;
     juce::ToggleButton muteToggle;
     juce::ComboBox routingModeCombo;
     juce::Slider monitorGainSlider;
     juce::ToggleButton globalBypassToggle;
+
     juce::Slider cleanBoostGainSlider;
     juce::ToggleButton cleanBoostToggle;
+
+    juce::Slider overdriveDriveSlider;
+    juce::Slider overdriveLevelSlider;
+    juce::ToggleButton overdriveToggle;
 
     juce::TextButton retryAudioButton { "Retry audio" };
 
@@ -118,11 +151,18 @@ private:
     std::atomic<int> routingMode { 1 }; // matches ComboBox selectedId
     std::atomic<float> monitorGainLinear { 1.0f };
     std::atomic<float> monitorGainDb { 0.0f };
+
     std::atomic<bool> globalBypass { false };
+
     std::atomic<float> cleanBoostGainDb { 0.0f };
     std::atomic<bool> cleanBoostEnabled { true };
 
+    std::atomic<float> overdriveDrivePct { 0.0f };
+    std::atomic<float> overdriveLevelPct { 100.0f };
+    std::atomic<bool> overdriveEnabled { true };
+
     milodikfx::dsp::GainProcessor* cleanBoostProcessor = nullptr;
+    milodikfx::dsp::OverdriveProcessor* overdriveProcessor = nullptr;
 
     float peakHoldDb = -100.0f;
     uint32_t peakHoldLastUpdateMs = 0;
