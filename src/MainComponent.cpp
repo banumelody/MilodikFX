@@ -85,6 +85,130 @@ void MainComponent::KnobLookAndFeel::drawRotarySlider (juce::Graphics& g,
     }
 }
 
+void MainComponent::EffectCard::setTitle (juce::String newTitle)
+{
+    title = std::move (newTitle);
+    repaint();
+}
+
+void MainComponent::EffectCard::setAccentColour (juce::Colour newAccent)
+{
+    accent = newAccent;
+    repaint();
+}
+
+void MainComponent::EffectCard::setEnabledState (bool isEnabled)
+{
+    enabledState = isEnabled;
+    repaint();
+}
+
+juce::Rectangle<int> MainComponent::EffectCard::getContentBounds() const
+{
+    auto b = getLocalBounds().reduced (14);
+    b.removeFromTop (38);
+    b.removeFromTop (10);
+    b.removeFromBottom (10);
+    return b;
+}
+
+void MainComponent::EffectCard::paint (juce::Graphics& g)
+{
+    auto b = getLocalBounds().toFloat();
+
+    const auto radius = 10.0f;
+
+    // Body
+    {
+        juce::ColourGradient bodyGrad (juce::Colour (0xff232629), b.getCentreX(), b.getY(),
+                                      juce::Colour (0xff121416), b.getCentreX(), b.getBottom(), false);
+        g.setGradientFill (bodyGrad);
+        g.fillRoundedRectangle (b, radius);
+
+        g.setColour (juce::Colours::black.withAlpha (0.65f));
+        g.drawRoundedRectangle (b, radius, 1.5f);
+    }
+
+    // Header
+    {
+        auto header = b;
+        header.setHeight (38.0f);
+
+        const auto headerAccent = enabledState ? accent.withAlpha (0.55f)
+                                               : accent.withAlpha (0.14f);
+
+        juce::ColourGradient headerGrad (headerAccent, header.getX(), header.getY(),
+                                        juce::Colour (0xff0f1113), header.getX(), header.getBottom(), false);
+        g.setGradientFill (headerGrad);
+        g.fillRoundedRectangle (header, radius);
+
+        // Square off the bottom of the header for a nicer card look
+        g.setColour (juce::Colour (0xff0f1113).withAlpha (0.8f));
+        g.fillRect (juce::Rectangle<float> (header.getX(), header.getBottom() - radius, header.getWidth(), radius));
+
+        // LED
+        const auto led = enabledState ? accent.withAlpha (0.95f)
+                                      : juce::Colours::black.withAlpha (0.35f);
+        g.setColour (led);
+        g.fillEllipse (juce::Rectangle<float> (header.getX() + 12.0f, header.getCentreY() - 6.0f, 12.0f, 12.0f));
+        g.setColour (juce::Colours::black.withAlpha (0.4f));
+        g.drawEllipse (juce::Rectangle<float> (header.getX() + 12.0f, header.getCentreY() - 6.0f, 12.0f, 12.0f), 1.0f);
+
+        g.setColour (juce::Colours::white.withAlpha (0.95f));
+        g.setFont (juce::Font (juce::FontOptions (14.0f, juce::Font::bold)));
+        g.drawFittedText (title, header.toNearestInt().reduced (24, 0), juce::Justification::centred, 1);
+    }
+}
+
+void MainComponent::FootswitchButton::setAccentColour (juce::Colour newAccent)
+{
+    accent = newAccent;
+    repaint();
+}
+
+void MainComponent::FootswitchButton::paintButton (juce::Graphics& g,
+                                                   bool shouldDrawButtonAsHighlighted,
+                                                   bool shouldDrawButtonAsDown)
+{
+    auto b = getLocalBounds().toFloat().reduced (2.0f);
+
+    const auto radius = juce::jmin (b.getWidth(), b.getHeight()) * 0.5f;
+    const auto cx = b.getCentreX();
+    const auto cy = b.getCentreY();
+
+    const auto circle = juce::Rectangle<float> (cx - radius, cy - radius, radius * 2.0f, radius * 2.0f);
+
+    const auto toggleOn = getToggleState();
+
+    auto base1 = juce::Colour (0xff2b2e31);
+    auto base2 = juce::Colour (0xff0d0f11);
+
+    if (shouldDrawButtonAsDown)
+        base1 = base1.brighter (0.08f);
+
+    if (shouldDrawButtonAsHighlighted)
+        base1 = base1.brighter (0.05f);
+
+    juce::ColourGradient grad (base1, cx, cy - radius, base2, cx, cy + radius, false);
+    g.setGradientFill (grad);
+    g.fillEllipse (circle);
+
+    // Outer ring
+    g.setColour (juce::Colours::black.withAlpha (0.75f));
+    g.drawEllipse (circle, 2.0f);
+
+    // Inner ring
+    g.setColour (juce::Colours::white.withAlpha (0.08f));
+    g.drawEllipse (circle.reduced (4.0f), 1.0f);
+
+    // Accent glow when ON
+    if (toggleOn)
+    {
+        g.setColour (accent.withAlpha (0.55f));
+        g.drawEllipse (circle.reduced (1.5f), 3.0f);
+    }
+}
+
 void MainComponent::LevelMeter::setLevelsDb (float newRmsDb, float newPeakHoldDb, bool isClipped)
 {
     rmsDb = juce::jlimit (-100.0f, 0.0f, newRmsDb);
@@ -407,15 +531,16 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     dspChainGroup.setText ("DSP Chain");
     addAndMakeVisible (dspChainGroup);
 
-    cleanBoostGroup.setText ("Clean Boost");
-    cleanBoostGroup.setColour (juce::GroupComponent::textColourId, juce::Colour (0xff6ee04a));
-    cleanBoostGroup.setColour (juce::GroupComponent::outlineColourId, juce::Colour (0xff6ee04a).withAlpha (0.35f));
-    addAndMakeVisible (cleanBoostGroup);
+    cleanBoostCard.setTitle ("CLEAN BOOST");
+    cleanBoostCard.setAccentColour (juce::Colour (0xff6ee04a));
+    addAndMakeVisible (cleanBoostCard);
 
-    overdriveGroup.setText ("Overdrive");
-    overdriveGroup.setColour (juce::GroupComponent::textColourId, juce::Colour (0xffff9a1f));
-    overdriveGroup.setColour (juce::GroupComponent::outlineColourId, juce::Colour (0xffff9a1f).withAlpha (0.35f));
-    addAndMakeVisible (overdriveGroup);
+    overdriveCard.setTitle ("OVERDRIVE");
+    overdriveCard.setAccentColour (juce::Colour (0xffff9a1f));
+    addAndMakeVisible (overdriveCard);
+
+    cleanBoostCard.setEnabledState (persistedCleanBoostEnabled);
+    overdriveCard.setEnabledState (persistedOverdriveEnabled);
 
     monitorNoteLabel.setText ("Passthrough: input -> output", juce::dontSendNotification);
     monitorNoteLabel.setJustificationType (juce::Justification::centredLeft);
@@ -432,16 +557,24 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     addAndMakeVisible (dspChainNoteLabel);
 
     cleanBoostGainLabel.setText ("Gain", juce::dontSendNotification);
-    cleanBoostGainLabel.setJustificationType (juce::Justification::centredLeft);
+    cleanBoostGainLabel.setJustificationType (juce::Justification::centred);
     addAndMakeVisible (cleanBoostGainLabel);
 
+    cleanBoostStateLabel.setJustificationType (juce::Justification::centred);
+    cleanBoostStateLabel.setFont (juce::Font (juce::FontOptions (12.0f, juce::Font::bold)));
+    addAndMakeVisible (cleanBoostStateLabel);
+
     overdriveDriveLabel.setText ("Drive", juce::dontSendNotification);
-    overdriveDriveLabel.setJustificationType (juce::Justification::centredLeft);
+    overdriveDriveLabel.setJustificationType (juce::Justification::centred);
     addAndMakeVisible (overdriveDriveLabel);
 
     overdriveLevelLabel.setText ("Level", juce::dontSendNotification);
-    overdriveLevelLabel.setJustificationType (juce::Justification::centredLeft);
+    overdriveLevelLabel.setJustificationType (juce::Justification::centred);
     addAndMakeVisible (overdriveLevelLabel);
+
+    overdriveStateLabel.setJustificationType (juce::Justification::centred);
+    overdriveStateLabel.setFont (juce::Font (juce::FontOptions (12.0f, juce::Font::bold)));
+    addAndMakeVisible (overdriveStateLabel);
 
     monitorEnabledToggle.setButtonText ("Monitor");
     monitorEnabledToggle.setToggleState (persistedMonitor, juce::dontSendNotification);
@@ -523,11 +656,13 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
         s.setColour (juce::Slider::textBoxTextColourId, juce::Colours::white.withAlpha (0.9f));
     };
 
-    auto stylePowerToggle = [] (juce::ToggleButton& b, juce::Colour onColour)
+    auto setEffectStateUi = [this] (EffectCard& card, juce::Label& stateLabel, bool isOn, juce::Colour accent)
     {
-        b.setButtonText (b.getToggleState() ? "ON" : "OFF");
-        b.setColour (juce::ToggleButton::textColourId,
-                     b.getToggleState() ? onColour : juce::Colours::white.withAlpha (0.5f));
+        card.setEnabledState (isOn);
+
+        stateLabel.setText (isOn ? "ON" : "OFF", juce::dontSendNotification);
+        stateLabel.setColour (juce::Label::textColourId,
+                              isOn ? accent : juce::Colours::white.withAlpha (0.5f));
     };
 
     configureKnob (cleanBoostGainSlider, juce::Colour (0xff6ee04a));
@@ -546,9 +681,13 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     };
     addAndMakeVisible (cleanBoostGainSlider);
 
+    const auto cleanAccent = juce::Colour (0xff6ee04a);
+    cleanBoostToggle.setButtonText ({});
+    cleanBoostToggle.setAccentColour (cleanAccent);
     cleanBoostToggle.setToggleState (persistedCleanBoostEnabled, juce::dontSendNotification);
-    stylePowerToggle (cleanBoostToggle, juce::Colour (0xff6ee04a));
-    cleanBoostToggle.onClick = [this, stylePowerToggle]
+    setEffectStateUi (cleanBoostCard, cleanBoostStateLabel, persistedCleanBoostEnabled, cleanAccent);
+
+    cleanBoostToggle.onClick = [this, cleanAccent, setEffectStateUi]
     {
         const auto v = cleanBoostToggle.getToggleState();
         cleanBoostEnabled.store (v, std::memory_order_relaxed);
@@ -557,7 +696,8 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
 
         settingsFile.setValue (kKeyCleanBoostEnabled, v);
         markSettingsDirty();
-        stylePowerToggle (cleanBoostToggle, juce::Colour (0xff6ee04a));
+
+        setEffectStateUi (cleanBoostCard, cleanBoostStateLabel, v, cleanAccent);
     };
     addAndMakeVisible (cleanBoostToggle);
 
@@ -595,9 +735,13 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     };
     addAndMakeVisible (overdriveLevelSlider);
 
+    const auto odAccent = juce::Colour (0xffff9a1f);
+    overdriveToggle.setButtonText ({});
+    overdriveToggle.setAccentColour (odAccent);
     overdriveToggle.setToggleState (persistedOverdriveEnabled, juce::dontSendNotification);
-    stylePowerToggle (overdriveToggle, juce::Colour (0xffff9a1f));
-    overdriveToggle.onClick = [this, stylePowerToggle]
+    setEffectStateUi (overdriveCard, overdriveStateLabel, persistedOverdriveEnabled, odAccent);
+
+    overdriveToggle.onClick = [this, odAccent, setEffectStateUi]
     {
         const auto v = overdriveToggle.getToggleState();
         overdriveEnabled.store (v, std::memory_order_relaxed);
@@ -606,7 +750,8 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
 
         settingsFile.setValue (kKeyOverdriveEnabled, v);
         markSettingsDirty();
-        stylePowerToggle (overdriveToggle, juce::Colour (0xffff9a1f));
+
+        setEffectStateUi (overdriveCard, overdriveStateLabel, v, odAccent);
     };
     addAndMakeVisible (overdriveToggle);
 
@@ -636,8 +781,6 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     deviceGroup.toBack();
     monitorGroup.toBack();
     dspChainGroup.toBack();
-    cleanBoostGroup.toBack();
-    overdriveGroup.toBack();
 
     startTimerHz (30);
 }
@@ -725,34 +868,43 @@ void MainComponent::resized()
 
         chainArea.removeFromTop (8);
 
-        constexpr int kCardWidth = 220;
-        constexpr int kCardGap = 12;
+        constexpr int kCardGap = 14;
+        constexpr int kMaxCardWidth = 260;
+        constexpr int kMinCardWidth = 160;
 
-        auto cleanArea = chainArea.removeFromLeft (kCardWidth);
-        cleanBoostGroup.setBounds (cleanArea);
+        const auto cardHeight = juce::jmin (260, chainArea.getHeight());
+        auto cardsRow = chainArea.withSizeKeepingCentre (chainArea.getWidth(), cardHeight);
 
-        chainArea.removeFromLeft (kCardGap);
+        int cardWidth = (cardsRow.getWidth() - kCardGap) / 2;
+        cardWidth = juce::jmin (kMaxCardWidth, cardWidth);
 
-        auto overdriveArea = chainArea.removeFromLeft (kCardWidth);
-        overdriveGroup.setBounds (overdriveArea);
+        if (cardWidth < kMinCardWidth && cardsRow.getWidth() >= (kMinCardWidth * 2 + kCardGap))
+            cardWidth = kMinCardWidth;
+
+        cardWidth = juce::jmax (0, cardWidth);
+
+        const auto totalWidth = cardWidth * 2 + kCardGap;
+        const auto xStart = cardsRow.getX() + (cardsRow.getWidth() - totalWidth) / 2;
+
+        cleanBoostCard.setBounds (xStart, cardsRow.getY(), cardWidth, cardsRow.getHeight());
+        overdriveCard.setBounds (xStart + cardWidth + kCardGap, cardsRow.getY(), cardWidth, cardsRow.getHeight());
 
         {
-            auto cardContent = cleanBoostGroup.getBounds().reduced (12);
-            cardContent.removeFromTop (22);
+            auto cardContent = cleanBoostCard.getContentBounds().translated (cleanBoostCard.getX(), cleanBoostCard.getY());
 
             cleanBoostGainLabel.setBounds (cardContent.removeFromTop (18));
             cardContent.removeFromTop (6);
 
-            auto knobArea = cardContent.removeFromTop (110);
-            cleanBoostGainSlider.setBounds (knobArea);
+            auto knobArea = cardContent.removeFromTop (150);
+            cleanBoostGainSlider.setBounds (knobArea.reduced (10));
 
-            cardContent.removeFromTop (6);
-            cleanBoostToggle.setBounds (cardContent.removeFromTop (24));
+            auto footArea = cardContent.removeFromBottom (66);
+            cleanBoostStateLabel.setBounds (footArea.removeFromTop (18));
+            cleanBoostToggle.setBounds (footArea.reduced (0, 2).withSizeKeepingCentre (44, 44));
         }
 
         {
-            auto cardContent = overdriveGroup.getBounds().reduced (12);
-            cardContent.removeFromTop (22);
+            auto cardContent = overdriveCard.getContentBounds().translated (overdriveCard.getX(), overdriveCard.getY());
 
             auto labelsRow = cardContent.removeFromTop (18);
             overdriveDriveLabel.setBounds (labelsRow.removeFromLeft (labelsRow.getWidth() / 2));
@@ -760,13 +912,14 @@ void MainComponent::resized()
 
             cardContent.removeFromTop (6);
 
-            auto knobsRow = cardContent.removeFromTop (110);
+            auto knobsRow = cardContent.removeFromTop (150);
             auto leftKnob = knobsRow.removeFromLeft (knobsRow.getWidth() / 2);
-            overdriveDriveSlider.setBounds (leftKnob);
-            overdriveLevelSlider.setBounds (knobsRow);
+            overdriveDriveSlider.setBounds (leftKnob.reduced (10));
+            overdriveLevelSlider.setBounds (knobsRow.reduced (10));
 
-            cardContent.removeFromTop (6);
-            overdriveToggle.setBounds (cardContent.removeFromTop (24));
+            auto footArea = cardContent.removeFromBottom (66);
+            overdriveStateLabel.setBounds (footArea.removeFromTop (18));
+            overdriveToggle.setBounds (footArea.reduced (0, 2).withSizeKeepingCentre (44, 44));
         }
 
     }

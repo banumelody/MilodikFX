@@ -84,6 +84,32 @@ private:
                               juce::Slider& slider) override;
     };
 
+    struct EffectCard final : public juce::Component
+    {
+        void setTitle (juce::String newTitle);
+        void setAccentColour (juce::Colour newAccent);
+        void setEnabledState (bool isEnabled);
+
+        juce::Rectangle<int> getContentBounds() const;
+
+        void paint (juce::Graphics& g) override;
+
+    private:
+        juce::String title;
+        juce::Colour accent { juce::Colours::white };
+        bool enabledState = true;
+    };
+
+    struct FootswitchButton final : public juce::ToggleButton
+    {
+        void setAccentColour (juce::Colour newAccent);
+
+        void paintButton (juce::Graphics& g, bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override;
+
+    private:
+        juce::Colour accent { juce::Colours::white };
+    };
+
     juce::PropertiesFile& settingsFile;
     bool settingsDirty = false;
     uint32_t lastSettingsSaveMs = 0;
@@ -104,8 +130,9 @@ private:
     juce::GroupComponent deviceGroup;
     juce::GroupComponent monitorGroup;
     juce::GroupComponent dspChainGroup;
-    juce::GroupComponent cleanBoostGroup;
-    juce::GroupComponent overdriveGroup;
+
+    EffectCard cleanBoostCard;
+    EffectCard overdriveCard;
 
     juce::Label monitorNoteLabel;
     juce::Label inputLevelLabel;
@@ -113,9 +140,11 @@ private:
     juce::Label dspChainNoteLabel;
 
     juce::Label cleanBoostGainLabel;
+    juce::Label cleanBoostStateLabel;
 
     juce::Label overdriveDriveLabel;
     juce::Label overdriveLevelLabel;
+    juce::Label overdriveStateLabel;
 
     juce::ToggleButton monitorEnabledToggle;
     juce::ToggleButton muteToggle;
@@ -124,11 +153,11 @@ private:
     juce::ToggleButton globalBypassToggle;
 
     juce::Slider cleanBoostGainSlider;
-    juce::ToggleButton cleanBoostToggle;
+    FootswitchButton cleanBoostToggle;
 
     juce::Slider overdriveDriveSlider;
     juce::Slider overdriveLevelSlider;
-    juce::ToggleButton overdriveToggle;
+    FootswitchButton overdriveToggle;
 
     juce::TextButton retryAudioButton { "Retry audio" };
 
