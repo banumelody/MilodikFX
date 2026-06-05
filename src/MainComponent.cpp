@@ -883,14 +883,17 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
 
     eqBassLabel.setText ("Bass", juce::dontSendNotification);
     eqBassLabel.setJustificationType (juce::Justification::centred);
+    eqBassLabel.setMinimumHorizontalScale (0.75f);
     addAndMakeVisible (eqBassLabel);
 
     eqMidLabel.setText ("Mid", juce::dontSendNotification);
     eqMidLabel.setJustificationType (juce::Justification::centred);
+    eqMidLabel.setMinimumHorizontalScale (0.75f);
     addAndMakeVisible (eqMidLabel);
 
     eqTrebleLabel.setText ("Treble", juce::dontSendNotification);
     eqTrebleLabel.setJustificationType (juce::Justification::centred);
+    eqTrebleLabel.setMinimumHorizontalScale (0.75f);
     addAndMakeVisible (eqTrebleLabel);
 
     eqStateLabel.setJustificationType (juce::Justification::centred);
@@ -1079,7 +1082,11 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     const auto eqAccent = juce::Colour (0xff3aa3ff);
 
     configureKnob (eqBassSlider, eqAccent);
+    eqBassSlider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 64, 16);
     eqBassSlider.setTextValueSuffix (" dB");
+    eqBassSlider.setNumDecimalPlacesToDisplay (1);
+    eqBassSlider.setDoubleClickReturnValue (true, 0.0);
+    eqBassSlider.setPopupDisplayEnabled (true, false, this);
     eqBassSlider.setRange (-12.0, 12.0, 0.1);
     eqBassSlider.setValue (persistedEqBassDb, juce::dontSendNotification);
     eqBassSlider.onValueChange = [this]
@@ -1095,7 +1102,11 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     addAndMakeVisible (eqBassSlider);
 
     configureKnob (eqMidSlider, eqAccent);
+    eqMidSlider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 64, 16);
     eqMidSlider.setTextValueSuffix (" dB");
+    eqMidSlider.setNumDecimalPlacesToDisplay (1);
+    eqMidSlider.setDoubleClickReturnValue (true, 0.0);
+    eqMidSlider.setPopupDisplayEnabled (true, false, this);
     eqMidSlider.setRange (-12.0, 12.0, 0.1);
     eqMidSlider.setValue (persistedEqMidDb, juce::dontSendNotification);
     eqMidSlider.onValueChange = [this]
@@ -1111,7 +1122,11 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     addAndMakeVisible (eqMidSlider);
 
     configureKnob (eqTrebleSlider, eqAccent);
+    eqTrebleSlider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 64, 16);
     eqTrebleSlider.setTextValueSuffix (" dB");
+    eqTrebleSlider.setNumDecimalPlacesToDisplay (1);
+    eqTrebleSlider.setDoubleClickReturnValue (true, 0.0);
+    eqTrebleSlider.setPopupDisplayEnabled (true, false, this);
     eqTrebleSlider.setRange (-12.0, 12.0, 0.1);
     eqTrebleSlider.setValue (persistedEqTrebleDb, juce::dontSendNotification);
     eqTrebleSlider.onValueChange = [this]
@@ -1262,12 +1277,17 @@ void MainComponent::resized()
 
     const auto desiredTopRowH = (int) (content.getHeight() * 0.6f);
     constexpr int kMinChainH = 260;
+
     int topRowH = desiredTopRowH;
 
-    if (content.getHeight() - topRowH < kMinChainH)
-        topRowH = juce::jmax (0, content.getHeight() - kMinChainH);
+    // Prefer keeping enough vertical space for the DSP chain row; otherwise the EQ card gets cramped.
+    const int maxTopRowH = juce::jmax (0, content.getHeight() - kMinChainH);
 
-    topRowH = juce::jlimit (160, content.getHeight(), topRowH);
+    // Only enforce the usual minimum when there's enough space for both panels + chain.
+    const int minTopRowH = (content.getHeight() >= 160 + kMinChainH) ? 160 : 0;
+
+    topRowH = juce::jlimit (minTopRowH, content.getHeight(), topRowH);
+    topRowH = juce::jmin (topRowH, maxTopRowH);
 
     auto topRow = takeTop (content, topRowH);
 
@@ -1415,33 +1435,42 @@ void MainComponent::resized()
         {
             auto contentAbs = card.getContentBounds().translated (card.getX(), card.getY());
 
-            auto labelsRow = takeTop (contentAbs, juce::jmin (18, contentAbs.getHeight()));
+            auto labelsRow = takeTop (contentAbs, juce::jmin (16, contentAbs.getHeight()));
             auto colW = labelsRow.getWidth() / 3;
-            bassLabel.setBounds (takeLeft (labelsRow, colW));
-            midLabel.setBounds (takeLeft (labelsRow, colW));
-            trebleLabel.setBounds (labelsRow);
+            bassLabel.setBounds (takeLeft (labelsRow, colW).reduced (2, 0));
+            midLabel.setBounds (takeLeft (labelsRow, colW).reduced (2, 0));
+            trebleLabel.setBounds (labelsRow.reduced (2, 0));
 
             takeTop (contentAbs, 6);
 
-            const auto footH = juce::jmin (66, contentAbs.getHeight());
+            const auto footH = juce::jmin (56, juce::jmax (44, contentAbs.getHeight() / 3));
             auto footArea = takeBottom (contentAbs, footH);
             layoutFootswitch (footArea, stateLabel, button);
 
             auto knobsArea = contentAbs;
-            const auto inset = juce::jlimit (4, 12, knobsArea.getWidth() / 16);
+            const auto minDim = juce::jmin (knobsArea.getWidth(), knobsArea.getHeight());
+            const auto inset = juce::jlimit (2, 10, minDim / 14);
 
             if (knobsArea.getWidth() < 240)
             {
-                auto topH = knobsArea.getHeight() / 3;
-                bassKnob.setBounds (takeTop (knobsArea, topH).reduced (inset));
-                midKnob.setBounds (takeTop (knobsArea, topH).reduced (inset));
+                const int gap = juce::jmin (10, juce::jmax (0, knobsArea.getHeight() / 18));
+                const int h = juce::jmax (0, (knobsArea.getHeight() - gap * 2) / 3);
+
+                bassKnob.setBounds (takeTop (knobsArea, h).reduced (inset));
+                takeTop (knobsArea, gap);
+                midKnob.setBounds (takeTop (knobsArea, h).reduced (inset));
+                takeTop (knobsArea, gap);
                 trebleKnob.setBounds (knobsArea.reduced (inset));
             }
             else
             {
-                auto thirdW = knobsArea.getWidth() / 3;
-                bassKnob.setBounds (takeLeft (knobsArea, thirdW).reduced (inset));
-                midKnob.setBounds (takeLeft (knobsArea, thirdW).reduced (inset));
+                const int gap = juce::jmin (10, juce::jmax (0, knobsArea.getWidth() / 24));
+                const int w = juce::jmax (0, (knobsArea.getWidth() - gap * 2) / 3);
+
+                bassKnob.setBounds (takeLeft (knobsArea, w).reduced (inset));
+                takeLeft (knobsArea, gap);
+                midKnob.setBounds (takeLeft (knobsArea, w).reduced (inset));
+                takeLeft (knobsArea, gap);
                 trebleKnob.setBounds (knobsArea.reduced (inset));
             }
         };

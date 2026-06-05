@@ -2,7 +2,7 @@
 
 MilodikFX adalah aplikasi multi-effect gitar/bass berbasis DSP realtime (C++20 + JUCE) untuk Windows 11.
 
-Status v0.5.0:
+Status v0.5.1:
 - Monitoring passthrough + input/output metering
 - DSP Chain: Clean Boost (0–24 dB) → Overdrive (Drive/Level %) → 3 Band EQ (Bass/Mid/Treble ±12 dB)
 - Preset management: Save / Load / Delete (JSON)
