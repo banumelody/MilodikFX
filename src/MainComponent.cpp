@@ -805,18 +805,53 @@ void MainComponent::paint (juce::Graphics& g)
 
 void MainComponent::resized()
 {
+    auto takeTop = [] (juce::Rectangle<int>& r, int h)
+    {
+        return r.removeFromTop (juce::jmin (h, r.getHeight()));
+    };
+
+    auto takeBottom = [] (juce::Rectangle<int>& r, int h)
+    {
+        return r.removeFromBottom (juce::jmin (h, r.getHeight()));
+    };
+
+    auto takeLeft = [] (juce::Rectangle<int>& r, int w)
+    {
+        return r.removeFromLeft (juce::jmin (w, r.getWidth()));
+    };
+
+    auto takeRight = [] (juce::Rectangle<int>& r, int w)
+    {
+        return r.removeFromRight (juce::jmin (w, r.getWidth()));
+    };
+
     auto bounds = getLocalBounds().reduced (12);
 
-    auto header = bounds.removeFromTop (48);
-    auto titleArea = header.removeFromLeft (220);
-    titleLabel.setBounds (titleArea.removeFromTop (28));
+    auto header = takeTop (bounds, 48);
+    auto titleArea = takeLeft (header, 220);
+    titleLabel.setBounds (takeTop (titleArea, 28));
     versionLabel.setBounds (titleArea);
-    retryAudioButton.setBounds (header.removeFromRight (120));
+    retryAudioButton.setBounds (takeRight (header, 120));
     deviceStatusLabel.setBounds (header);
 
     auto content = bounds;
-    auto topRow = content.removeFromTop ((int) (content.getHeight() * 0.6f));
-    auto left = topRow.removeFromLeft ((int) (topRow.getWidth() * 0.65f));
+
+    const auto desiredTopRowH = (int) (content.getHeight() * 0.6f);
+    constexpr int kMinChainH = 260;
+    int topRowH = desiredTopRowH;
+
+    if (content.getHeight() - topRowH < kMinChainH)
+        topRowH = juce::jmax (0, content.getHeight() - kMinChainH);
+
+    topRowH = juce::jlimit (160, content.getHeight(), topRowH);
+
+    auto topRow = takeTop (content, topRowH);
+
+    constexpr int kMinRightPanelW = 260;
+    int leftW = (int) (topRow.getWidth() * 0.65f);
+    leftW = juce::jlimit (220, juce::jmax (220, topRow.getWidth() - kMinRightPanelW), leftW);
+
+    auto left = takeLeft (topRow, leftW);
     auto right = topRow;
 
     deviceGroup.setBounds (left);
@@ -825,7 +860,7 @@ void MainComponent::resized()
 
     {
         auto deviceArea = deviceGroup.getBounds().reduced (12);
-        deviceArea.removeFromTop (22);
+        takeTop (deviceArea, 22);
 
         if (deviceSelector != nullptr)
             deviceSelector->setBounds (deviceArea);
@@ -833,95 +868,150 @@ void MainComponent::resized()
 
     {
         auto monitorArea = monitorGroup.getBounds().reduced (12);
-        monitorArea.removeFromTop (22);
+        takeTop (monitorArea, 22);
 
-        monitorNoteLabel.setBounds (monitorArea.removeFromTop (20));
-        monitorArea.removeFromTop (6);
+        monitorNoteLabel.setBounds (takeTop (monitorArea, 20));
+        takeTop (monitorArea, 6);
 
-        auto controls = monitorArea.removeFromTop (26);
-        monitorEnabledToggle.setBounds (controls.removeFromLeft (110));
-        muteToggle.setBounds (controls.removeFromLeft (70));
+        auto controls = takeTop (monitorArea, 26);
+        monitorEnabledToggle.setBounds (takeLeft (controls, 110));
+        muteToggle.setBounds (takeLeft (controls, 70));
         routingModeCombo.setBounds (controls.reduced (0, 2));
 
-        monitorArea.removeFromTop (8);
-        monitorGainSlider.setBounds (monitorArea.removeFromTop (26));
-        monitorArea.removeFromTop (8);
+        takeTop (monitorArea, 8);
+        monitorGainSlider.setBounds (takeTop (monitorArea, 26));
+        takeTop (monitorArea, 8);
 
-        auto inRow = monitorArea.removeFromTop (26);
-        inputMeter.setBounds (inRow.removeFromRight (140).reduced (0, 4));
+        auto inRow = takeTop (monitorArea, 26);
+        inputMeter.setBounds (takeRight (inRow, 140).reduced (0, 4));
         inputLevelLabel.setBounds (inRow);
 
-        monitorArea.removeFromTop (6);
+        takeTop (monitorArea, 6);
 
-        auto outRow = monitorArea.removeFromTop (26);
-        outputMeter.setBounds (outRow.removeFromRight (140).reduced (0, 4));
+        auto outRow = takeTop (monitorArea, 26);
+        outputMeter.setBounds (takeRight (outRow, 140).reduced (0, 4));
         outputLevelLabel.setBounds (outRow);
     }
 
     {
         auto chainArea = dspChainGroup.getBounds().reduced (12);
-        chainArea.removeFromTop (22);
+        takeTop (chainArea, 22);
 
-        auto chainHeader = chainArea.removeFromTop (26);
-        globalBypassToggle.setBounds (chainHeader.removeFromRight (160).reduced (0, 2));
+        auto chainHeader = takeTop (chainArea, 26);
+        globalBypassToggle.setBounds (takeRight (chainHeader, 160).reduced (0, 2));
         dspChainNoteLabel.setBounds (chainHeader);
 
-        chainArea.removeFromTop (8);
+        takeTop (chainArea, 8);
 
         constexpr int kCardGap = 14;
         constexpr int kMaxCardWidth = 260;
         constexpr int kMinCardWidth = 160;
+        constexpr int kMaxCardHeight = 260;
 
-        const auto cardHeight = juce::jmin (260, chainArea.getHeight());
-        auto cardsRow = chainArea.withSizeKeepingCentre (chainArea.getWidth(), cardHeight);
-
-        int cardWidth = (cardsRow.getWidth() - kCardGap) / 2;
-        cardWidth = juce::jmin (kMaxCardWidth, cardWidth);
-
-        if (cardWidth < kMinCardWidth && cardsRow.getWidth() >= (kMinCardWidth * 2 + kCardGap))
-            cardWidth = kMinCardWidth;
-
-        cardWidth = juce::jmax (0, cardWidth);
-
-        const auto totalWidth = cardWidth * 2 + kCardGap;
-        const auto xStart = cardsRow.getX() + (cardsRow.getWidth() - totalWidth) / 2;
-
-        cleanBoostCard.setBounds (xStart, cardsRow.getY(), cardWidth, cardsRow.getHeight());
-        overdriveCard.setBounds (xStart + cardWidth + kCardGap, cardsRow.getY(), cardWidth, cardsRow.getHeight());
-
+        auto layoutFootswitch = [&] (juce::Rectangle<int> footArea, juce::Label& stateLabel, FootswitchButton& button)
         {
-            auto cardContent = cleanBoostCard.getContentBounds().translated (cleanBoostCard.getX(), cleanBoostCard.getY());
+            const auto stateH = juce::jmin (18, footArea.getHeight());
+            stateLabel.setBounds (takeTop (footArea, stateH));
 
-            cleanBoostGainLabel.setBounds (cardContent.removeFromTop (18));
-            cardContent.removeFromTop (6);
+            auto buttonArea = footArea.reduced (0, 2);
+            const auto btnSize = juce::jmin (44, juce::jmin (buttonArea.getWidth(), buttonArea.getHeight()));
+            button.setBounds (buttonArea.withSizeKeepingCentre (btnSize, btnSize));
+        };
 
-            auto knobArea = cardContent.removeFromTop (150);
-            cleanBoostGainSlider.setBounds (knobArea.reduced (10));
+        auto layoutOneKnobCard = [&] (EffectCard& card, juce::Label& label, juce::Slider& knob, juce::Label& stateLabel, FootswitchButton& button)
+        {
+            auto contentAbs = card.getContentBounds().translated (card.getX(), card.getY());
+            label.setBounds (takeTop (contentAbs, juce::jmin (18, contentAbs.getHeight())));
+            takeTop (contentAbs, 6);
 
-            auto footArea = cardContent.removeFromBottom (66);
-            cleanBoostStateLabel.setBounds (footArea.removeFromTop (18));
-            cleanBoostToggle.setBounds (footArea.reduced (0, 2).withSizeKeepingCentre (44, 44));
+            const auto footH = juce::jmin (66, contentAbs.getHeight());
+            auto footArea = takeBottom (contentAbs, footH);
+            layoutFootswitch (footArea, stateLabel, button);
+
+            auto knobArea = contentAbs;
+            const auto inset = juce::jlimit (4, 12, knobArea.getWidth() / 10);
+            knob.setBounds (knobArea.reduced (inset));
+        };
+
+        auto layoutTwoKnobCard = [&] (EffectCard& card,
+                                     juce::Label& leftLabel,
+                                     juce::Label& rightLabel,
+                                     juce::Slider& leftKnob,
+                                     juce::Slider& rightKnob,
+                                     juce::Label& stateLabel,
+                                     FootswitchButton& button)
+        {
+            auto contentAbs = card.getContentBounds().translated (card.getX(), card.getY());
+
+            auto labelsRow = takeTop (contentAbs, juce::jmin (18, contentAbs.getHeight()));
+            auto leftHalf = takeLeft (labelsRow, labelsRow.getWidth() / 2);
+            leftLabel.setBounds (leftHalf);
+            rightLabel.setBounds (labelsRow);
+
+            takeTop (contentAbs, 6);
+
+            const auto footH = juce::jmin (66, contentAbs.getHeight());
+            auto footArea = takeBottom (contentAbs, footH);
+            layoutFootswitch (footArea, stateLabel, button);
+
+            auto knobsArea = contentAbs;
+            const auto inset = juce::jlimit (4, 12, knobsArea.getWidth() / 12);
+
+            if (knobsArea.getWidth() < 200)
+            {
+                auto topKnob = takeTop (knobsArea, knobsArea.getHeight() / 2);
+                leftKnob.setBounds (topKnob.reduced (inset));
+                rightKnob.setBounds (knobsArea.reduced (inset));
+            }
+            else
+            {
+                auto leftKnobArea = takeLeft (knobsArea, knobsArea.getWidth() / 2);
+                leftKnob.setBounds (leftKnobArea.reduced (inset));
+                rightKnob.setBounds (knobsArea.reduced (inset));
+            }
+        };
+
+        // Pedalboard cards: horizontal when space allows, otherwise stack vertically.
+        if (chainArea.getWidth() >= (kMinCardWidth * 2 + kCardGap))
+        {
+            const auto cardHeight = juce::jmin (kMaxCardHeight, chainArea.getHeight());
+            auto cardsRow = chainArea.withSizeKeepingCentre (chainArea.getWidth(), cardHeight);
+
+            int cardWidth = (cardsRow.getWidth() - kCardGap) / 2;
+            cardWidth = juce::jmin (kMaxCardWidth, cardWidth);
+            cardWidth = juce::jmax (kMinCardWidth, cardWidth);
+
+            const auto totalWidth = cardWidth * 2 + kCardGap;
+            const auto xStart = cardsRow.getX() + (cardsRow.getWidth() - totalWidth) / 2;
+
+            cleanBoostCard.setBounds (xStart, cardsRow.getY(), cardWidth, cardsRow.getHeight());
+            overdriveCard.setBounds (xStart + cardWidth + kCardGap, cardsRow.getY(), cardWidth, cardsRow.getHeight());
+        }
+        else
+        {
+            const auto cardWidth = juce::jmin (kMaxCardWidth, chainArea.getWidth());
+
+            auto stackArea = chainArea;
+            const auto maxStackH = juce::jmin (chainArea.getHeight(), (kMaxCardHeight * 2 + kCardGap));
+            stackArea = stackArea.withSizeKeepingCentre (cardWidth, maxStackH);
+
+            const auto cardHeight = juce::jmin (kMaxCardHeight, (stackArea.getHeight() - kCardGap) / 2);
+            auto topCard = takeTop (stackArea, cardHeight);
+            takeTop (stackArea, kCardGap);
+            auto bottomCard = takeTop (stackArea, cardHeight);
+
+            cleanBoostCard.setBounds (topCard);
+            overdriveCard.setBounds (bottomCard);
         }
 
-        {
-            auto cardContent = overdriveCard.getContentBounds().translated (overdriveCard.getX(), overdriveCard.getY());
-
-            auto labelsRow = cardContent.removeFromTop (18);
-            overdriveDriveLabel.setBounds (labelsRow.removeFromLeft (labelsRow.getWidth() / 2));
-            overdriveLevelLabel.setBounds (labelsRow);
-
-            cardContent.removeFromTop (6);
-
-            auto knobsRow = cardContent.removeFromTop (150);
-            auto leftKnob = knobsRow.removeFromLeft (knobsRow.getWidth() / 2);
-            overdriveDriveSlider.setBounds (leftKnob.reduced (10));
-            overdriveLevelSlider.setBounds (knobsRow.reduced (10));
-
-            auto footArea = cardContent.removeFromBottom (66);
-            overdriveStateLabel.setBounds (footArea.removeFromTop (18));
-            overdriveToggle.setBounds (footArea.reduced (0, 2).withSizeKeepingCentre (44, 44));
-        }
-
+        layoutOneKnobCard (cleanBoostCard, cleanBoostGainLabel, cleanBoostGainSlider, cleanBoostStateLabel, cleanBoostToggle);
+        layoutTwoKnobCard (overdriveCard,
+                           overdriveDriveLabel,
+                           overdriveLevelLabel,
+                           overdriveDriveSlider,
+                           overdriveLevelSlider,
+                           overdriveStateLabel,
+                           overdriveToggle);
     }
 }
 
