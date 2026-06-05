@@ -43,7 +43,11 @@ $requiredKeys = @(
     'dsp.cleanBoost.gainDb',
     'dsp.overdrive.enabled',
     'dsp.overdrive.drivePct',
-    'dsp.overdrive.levelPct'
+    'dsp.overdrive.levelPct',
+    'dsp.eq.enabled',
+    'dsp.eq.bassDb',
+    'dsp.eq.midDb',
+    'dsp.eq.trebleDb'
 )
 
 foreach ($k in $requiredKeys) {

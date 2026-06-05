@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(MilodikFX VERSION 0.3.2 LANGUAGES CXX)
+project(MilodikFX VERSION 0.4.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -57,6 +57,8 @@ target_sources(MilodikFX
     src/dsp/GainProcessor.cpp
     src/dsp/OverdriveProcessor.h
     src/dsp/OverdriveProcessor.cpp
+    src/dsp/EQProcessor.h
+    src/dsp/EQProcessor.cpp
     src/dsp/DSPChainManager.h
     src/dsp/DSPChainManager.cpp
 )
@@ -91,6 +93,7 @@ endif()
 target_link_libraries(MilodikFX
   PRIVATE
     juce::juce_audio_utils
+    juce::juce_dsp
     juce::juce_data_structures
     juce::juce_gui_extra
     juce::juce_recommended_config_flags
@@ -110,6 +113,7 @@ target_sources(MilodikFX_tests
     src/dsp/DSPChainManager.cpp
     src/dsp/GainProcessor.cpp
     src/dsp/OverdriveProcessor.cpp
+    src/dsp/EQProcessor.cpp
 )
 
 target_compile_definitions(MilodikFX_tests
@@ -122,6 +126,7 @@ target_link_libraries(MilodikFX_tests
   PRIVATE
     juce::juce_core
     juce::juce_audio_basics
+    juce::juce_dsp
     juce::juce_data_structures
     juce::juce_recommended_config_flags
     juce::juce_recommended_lto_flags

@@ -428,6 +428,11 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     double persistedOverdriveLevelPct = 100.0;
     bool persistedOverdriveEnabled = true;
 
+    double persistedEqBassDb = 0.0;
+    double persistedEqMidDb = 0.0;
+    double persistedEqTrebleDb = 0.0;
+    bool persistedEqEnabled = true;
+
     juce::String persistedAudioXml;
 
     persistedMonitor = settingsFile.getBoolValue (kKeyMonitorEnabled, true);
@@ -443,6 +448,11 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     persistedOverdriveLevelPct = settingsFile.getDoubleValue (kKeyOverdriveLevelPct, 100.0);
     persistedOverdriveEnabled = settingsFile.getBoolValue (kKeyOverdriveEnabled, true);
 
+    persistedEqBassDb = settingsFile.getDoubleValue (kKeyEqBassDb, 0.0);
+    persistedEqMidDb = settingsFile.getDoubleValue (kKeyEqMidDb, 0.0);
+    persistedEqTrebleDb = settingsFile.getDoubleValue (kKeyEqTrebleDb, 0.0);
+    persistedEqEnabled = settingsFile.getBoolValue (kKeyEqEnabled, true);
+
     persistedAudioXml = settingsFile.getValue (kKeyAudioDeviceStateXml);
 
     persistedRouting = juce::jlimit (1, 4, persistedRouting);
@@ -451,6 +461,10 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
 
     persistedOverdriveDrivePct = juce::jlimit (0.0, 100.0, persistedOverdriveDrivePct);
     persistedOverdriveLevelPct = juce::jlimit (0.0, 100.0, persistedOverdriveLevelPct);
+
+    persistedEqBassDb = juce::jlimit (-12.0, 12.0, persistedEqBassDb);
+    persistedEqMidDb = juce::jlimit (-12.0, 12.0, persistedEqMidDb);
+    persistedEqTrebleDb = juce::jlimit (-12.0, 12.0, persistedEqTrebleDb);
 
     monitorEnabled.store (persistedMonitor, std::memory_order_relaxed);
     muted.store (persistedMute, std::memory_order_relaxed);
@@ -468,11 +482,19 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     overdriveLevelPct.store ((float) persistedOverdriveLevelPct, std::memory_order_relaxed);
     overdriveEnabled.store (persistedOverdriveEnabled, std::memory_order_relaxed);
 
+    eqBassDb.store ((float) persistedEqBassDb, std::memory_order_relaxed);
+    eqMidDb.store ((float) persistedEqMidDb, std::memory_order_relaxed);
+    eqTrebleDb.store ((float) persistedEqTrebleDb, std::memory_order_relaxed);
+    eqEnabled.store (persistedEqEnabled, std::memory_order_relaxed);
+
     if (auto* processor = audioEngine.getChain().addProcessor (std::make_unique<milodikfx::dsp::GainProcessor>()))
         cleanBoostProcessor = dynamic_cast<milodikfx::dsp::GainProcessor*> (processor);
 
     if (auto* processor = audioEngine.getChain().addProcessor (std::make_unique<milodikfx::dsp::OverdriveProcessor>()))
         overdriveProcessor = dynamic_cast<milodikfx::dsp::OverdriveProcessor*> (processor);
+
+    if (auto* processor = audioEngine.getChain().addProcessor (std::make_unique<milodikfx::dsp::EQProcessor>()))
+        eqProcessor = dynamic_cast<milodikfx::dsp::EQProcessor*> (processor);
 
     if (cleanBoostProcessor != nullptr)
     {
@@ -485,6 +507,14 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
         overdriveProcessor->setDrivePercent ((float) persistedOverdriveDrivePct);
         overdriveProcessor->setLevelPercent ((float) persistedOverdriveLevelPct);
         overdriveProcessor->setEnabled (persistedOverdriveEnabled);
+    }
+
+    if (eqProcessor != nullptr)
+    {
+        eqProcessor->setBassDb ((float) persistedEqBassDb);
+        eqProcessor->setMidDb ((float) persistedEqMidDb);
+        eqProcessor->setTrebleDb ((float) persistedEqTrebleDb);
+        eqProcessor->setEnabled (persistedEqEnabled);
     }
 
     std::unique_ptr<juce::XmlElement> persistedAudioState;
@@ -502,6 +532,10 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     settingsFile.setValue (kKeyOverdriveDrivePct, persistedOverdriveDrivePct);
     settingsFile.setValue (kKeyOverdriveLevelPct, persistedOverdriveLevelPct);
     settingsFile.setValue (kKeyOverdriveEnabled, persistedOverdriveEnabled);
+    settingsFile.setValue (kKeyEqBassDb, persistedEqBassDb);
+    settingsFile.setValue (kKeyEqMidDb, persistedEqMidDb);
+    settingsFile.setValue (kKeyEqTrebleDb, persistedEqTrebleDb);
+    settingsFile.setValue (kKeyEqEnabled, persistedEqEnabled);
     markSettingsDirty();
     saveSettingsIfNeeded (true);
 
@@ -544,8 +578,13 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     overdriveCard.setAccentColour (juce::Colour (0xffff9a1f));
     addAndMakeVisible (overdriveCard);
 
+    eqCard.setTitle ("3 BAND EQ");
+    eqCard.setAccentColour (juce::Colour (0xff3aa3ff));
+    addAndMakeVisible (eqCard);
+
     cleanBoostCard.setEnabledState (persistedCleanBoostEnabled);
     overdriveCard.setEnabledState (persistedOverdriveEnabled);
+    eqCard.setEnabledState (persistedEqEnabled);
 
     monitorNoteLabel.setText ("Passthrough: input -> output", juce::dontSendNotification);
     monitorNoteLabel.setJustificationType (juce::Justification::centredLeft);
@@ -557,7 +596,7 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     outputLevelLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (outputLevelLabel);
 
-    dspChainNoteLabel.setText ("DSP Chain: Clean Boost -> Overdrive", juce::dontSendNotification);
+    dspChainNoteLabel.setText ("DSP Chain: Clean Boost -> Overdrive -> EQ", juce::dontSendNotification);
     dspChainNoteLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (dspChainNoteLabel);
 
@@ -580,6 +619,22 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     overdriveStateLabel.setJustificationType (juce::Justification::centred);
     overdriveStateLabel.setFont (juce::Font (juce::FontOptions (12.0f, juce::Font::bold)));
     addAndMakeVisible (overdriveStateLabel);
+
+    eqBassLabel.setText ("Bass", juce::dontSendNotification);
+    eqBassLabel.setJustificationType (juce::Justification::centred);
+    addAndMakeVisible (eqBassLabel);
+
+    eqMidLabel.setText ("Mid", juce::dontSendNotification);
+    eqMidLabel.setJustificationType (juce::Justification::centred);
+    addAndMakeVisible (eqMidLabel);
+
+    eqTrebleLabel.setText ("Treble", juce::dontSendNotification);
+    eqTrebleLabel.setJustificationType (juce::Justification::centred);
+    addAndMakeVisible (eqTrebleLabel);
+
+    eqStateLabel.setJustificationType (juce::Justification::centred);
+    eqStateLabel.setFont (juce::Font (juce::FontOptions (12.0f, juce::Font::bold)));
+    addAndMakeVisible (eqStateLabel);
 
     monitorEnabledToggle.setButtonText ("Monitor");
     monitorEnabledToggle.setToggleState (persistedMonitor, juce::dontSendNotification);
@@ -759,6 +814,75 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
         setEffectStateUi (overdriveCard, overdriveStateLabel, v, odAccent);
     };
     addAndMakeVisible (overdriveToggle);
+
+    const auto eqAccent = juce::Colour (0xff3aa3ff);
+
+    configureKnob (eqBassSlider, eqAccent);
+    eqBassSlider.setTextValueSuffix (" dB");
+    eqBassSlider.setRange (-12.0, 12.0, 0.1);
+    eqBassSlider.setValue (persistedEqBassDb, juce::dontSendNotification);
+    eqBassSlider.onValueChange = [this]
+    {
+        const auto db = (float) eqBassSlider.getValue();
+        eqBassDb.store (db, std::memory_order_relaxed);
+        if (eqProcessor != nullptr)
+            eqProcessor->setBassDb (db);
+
+        settingsFile.setValue (kKeyEqBassDb, (double) db);
+        markSettingsDirty();
+    };
+    addAndMakeVisible (eqBassSlider);
+
+    configureKnob (eqMidSlider, eqAccent);
+    eqMidSlider.setTextValueSuffix (" dB");
+    eqMidSlider.setRange (-12.0, 12.0, 0.1);
+    eqMidSlider.setValue (persistedEqMidDb, juce::dontSendNotification);
+    eqMidSlider.onValueChange = [this]
+    {
+        const auto db = (float) eqMidSlider.getValue();
+        eqMidDb.store (db, std::memory_order_relaxed);
+        if (eqProcessor != nullptr)
+            eqProcessor->setMidDb (db);
+
+        settingsFile.setValue (kKeyEqMidDb, (double) db);
+        markSettingsDirty();
+    };
+    addAndMakeVisible (eqMidSlider);
+
+    configureKnob (eqTrebleSlider, eqAccent);
+    eqTrebleSlider.setTextValueSuffix (" dB");
+    eqTrebleSlider.setRange (-12.0, 12.0, 0.1);
+    eqTrebleSlider.setValue (persistedEqTrebleDb, juce::dontSendNotification);
+    eqTrebleSlider.onValueChange = [this]
+    {
+        const auto db = (float) eqTrebleSlider.getValue();
+        eqTrebleDb.store (db, std::memory_order_relaxed);
+        if (eqProcessor != nullptr)
+            eqProcessor->setTrebleDb (db);
+
+        settingsFile.setValue (kKeyEqTrebleDb, (double) db);
+        markSettingsDirty();
+    };
+    addAndMakeVisible (eqTrebleSlider);
+
+    eqToggle.setButtonText ({});
+    eqToggle.setAccentColour (eqAccent);
+    eqToggle.setToggleState (persistedEqEnabled, juce::dontSendNotification);
+    setEffectStateUi (eqCard, eqStateLabel, persistedEqEnabled, eqAccent);
+
+    eqToggle.onClick = [this, eqAccent, setEffectStateUi]
+    {
+        const auto v = eqToggle.getToggleState();
+        eqEnabled.store (v, std::memory_order_relaxed);
+        if (eqProcessor != nullptr)
+            eqProcessor->setEnabled (v);
+
+        settingsFile.setValue (kKeyEqEnabled, v);
+        markSettingsDirty();
+
+        setEffectStateUi (eqCard, eqStateLabel, v, eqAccent);
+    };
+    addAndMakeVisible (eqToggle);
 
     retryAudioButton.onClick = [this]
     {
@@ -984,37 +1108,91 @@ void MainComponent::resized()
             }
         };
 
-        // Pedalboard cards: horizontal when space allows, otherwise stack vertically.
-        if (chainArea.getWidth() >= (kMinCardWidth * 2 + kCardGap))
+        auto layoutThreeKnobCard = [&] (EffectCard& card,
+                                        juce::Label& bassLabel,
+                                        juce::Label& midLabel,
+                                        juce::Label& trebleLabel,
+                                        juce::Slider& bassKnob,
+                                        juce::Slider& midKnob,
+                                        juce::Slider& trebleKnob,
+                                        juce::Label& stateLabel,
+                                        FootswitchButton& button)
         {
-            const auto cardHeight = juce::jmin (kMaxCardHeight, chainArea.getHeight());
-            auto cardsRow = chainArea.withSizeKeepingCentre (chainArea.getWidth(), cardHeight);
+            auto contentAbs = card.getContentBounds().translated (card.getX(), card.getY());
 
-            int cardWidth = (cardsRow.getWidth() - kCardGap) / 2;
-            cardWidth = juce::jmin (kMaxCardWidth, cardWidth);
-            cardWidth = juce::jmax (kMinCardWidth, cardWidth);
+            auto labelsRow = takeTop (contentAbs, juce::jmin (18, contentAbs.getHeight()));
+            auto colW = labelsRow.getWidth() / 3;
+            bassLabel.setBounds (takeLeft (labelsRow, colW));
+            midLabel.setBounds (takeLeft (labelsRow, colW));
+            trebleLabel.setBounds (labelsRow);
 
-            const auto totalWidth = cardWidth * 2 + kCardGap;
-            const auto xStart = cardsRow.getX() + (cardsRow.getWidth() - totalWidth) / 2;
+            takeTop (contentAbs, 6);
 
-            cleanBoostCard.setBounds (xStart, cardsRow.getY(), cardWidth, cardsRow.getHeight());
-            overdriveCard.setBounds (xStart + cardWidth + kCardGap, cardsRow.getY(), cardWidth, cardsRow.getHeight());
-        }
-        else
+            const auto footH = juce::jmin (66, contentAbs.getHeight());
+            auto footArea = takeBottom (contentAbs, footH);
+            layoutFootswitch (footArea, stateLabel, button);
+
+            auto knobsArea = contentAbs;
+            const auto inset = juce::jlimit (4, 12, knobsArea.getWidth() / 16);
+
+            if (knobsArea.getWidth() < 240)
+            {
+                auto topH = knobsArea.getHeight() / 3;
+                bassKnob.setBounds (takeTop (knobsArea, topH).reduced (inset));
+                midKnob.setBounds (takeTop (knobsArea, topH).reduced (inset));
+                trebleKnob.setBounds (knobsArea.reduced (inset));
+            }
+            else
+            {
+                auto thirdW = knobsArea.getWidth() / 3;
+                bassKnob.setBounds (takeLeft (knobsArea, thirdW).reduced (inset));
+                midKnob.setBounds (takeLeft (knobsArea, thirdW).reduced (inset));
+                trebleKnob.setBounds (knobsArea.reduced (inset));
+            }
+        };
+
+        // Pedalboard cards: 3 columns when space allows, otherwise 2+1, otherwise stack vertically.
+        constexpr int kCardCount = 3;
+
+        int columns = 1;
+        if (chainArea.getWidth() >= (kMinCardWidth * 3 + kCardGap * 2))
+            columns = 3;
+        else if (chainArea.getWidth() >= (kMinCardWidth * 2 + kCardGap))
+            columns = 2;
+
+        const int rows = (kCardCount + columns - 1) / columns;
+
+        const int hGap = (columns > 1) ? juce::jmin (kCardGap, chainArea.getWidth() / (columns * 10)) : 0;
+        const int vGap = (rows > 1) ? juce::jmin (kCardGap, chainArea.getHeight() / (rows * 10)) : 0;
+
+        const int minCardWidth = juce::jmin (kMinCardWidth, chainArea.getWidth());
+        const int availableW = juce::jmax (0, chainArea.getWidth() - hGap * (columns - 1));
+        int cardWidth = availableW / columns;
+        cardWidth = juce::jlimit (minCardWidth, kMaxCardWidth, cardWidth);
+
+        const int availableH = juce::jmax (0, chainArea.getHeight() - vGap * (rows - 1));
+        const int cardHeight = juce::jmin (kMaxCardHeight, availableH / rows);
+
+        const int totalH = cardHeight * rows + vGap * (rows - 1);
+        int y = chainArea.getY() + (chainArea.getHeight() - totalH) / 2;
+
+        EffectCard* cards[kCardCount] { &cleanBoostCard, &overdriveCard, &eqCard };
+        int index = 0;
+
+        for (int r = 0; r < rows; ++r)
         {
-            const auto cardWidth = juce::jmin (kMaxCardWidth, chainArea.getWidth());
+            const int itemsThisRow = juce::jmin (columns, kCardCount - index);
+            const int rowW = cardWidth * itemsThisRow + hGap * (itemsThisRow - 1);
+            int x = chainArea.getX() + (chainArea.getWidth() - rowW) / 2;
 
-            auto stackArea = chainArea;
-            const auto maxStackH = juce::jmin (chainArea.getHeight(), (kMaxCardHeight * 2 + kCardGap));
-            stackArea = stackArea.withSizeKeepingCentre (cardWidth, maxStackH);
+            for (int c = 0; c < itemsThisRow; ++c)
+            {
+                cards[index]->setBounds (x, y, cardWidth, cardHeight);
+                x += cardWidth + hGap;
+                ++index;
+            }
 
-            const auto cardHeight = juce::jmin (kMaxCardHeight, (stackArea.getHeight() - kCardGap) / 2);
-            auto topCard = takeTop (stackArea, cardHeight);
-            takeTop (stackArea, kCardGap);
-            auto bottomCard = takeTop (stackArea, cardHeight);
-
-            cleanBoostCard.setBounds (topCard);
-            overdriveCard.setBounds (bottomCard);
+            y += cardHeight + vGap;
         }
 
         layoutOneKnobCard (cleanBoostCard, cleanBoostGainLabel, cleanBoostGainSlider, cleanBoostStateLabel, cleanBoostToggle);
@@ -1025,6 +1203,15 @@ void MainComponent::resized()
                            overdriveLevelSlider,
                            overdriveStateLabel,
                            overdriveToggle);
+        layoutThreeKnobCard (eqCard,
+                             eqBassLabel,
+                             eqMidLabel,
+                             eqTrebleLabel,
+                             eqBassSlider,
+                             eqMidSlider,
+                             eqTrebleSlider,
+                             eqStateLabel,
+                             eqToggle);
     }
 }
 
@@ -1377,12 +1564,21 @@ void MainComponent::timerCallback()
         const auto odDrive = overdriveDrivePct.load (std::memory_order_relaxed);
         const auto odLevel = overdriveLevelPct.load (std::memory_order_relaxed);
 
+        const auto eqOn = eqEnabled.load (std::memory_order_relaxed);
+        const auto eqBass = eqBassDb.load (std::memory_order_relaxed);
+        const auto eqMid = eqMidDb.load (std::memory_order_relaxed);
+        const auto eqTreble = eqTrebleDb.load (std::memory_order_relaxed);
+
         juce::String chain = bypassed ? "Bypassed"
                                       : "Clean Boost " + juce::String (boostOn ? "ON" : "OFF")
                                             + " | Gain " + juce::String (boostDb, 1) + " dB"
                                             + " -> Overdrive " + juce::String (odOn ? "ON" : "OFF")
                                             + " | Drive " + juce::String (odDrive, 0) + "%"
-                                            + " | Level " + juce::String (odLevel, 0) + "%";
+                                            + " | Level " + juce::String (odLevel, 0) + "%"
+                                            + " -> EQ " + juce::String (eqOn ? "ON" : "OFF")
+                                            + " | Bass " + juce::String (eqBass, 1) + " dB"
+                                            + " | Mid " + juce::String (eqMid, 1) + " dB"
+                                            + " | Treble " + juce::String (eqTreble, 1) + " dB";
 
         dspChainNoteLabel.setText ("DSP Chain: " + chain, juce::dontSendNotification);
     }

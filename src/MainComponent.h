@@ -5,6 +5,7 @@
 #include "audio/AudioEngine.h"
 #include "dsp/GainProcessor.h"
 #include "dsp/OverdriveProcessor.h"
+#include "dsp/EQProcessor.h"
 
 class MainComponent final : public juce::Component,
                             private juce::AudioIODeviceCallback,
@@ -31,6 +32,11 @@ private:
     static constexpr const char* kKeyOverdriveEnabled = "dsp.overdrive.enabled";
     static constexpr const char* kKeyOverdriveDrivePct = "dsp.overdrive.drivePct";
     static constexpr const char* kKeyOverdriveLevelPct = "dsp.overdrive.levelPct";
+
+    static constexpr const char* kKeyEqEnabled = "dsp.eq.enabled";
+    static constexpr const char* kKeyEqBassDb = "dsp.eq.bassDb";
+    static constexpr const char* kKeyEqMidDb = "dsp.eq.midDb";
+    static constexpr const char* kKeyEqTrebleDb = "dsp.eq.trebleDb";
 
     static constexpr const char* kKeyAudioDeviceStateXml = "audio.deviceStateXml";
 
@@ -134,6 +140,7 @@ private:
 
     EffectCard cleanBoostCard;
     EffectCard overdriveCard;
+    EffectCard eqCard;
 
     juce::Label monitorNoteLabel;
     juce::Label inputLevelLabel;
@@ -147,6 +154,11 @@ private:
     juce::Label overdriveLevelLabel;
     juce::Label overdriveStateLabel;
 
+    juce::Label eqBassLabel;
+    juce::Label eqMidLabel;
+    juce::Label eqTrebleLabel;
+    juce::Label eqStateLabel;
+
     juce::ToggleButton monitorEnabledToggle;
     juce::ToggleButton muteToggle;
     juce::ComboBox routingModeCombo;
@@ -159,6 +171,11 @@ private:
     juce::Slider overdriveDriveSlider;
     juce::Slider overdriveLevelSlider;
     FootswitchButton overdriveToggle;
+
+    juce::Slider eqBassSlider;
+    juce::Slider eqMidSlider;
+    juce::Slider eqTrebleSlider;
+    FootswitchButton eqToggle;
 
     juce::TextButton retryAudioButton { "Retry audio" };
 
@@ -191,8 +208,14 @@ private:
     std::atomic<float> overdriveLevelPct { 100.0f };
     std::atomic<bool> overdriveEnabled { true };
 
+    std::atomic<float> eqBassDb { 0.0f };
+    std::atomic<float> eqMidDb { 0.0f };
+    std::atomic<float> eqTrebleDb { 0.0f };
+    std::atomic<bool> eqEnabled { true };
+
     milodikfx::dsp::GainProcessor* cleanBoostProcessor = nullptr;
     milodikfx::dsp::OverdriveProcessor* overdriveProcessor = nullptr;
+    milodikfx::dsp::EQProcessor* eqProcessor = nullptr;
 
     float peakHoldDb = -100.0f;
     uint32_t peakHoldLastUpdateMs = 0;
