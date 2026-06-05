@@ -326,19 +326,19 @@ bool MainComponent::initialiseAudioWithFallback (const juce::XmlElement* savedSt
 void MainComponent::rebuildDeviceSelector()
 {
     if (deviceSelector != nullptr)
-        removeChildComponent (deviceSelector.get());
+        deviceSelectorViewport.setViewedComponent (nullptr, false);
 
     deviceSelector = std::make_unique<juce::AudioDeviceSelectorComponent> (
         deviceManager,
         0, 2,   // min/max inputs
         1, 2,   // min/max outputs
-        true,   // show MIDI input
+        false,  // show MIDI input
         false,  // show MIDI output
         true,   // show channels
         true    // show advanced
     );
 
-    addAndMakeVisible (*deviceSelector);
+    deviceSelectorViewport.setViewedComponent (deviceSelector.get(), false);
 }
 
 void MainComponent::markSettingsDirty()
@@ -524,6 +524,11 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
 
     deviceGroup.setText ("Audio Device");
     addAndMakeVisible (deviceGroup);
+
+    deviceSelectorViewport.setScrollBarsShown (true, false);
+    deviceSelectorViewport.setScrollBarThickness (10);
+    deviceSelectorViewport.setWantsKeyboardFocus (false);
+    addAndMakeVisible (deviceSelectorViewport);
 
     monitorGroup.setText ("Monitoring");
     addAndMakeVisible (monitorGroup);
@@ -862,8 +867,16 @@ void MainComponent::resized()
         auto deviceArea = deviceGroup.getBounds().reduced (12);
         takeTop (deviceArea, 22);
 
+        deviceSelectorViewport.setBounds (deviceArea);
+
         if (deviceSelector != nullptr)
-            deviceSelector->setBounds (deviceArea);
+        {
+            // Give the selector enough height so its internal layout doesn't spill out;
+            // the viewport will scroll/clip as needed.
+            const auto w = juce::jmax (1, deviceArea.getWidth());
+            const auto h = juce::jmax (deviceArea.getHeight(), 520);
+            deviceSelector->setSize (w, h);
+        }
     }
 
     {

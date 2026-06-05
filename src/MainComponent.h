@@ -116,6 +116,7 @@ private:
     uint32_t lastDeviceStatePersistTryMs = 0;
 
     juce::AudioDeviceManager deviceManager;
+    juce::Viewport deviceSelectorViewport;
     std::unique_ptr<juce::AudioDeviceSelectorComponent> deviceSelector;
     juce::AudioBuffer<float> engineBuffer;
     milodikfx::audio::AudioEngine audioEngine;
