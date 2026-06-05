@@ -73,25 +73,33 @@ bool MainComponent::initialiseAudioWithFallback (const juce::XmlElement* savedSt
     audioInitError.clear();
     audioInitNote.clear();
 
-    // Prefer ASIO on first run (when we don't have a saved DEVICESETUP yet), if available.
-    if (savedState == nullptr)
-    {
-        for (auto* t : deviceManager.getAvailableDeviceTypes())
-        {
-            if (t != nullptr && t->getTypeName().equalsIgnoreCase ("ASIO"))
-            {
-                if (! t->getDeviceNames (true).isEmpty() || ! t->getDeviceNames (false).isEmpty())
-                    deviceManager.setCurrentAudioDeviceType (t->getTypeName(), false);
+    const juce::XmlElement* stateToUse = savedState;
+    bool asioAvailable = false;
 
-                break;
-            }
+    for (auto* t : deviceManager.getAvailableDeviceTypes())
+    {
+        if (t != nullptr && t->getTypeName().equalsIgnoreCase ("ASIO"))
+        {
+            asioAvailable = ! t->getDeviceNames (true).isEmpty() || ! t->getDeviceNames (false).isEmpty();
+
+            if (asioAvailable)
+                deviceManager.setCurrentAudioDeviceType (t->getTypeName(), false);
+
+            break;
         }
     }
 
-    auto err = deviceManager.initialise (2, 2, savedState, true);
+    if (asioAvailable && savedState != nullptr)
+    {
+        const auto typeAttr = savedState->getStringAttribute ("deviceType");
+        if (! typeAttr.equalsIgnoreCase ("ASIO"))
+            stateToUse = nullptr;
+    }
+
+    auto err = deviceManager.initialise (2, 2, stateToUse, true);
 
     // If the saved state is invalid for this machine, fall back to defaults.
-    if (savedState != nullptr && err.isNotEmpty())
+    if (stateToUse != nullptr && err.isNotEmpty())
         err = deviceManager.initialise (2, 2, nullptr, true);
 
     if (err.isEmpty())

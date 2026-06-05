@@ -118,3 +118,10 @@ add_test(NAME MilodikFX_Smoke
           -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/smoke.ps1"
           -AppPath $<TARGET_FILE:MilodikFX>
 )
+
+add_test(NAME MilodikFX_Smoke_ASIO
+  COMMAND powershell -ExecutionPolicy Bypass
+          -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/smoke-asio.ps1"
+          -AppPath $<TARGET_FILE:MilodikFX>
+          -BuildDir "${CMAKE_BINARY_DIR}"
+)

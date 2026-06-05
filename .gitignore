@@ -9,3 +9,9 @@ out/
 
 # OS
 Thumbs.db
+
+# Local env
+.env
+
+# Release artefacts
+MilodikFX-Windows-*.zip

@@ -21,6 +21,7 @@ Tests (Debug):
 cmake --build build --config Debug --target MilodikFX_tests
 ctest --test-dir build -C Debug --output-on-failure
 ```
+Catatan: `MilodikFX_Smoke_ASIO` akan skip jika build tidak mengaktifkan ASIO atau driver ASIO tidak terdeteksi. Jika driver ada dan ASIO aktif tapi tidak terpilih, test akan gagal.
 
 ASIO (opsional):
 - Install Steinberg ASIO SDK (local)
