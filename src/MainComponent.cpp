@@ -217,12 +217,14 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     bool persistedMute = false;
     int persistedRouting = 1;
     double persistedGainDb = 0.0;
+    bool persistedGlobalBypass = false;
     juce::String persistedAudioXml;
 
     persistedMonitor = settingsFile.getBoolValue (kKeyMonitorEnabled, true);
     persistedMute = settingsFile.getBoolValue (kKeyMuted, false);
     persistedRouting = settingsFile.getIntValue (kKeyRoutingModeId, 1);
     persistedGainDb = settingsFile.getDoubleValue (kKeyMonitorGainDb, 0.0);
+    persistedGlobalBypass = settingsFile.getBoolValue (kKeyGlobalBypass, false);
     persistedAudioXml = settingsFile.getValue (kKeyAudioDeviceStateXml);
 
     persistedRouting = juce::jlimit (1, 4, persistedRouting);
@@ -233,6 +235,8 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     routingMode.store (persistedRouting, std::memory_order_relaxed);
     monitorGainDb.store ((float) persistedGainDb, std::memory_order_relaxed);
     monitorGainLinear.store (juce::Decibels::decibelsToGain ((float) persistedGainDb), std::memory_order_relaxed);
+    globalBypass.store (persistedGlobalBypass, std::memory_order_relaxed);
+    audioEngine.setBypassed (persistedGlobalBypass);
 
     std::unique_ptr<juce::XmlElement> persistedAudioState;
     if (persistedAudioXml.isNotEmpty())
@@ -243,6 +247,7 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     settingsFile.setValue (kKeyMuted, persistedMute);
     settingsFile.setValue (kKeyRoutingModeId, persistedRouting);
     settingsFile.setValue (kKeyMonitorGainDb, persistedGainDb);
+    settingsFile.setValue (kKeyGlobalBypass, persistedGlobalBypass);
     markSettingsDirty();
     saveSettingsIfNeeded (true);
 
@@ -254,6 +259,12 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     titleLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (titleLabel);
 
+    versionLabel.setText ("v" + juce::String (ProjectInfo::versionString), juce::dontSendNotification);
+    versionLabel.setFont (juce::Font (juce::FontOptions (12.0f, juce::Font::plain)));
+    versionLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.6f));
+    versionLabel.setJustificationType (juce::Justification::centredLeft);
+    addAndMakeVisible (versionLabel);
+
     deviceStatusLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (deviceStatusLabel);
 
@@ -262,6 +273,9 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
 
     monitorGroup.setText ("Monitoring");
     addAndMakeVisible (monitorGroup);
+
+    dspChainGroup.setText ("DSP Chain");
+    addAndMakeVisible (dspChainGroup);
 
     monitorNoteLabel.setText ("Passthrough: input -> output", juce::dontSendNotification);
     monitorNoteLabel.setJustificationType (juce::Justification::centredLeft);
@@ -272,6 +286,10 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
 
     outputLevelLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (outputLevelLabel);
+
+    dspChainNoteLabel.setText ("DSP Chain: (empty)", juce::dontSendNotification);
+    dspChainNoteLabel.setJustificationType (juce::Justification::centredLeft);
+    addAndMakeVisible (dspChainNoteLabel);
 
     monitorEnabledToggle.setButtonText ("Monitor");
     monitorEnabledToggle.setToggleState (persistedMonitor, juce::dontSendNotification);
@@ -328,6 +346,19 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     };
     addAndMakeVisible (monitorGainSlider);
 
+    globalBypassToggle.setButtonText ("Global Bypass");
+    globalBypassToggle.setToggleState (persistedGlobalBypass, juce::dontSendNotification);
+    globalBypassToggle.onClick = [this]
+    {
+        const auto v = globalBypassToggle.getToggleState();
+        globalBypass.store (v, std::memory_order_relaxed);
+        audioEngine.setBypassed (v);
+
+        settingsFile.setValue (kKeyGlobalBypass, v);
+        markSettingsDirty();
+    };
+    addAndMakeVisible (globalBypassToggle);
+
     retryAudioButton.onClick = [this]
     {
         initialiseAudioWithFallback (nullptr);
@@ -353,6 +384,7 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
 
     deviceGroup.toBack();
     monitorGroup.toBack();
+    dspChainGroup.toBack();
 
     startTimerHz (30);
 }
@@ -380,16 +412,20 @@ void MainComponent::resized()
     auto bounds = getLocalBounds().reduced (12);
 
     auto header = bounds.removeFromTop (48);
-    titleLabel.setBounds (header.removeFromLeft (220));
+    auto titleArea = header.removeFromLeft (220);
+    titleLabel.setBounds (titleArea.removeFromTop (28));
+    versionLabel.setBounds (titleArea);
     retryAudioButton.setBounds (header.removeFromRight (120));
     deviceStatusLabel.setBounds (header);
 
     auto content = bounds;
-    auto left = content.removeFromLeft ((int) (content.getWidth() * 0.65f));
-    auto right = content;
+    auto topRow = content.removeFromTop ((int) (content.getHeight() * 0.6f));
+    auto left = topRow.removeFromLeft ((int) (topRow.getWidth() * 0.65f));
+    auto right = topRow;
 
     deviceGroup.setBounds (left);
     monitorGroup.setBounds (right);
+    dspChainGroup.setBounds (content);
 
     {
         auto deviceArea = deviceGroup.getBounds().reduced (12);
@@ -424,6 +460,17 @@ void MainComponent::resized()
         auto outRow = monitorArea.removeFromTop (26);
         outputMeter.setBounds (outRow.removeFromRight (140).reduced (0, 4));
         outputLevelLabel.setBounds (outRow);
+    }
+
+    {
+        auto chainArea = dspChainGroup.getBounds().reduced (12);
+        chainArea.removeFromTop (22);
+
+        auto chainHeader = chainArea.removeFromTop (26);
+        globalBypassToggle.setBounds (chainHeader.removeFromRight (160).reduced (0, 2));
+
+        chainArea.removeFromTop (6);
+        dspChainNoteLabel.setBounds (chainArea.removeFromTop (24));
     }
 }
 
@@ -522,6 +569,49 @@ void MainComponent::audioDeviceIOCallbackWithContext (const float* const* inputC
                     juce::FloatVectorOperations::clear (out, numSamples);
                 }
             }
+        }
+    }
+
+    if (numOutputChannels > 0)
+    {
+        bool needsScratch = false;
+
+        for (int ch = 0; ch < numOutputChannels; ++ch)
+        {
+            if (outputChannelData[ch] == nullptr)
+            {
+                needsScratch = true;
+                break;
+            }
+        }
+
+        if (needsScratch)
+        {
+            if (engineBuffer.getNumChannels() < numOutputChannels || engineBuffer.getNumSamples() < numSamples)
+                engineBuffer.setSize (numOutputChannels, numSamples, false, false, true);
+
+            for (int ch = 0; ch < numOutputChannels; ++ch)
+            {
+                if (auto* out = outputChannelData[ch])
+                    engineBuffer.copyFrom (ch, 0, out, numSamples);
+                else
+                    engineBuffer.clear (ch, 0, numSamples);
+            }
+
+            audioEngine.processBlock (engineBuffer);
+
+            for (int ch = 0; ch < numOutputChannels; ++ch)
+            {
+                if (auto* out = outputChannelData[ch])
+                    juce::FloatVectorOperations::copy (out, engineBuffer.getReadPointer (ch), numSamples);
+            }
+        }
+        else
+        {
+            juce::AudioBuffer<float> outputBuffer (const_cast<float**> (outputChannelData),
+                                                   numOutputChannels,
+                                                   numSamples);
+            audioEngine.processBlock (outputBuffer);
         }
     }
 
@@ -625,7 +715,7 @@ void MainComponent::audioDeviceIOCallbackWithContext (const float* const* inputC
     outputClipped.store (outClipped, std::memory_order_relaxed);
 }
 
-void MainComponent::audioDeviceAboutToStart (juce::AudioIODevice*)
+void MainComponent::audioDeviceAboutToStart (juce::AudioIODevice* device)
 {
     inputRms.store (0.0f, std::memory_order_relaxed);
     inputPeak.store (0.0f, std::memory_order_relaxed);
@@ -634,6 +724,19 @@ void MainComponent::audioDeviceAboutToStart (juce::AudioIODevice*)
     outputRms.store (0.0f, std::memory_order_relaxed);
     outputPeak.store (0.0f, std::memory_order_relaxed);
     outputClipped.store (false, std::memory_order_relaxed);
+
+    if (device != nullptr)
+    {
+        const auto numOutputChannels = device->getActiveOutputChannels().countNumberOfSetBits();
+        audioEngine.prepareToPlay (device->getCurrentSampleRate(),
+                                   device->getCurrentBufferSizeSamples(),
+                                   numOutputChannels);
+        engineBuffer.setSize (numOutputChannels,
+                              device->getCurrentBufferSizeSamples(),
+                              false,
+                              false,
+                              true);
+    }
 }
 
 void MainComponent::audioDeviceStopped()
@@ -645,6 +748,8 @@ void MainComponent::audioDeviceStopped()
     outputRms.store (0.0f, std::memory_order_relaxed);
     outputPeak.store (0.0f, std::memory_order_relaxed);
     outputClipped.store (false, std::memory_order_relaxed);
+
+    audioEngine.reset();
 }
 
 void MainComponent::audioDeviceError (const juce::String& errorMessage)

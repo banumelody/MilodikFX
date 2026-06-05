@@ -2,6 +2,8 @@
 
 #include <JuceHeader.h>
 
+#include "audio/AudioEngine.h"
+
 class MainComponent final : public juce::Component,
                             private juce::AudioIODeviceCallback,
                             private juce::ChangeListener,
@@ -19,6 +21,7 @@ private:
     static constexpr const char* kKeyMuted = "ui.muted";
     static constexpr const char* kKeyRoutingModeId = "ui.routingModeId";
     static constexpr const char* kKeyMonitorGainDb = "ui.monitorGainDb";
+    static constexpr const char* kKeyGlobalBypass = "ui.globalBypass";
     static constexpr const char* kKeyAudioDeviceStateXml = "audio.deviceStateXml";
 
     bool initialiseAudioWithFallback (const juce::XmlElement* savedState);
@@ -63,23 +66,29 @@ private:
 
     juce::AudioDeviceManager deviceManager;
     std::unique_ptr<juce::AudioDeviceSelectorComponent> deviceSelector;
+    juce::AudioBuffer<float> engineBuffer;
+    milodikfx::audio::AudioEngine audioEngine;
 
     juce::LookAndFeel_V4 lookAndFeel;
 
     juce::Label titleLabel;
+    juce::Label versionLabel;
     juce::Label deviceStatusLabel;
 
     juce::GroupComponent deviceGroup;
     juce::GroupComponent monitorGroup;
+    juce::GroupComponent dspChainGroup;
 
     juce::Label monitorNoteLabel;
     juce::Label inputLevelLabel;
     juce::Label outputLevelLabel;
+    juce::Label dspChainNoteLabel;
 
     juce::ToggleButton monitorEnabledToggle;
     juce::ToggleButton muteToggle;
     juce::ComboBox routingModeCombo;
     juce::Slider monitorGainSlider;
+    juce::ToggleButton globalBypassToggle;
 
     juce::TextButton retryAudioButton { "Retry audio" };
 
@@ -102,6 +111,7 @@ private:
     std::atomic<int> routingMode { 1 }; // matches ComboBox selectedId
     std::atomic<float> monitorGainLinear { 1.0f };
     std::atomic<float> monitorGainDb { 0.0f };
+    std::atomic<bool> globalBypass { false };
 
     float peakHoldDb = -100.0f;
     uint32_t peakHoldLastUpdateMs = 0;
