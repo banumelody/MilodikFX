@@ -1,0 +1,11 @@
+# CMake build directories
+build/
+build-vs/
+out/
+
+# IDE
+.vs/
+*.user
+
+# OS
+Thumbs.db
