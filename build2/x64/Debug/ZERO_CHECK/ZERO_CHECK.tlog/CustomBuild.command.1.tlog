@@ -1,0 +1,10 @@
+^D:\PROJECTS\MILODIKFX\BUILD2\CMAKEFILES\7859F8643142526BEBE6FFF6DF865F6F\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SD:/Projects/MilodikFX -BD:/Projects/MilodikFX/build2 --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file D:/Projects/MilodikFX/build2/MilodikFX.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

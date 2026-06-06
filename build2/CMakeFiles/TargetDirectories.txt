@@ -1,0 +1,17 @@
+D:/Projects/MilodikFX/build2/CMakeFiles/MilodikFX.dir
+D:/Projects/MilodikFX/build2/CMakeFiles/MilodikFX_rc_lib.dir
+D:/Projects/MilodikFX/build2/CMakeFiles/MilodikFX_tests.dir
+D:/Projects/MilodikFX/build2/CMakeFiles/MilodikFX_tests_rc_lib.dir
+D:/Projects/MilodikFX/build2/CMakeFiles/RUN_TESTS.dir
+D:/Projects/MilodikFX/build2/CMakeFiles/INSTALL.dir
+D:/Projects/MilodikFX/build2/CMakeFiles/ALL_BUILD.dir
+D:/Projects/MilodikFX/build2/CMakeFiles/ZERO_CHECK.dir
+D:/Projects/MilodikFX/build2/_deps/juce-build/CMakeFiles/RUN_TESTS.dir
+D:/Projects/MilodikFX/build2/_deps/juce-build/CMakeFiles/INSTALL.dir
+D:/Projects/MilodikFX/build2/_deps/juce-build/CMakeFiles/ALL_BUILD.dir
+D:/Projects/MilodikFX/build2/_deps/juce-build/modules/CMakeFiles/RUN_TESTS.dir
+D:/Projects/MilodikFX/build2/_deps/juce-build/modules/CMakeFiles/INSTALL.dir
+D:/Projects/MilodikFX/build2/_deps/juce-build/extras/Build/CMakeFiles/RUN_TESTS.dir
+D:/Projects/MilodikFX/build2/_deps/juce-build/extras/Build/CMakeFiles/INSTALL.dir
+D:/Projects/MilodikFX/build2/_deps/juce-build/extras/Build/juceaide/CMakeFiles/RUN_TESTS.dir
+D:/Projects/MilodikFX/build2/_deps/juce-build/extras/Build/juceaide/CMakeFiles/INSTALL.dir
