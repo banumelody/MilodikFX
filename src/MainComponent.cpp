@@ -1432,44 +1432,33 @@ void MainComponent::resized()
         {
             auto contentAbs = card.getContentBounds().translated (card.getX(), card.getY());
 
+            // Labels row (Bass, Mid, Treble)
             auto labelsRow = takeTop (contentAbs, juce::jmin (16, contentAbs.getHeight()));
-            auto colW = labelsRow.getWidth() / 3;
+            const auto colW = labelsRow.getWidth() / 3;
             bassLabel.setBounds (takeLeft (labelsRow, colW).reduced (2, 0));
             midLabel.setBounds (takeLeft (labelsRow, colW).reduced (2, 0));
             trebleLabel.setBounds (labelsRow.reduced (2, 0));
 
             takeTop (contentAbs, 6);
 
+            // Footswitch area
             const auto footH = juce::jmin (48, juce::jmax (40, contentAbs.getHeight() / 4));
             auto footArea = takeBottom (contentAbs, footH);
             layoutFootswitch (footArea, stateLabel, button);
 
+            // Knobs always horizontal (3-column layout)
             auto knobsArea = contentAbs;
             const auto minDim = juce::jmin (knobsArea.getWidth(), knobsArea.getHeight());
             const auto inset = juce::jlimit (2, 8, minDim / 16);
 
-            if (knobsArea.getWidth() < 240)
-            {
-                const int gap = juce::jmin (6, juce::jmax (2, knobsArea.getHeight() / 20));
-                const int h = juce::jmax (0, (knobsArea.getHeight() - gap * 2) / 3);
+            const int gap = juce::jmin (8, juce::jmax (3, knobsArea.getWidth() / 28));
+            const int w = juce::jmax (0, (knobsArea.getWidth() - gap * 2) / 3);
 
-                bassKnob.setBounds (takeTop (knobsArea, h).reduced (inset));
-                takeTop (knobsArea, gap);
-                midKnob.setBounds (takeTop (knobsArea, h).reduced (inset));
-                takeTop (knobsArea, gap);
-                trebleKnob.setBounds (knobsArea.reduced (inset));
-            }
-            else
-            {
-                const int gap = juce::jmin (8, juce::jmax (3, knobsArea.getWidth() / 28));
-                const int w = juce::jmax (0, (knobsArea.getWidth() - gap * 2) / 3);
-
-                bassKnob.setBounds (takeLeft (knobsArea, w).reduced (inset));
-                takeLeft (knobsArea, gap);
-                midKnob.setBounds (takeLeft (knobsArea, w).reduced (inset));
-                takeLeft (knobsArea, gap);
-                trebleKnob.setBounds (knobsArea.reduced (inset));
-            }
+            bassKnob.setBounds (takeLeft (knobsArea, w).reduced (inset));
+            takeLeft (knobsArea, gap);
+            midKnob.setBounds (takeLeft (knobsArea, w).reduced (inset));
+            takeLeft (knobsArea, gap);
+            trebleKnob.setBounds (knobsArea.reduced (inset));
         };
 
         // Pedalboard cards: 3 columns when space allows, otherwise 2+1, otherwise stack vertically.
