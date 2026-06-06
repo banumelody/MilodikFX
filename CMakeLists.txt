@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(MilodikFX VERSION 0.5.6 LANGUAGES CXX)
+project(MilodikFX VERSION 0.6.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -67,6 +67,12 @@ target_sources(MilodikFX
     src/ui/KnobComponent.cpp
     src/ui/FootswitchComponent.h
     src/ui/FootswitchComponent.cpp
+    src/ui/EffectCardComponent.h
+    src/ui/EffectCardComponent.cpp
+    src/ui/LevelMeterComponent.h
+    src/ui/LevelMeterComponent.cpp
+    src/ui/KnobLookAndFeelComponent.h
+    src/ui/KnobLookAndFeelComponent.cpp
 )
 
 target_include_directories(MilodikFX

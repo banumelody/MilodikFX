@@ -7,6 +7,9 @@
 #include "dsp/OverdriveProcessor.h"
 #include "dsp/EQProcessor.h"
 #include "preset/PresetManager.h"
+#include "ui/EffectCardComponent.h"
+#include "ui/LevelMeterComponent.h"
+#include "ui/KnobLookAndFeelComponent.h"
 
 class MainComponent final : public juce::Component,
                             private juce::AudioIODeviceCallback,
