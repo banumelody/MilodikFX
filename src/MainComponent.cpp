@@ -517,32 +517,21 @@ void MainComponent::refreshPresetList (const juce::String& selectPresetName)
 {
     const auto names = presetManager.listPresets();
 
-    presetCombo.clear();
-
-    int id = 1;
-    for (const auto& n : names)
-        presetCombo.addItem (n, id++);
-
     juce::String toSelect = selectPresetName;
     if (toSelect.isEmpty() && names.size() > 0)
         toSelect = names[0];
 
-    int selectedId = 0;
-    for (int i = 0; i < presetCombo.getNumItems(); ++i)
-        if (presetCombo.getItemText (i) == toSelect)
-            selectedId = presetCombo.getItemId (i);
+    int selectedIndex = 0;
+    for (int i = 0; i < names.size(); ++i)
+    {
+        if (names[i] == toSelect)
+        {
+            selectedIndex = i;
+            break;
+        }
+    }
 
-    if (selectedId == 0 && presetCombo.getNumItems() > 0)
-        selectedId = presetCombo.getItemId (0);
-
-    if (selectedId != 0)
-        presetCombo.setSelectedId (selectedId, juce::dontSendNotification);
-
-    const auto hasSelection = presetCombo.getNumItems() > 0 && presetCombo.getSelectedId() != 0;
-    presetLoadButton.setEnabled (hasSelection);
-
-    const auto selName = presetCombo.getText();
-    presetDeleteButton.setEnabled (hasSelection && selName != "Default Clean");
+    presetUI.setPresetsList (names, selectedIndex);
 }
 
 MainComponent::MainComponent (juce::PropertiesFile& settings)
@@ -695,29 +684,9 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     deviceStatusLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (deviceStatusLabel);
 
-    presetLabel.setText ("Preset:", juce::dontSendNotification);
-    presetLabel.setJustificationType (juce::Justification::centredLeft);
-    addAndMakeVisible (presetLabel);
-
-    presetCombo.setTextWhenNothingSelected ("(No presets)");
-    presetCombo.onChange = [this]
+    presetUI.onSavePressed = [this]
     {
-        const auto safe = milodikfx::preset::PresetManager::sanitisePresetName (presetCombo.getText());
-        if (safe.isNotEmpty())
-        {
-            settingsFile.setValue (kKeySelectedPresetName, juce::var (safe));
-            markSettingsDirty();
-        }
-
-        const auto hasSelection = presetCombo.getNumItems() > 0 && presetCombo.getSelectedId() != 0;
-        presetLoadButton.setEnabled (hasSelection);
-        presetDeleteButton.setEnabled (hasSelection && presetCombo.getText() != "Default Clean");
-    };
-    addAndMakeVisible (presetCombo);
-
-    presetSaveButton.onClick = [this]
-    {
-        const auto initial = presetCombo.getText().isNotEmpty() ? presetCombo.getText() : juce::String ("My Preset");
+        const auto initial = presetUI.getSelectedPresetName().isNotEmpty() ? presetUI.getSelectedPresetName() : juce::String ("My Preset");
         juce::Component::SafePointer<MainComponent> self (this);
 
         auto* w = new juce::AlertWindow ("Save Preset", "Preset name:", juce::AlertWindow::QuestionIcon, this);
@@ -755,11 +724,11 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
                             }),
                             true);
     };
-    addAndMakeVisible (presetSaveButton);
+    addAndMakeVisible (presetUI);
 
-    presetLoadButton.onClick = [this]
+    presetUI.onLoadPressed = [this]
     {
-        const auto name = presetCombo.getText();
+        const auto name = presetUI.getSelectedPresetName();
         milodikfx::preset::PresetState loaded;
 
         if (! presetManager.loadPreset (name, loaded))
@@ -775,11 +744,10 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
         markSettingsDirty();
         saveSettingsIfNeeded (true);
     };
-    addAndMakeVisible (presetLoadButton);
 
-    presetDeleteButton.onClick = [this]
+    presetUI.onDeletePressed = [this]
     {
-        const auto name = presetCombo.getText();
+        const auto name = presetUI.getSelectedPresetName();
         if (name == "Default Clean")
             return;
 
@@ -815,7 +783,19 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
                                                 self->saveSettingsIfNeeded (true);
                                             }));
     };
-    addAndMakeVisible (presetDeleteButton);
+
+    presetUI.onPresetSelected = [this] (int index)
+    {
+        if (index >= 0)
+        {
+            const auto name = presetUI.getSelectedPresetName();
+            if (name.isNotEmpty())
+            {
+                settingsFile.setValue (kKeySelectedPresetName, juce::var (name));
+                markSettingsDirty();
+            }
+        }
+    };
 
     deviceGroup.setText ("Audio Device");
     addAndMakeVisible (deviceGroup);
@@ -845,21 +825,46 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
 
     cleanBoostCard.setEnabledState (persistedCleanBoostEnabled);
     overdriveCard.setEnabledState (persistedOverdriveEnabled);
-    eqCard.setEnabledState (persistedEqEnabled);
-
-    monitorNoteLabel.setText ("Passthrough: input -> output", juce::dontSendNotification);
-    monitorNoteLabel.setJustificationType (juce::Justification::centredLeft);
-    addAndMakeVisible (monitorNoteLabel);
-
-    inputLevelLabel.setJustificationType (juce::Justification::centredLeft);
-    addAndMakeVisible (inputLevelLabel);
-
-    outputLevelLabel.setJustificationType (juce::Justification::centredLeft);
-    addAndMakeVisible (outputLevelLabel);
+     eqCard.setEnabledState (persistedEqEnabled);
 
     dspChainNoteLabel.setText ("DSP Chain: Clean Boost -> Overdrive -> EQ", juce::dontSendNotification);
     dspChainNoteLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (dspChainNoteLabel);
+
+    monitorUI.setMonitorEnabled (persistedMonitor);
+    monitorUI.setMuted (persistedMute);
+    monitorUI.setRoutingMode (persistedRouting);
+    monitorUI.setGainDb ((float) persistedGainDb);
+
+    monitorUI.onMonitorToggle = [this] (bool enabled)
+    {
+        monitorEnabled.store (enabled, std::memory_order_relaxed);
+        settingsFile.setValue (kKeyMonitorEnabled, enabled);
+        markSettingsDirty();
+    };
+
+    monitorUI.onMuteToggle = [this] (bool isMuted)
+    {
+        muted.store (isMuted, std::memory_order_relaxed);
+        settingsFile.setValue (kKeyMuted, isMuted);
+        markSettingsDirty();
+    };
+
+    monitorUI.onGainChange = [this] (float db)
+    {
+        monitorGainDb.store (db, std::memory_order_relaxed);
+        monitorGainLinear.store (juce::Decibels::decibelsToGain (db), std::memory_order_relaxed);
+        settingsFile.setValue (kKeyMonitorGainDb, (double) db);
+        markSettingsDirty();
+    };
+
+    monitorUI.onRoutingChange = [this] (int modeId)
+    {
+        routingMode.store (modeId, std::memory_order_relaxed);
+        settingsFile.setValue (kKeyRoutingModeId, modeId);
+        markSettingsDirty();
+    };
+    addAndMakeVisible (monitorUI);
 
     cleanBoostGainLabel.setText ("Gain", juce::dontSendNotification);
     cleanBoostGainLabel.setJustificationType (juce::Justification::centred);
@@ -899,61 +904,6 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     eqStateLabel.setJustificationType (juce::Justification::centred);
     eqStateLabel.setFont (juce::Font (juce::FontOptions (12.0f, juce::Font::bold)));
     addAndMakeVisible (eqStateLabel);
-
-    monitorEnabledToggle.setButtonText ("Monitor");
-    monitorEnabledToggle.setToggleState (persistedMonitor, juce::dontSendNotification);
-    monitorEnabledToggle.onClick = [this]
-    {
-        const auto v = monitorEnabledToggle.getToggleState();
-        monitorEnabled.store (v, std::memory_order_relaxed);
-
-        settingsFile.setValue (kKeyMonitorEnabled, v);
-        markSettingsDirty();
-    };
-    addAndMakeVisible (monitorEnabledToggle);
-
-    muteToggle.setButtonText ("Mute");
-    muteToggle.setToggleState (persistedMute, juce::dontSendNotification);
-    muteToggle.onClick = [this]
-    {
-        const auto v = muteToggle.getToggleState();
-        muted.store (v, std::memory_order_relaxed);
-
-        settingsFile.setValue (kKeyMuted, v);
-        markSettingsDirty();
-    };
-    addAndMakeVisible (muteToggle);
-
-    routingModeCombo.addItem ("Match channels", 1);
-    routingModeCombo.addItem ("Mono -> Stereo", 2);
-    routingModeCombo.addItem ("Stereo -> Mono (to all outs)", 3);
-    routingModeCombo.addItem ("Stereo -> Mono (L only)", 4);
-    routingModeCombo.setSelectedId (persistedRouting, juce::dontSendNotification);
-    routingModeCombo.onChange = [this]
-    {
-        const auto id = routingModeCombo.getSelectedId();
-        routingMode.store (id, std::memory_order_relaxed);
-
-        settingsFile.setValue (kKeyRoutingModeId, id);
-        markSettingsDirty();
-    };
-    addAndMakeVisible (routingModeCombo);
-
-    monitorGainSlider.setSliderStyle (juce::Slider::LinearHorizontal);
-    monitorGainSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 80, 20);
-    monitorGainSlider.setTextValueSuffix (" dB");
-    monitorGainSlider.setRange (-24.0, 12.0, 0.1);
-    monitorGainSlider.setValue (persistedGainDb, juce::dontSendNotification);
-    monitorGainSlider.onValueChange = [this]
-    {
-        const auto db = (float) monitorGainSlider.getValue();
-        monitorGainDb.store (db, std::memory_order_relaxed);
-        monitorGainLinear.store (juce::Decibels::decibelsToGain (db), std::memory_order_relaxed);
-
-        settingsFile.setValue (kKeyMonitorGainDb, (double) db);
-        markSettingsDirty();
-    };
-    addAndMakeVisible (monitorGainSlider);
 
     globalBypassToggle.setButtonText ("Global Bypass");
     globalBypassToggle.setToggleState (persistedGlobalBypass, juce::dontSendNotification);
@@ -1168,16 +1118,13 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     addAndMakeVisible (retryAudioButton);
     retryAudioButton.setVisible (false);
 
-    addAndMakeVisible (inputMeter);
-    addAndMakeVisible (outputMeter);
-
     // Sprint 5: presets
     milodikfx::preset::PresetState defaultPreset;
     presetManager.ensurePresetExists ("Default Clean", defaultPreset);
     refreshPresetList (persistedPresetName);
 
     milodikfx::preset::PresetState startupPreset;
-    const auto startupName = presetCombo.getText();
+    const auto startupName = presetUI.getSelectedPresetName();
     if (startupName.isNotEmpty() && presetManager.loadPreset (startupName, startupPreset))
         applyPresetState (startupPreset);
 
@@ -1248,26 +1195,7 @@ void MainComponent::resized()
 
     auto presetBar = takeTop (bounds, 44);
     {
-        auto presetArea = presetBar.reduced (0, 8);
-
-        presetLabel.setBounds (takeLeft (presetArea, juce::jmin (60, presetArea.getWidth())));
-
-        constexpr int kBtnW = 64;
-        constexpr int kBtnGap = 8;
-        const int desiredButtonsW = kBtnW * 3 + kBtnGap * 2;
-
-        auto buttons = takeRight (presetArea, juce::jmin (desiredButtonsW, presetArea.getWidth()));
-        presetCombo.setBounds (presetArea.reduced (0, 2));
-
-        auto saveArea = takeLeft (buttons, juce::jmin (kBtnW, buttons.getWidth()));
-        takeLeft (buttons, juce::jmin (kBtnGap, buttons.getWidth()));
-        auto loadArea = takeLeft (buttons, juce::jmin (kBtnW, buttons.getWidth()));
-        takeLeft (buttons, juce::jmin (kBtnGap, buttons.getWidth()));
-        auto deleteArea = buttons;
-
-        presetSaveButton.setBounds (saveArea.reduced (0, 2));
-        presetLoadButton.setBounds (loadArea.reduced (0, 2));
-        presetDeleteButton.setBounds (deleteArea.reduced (0, 2));
+        presetUI.setBounds (presetBar.reduced (0, 6));
     }
 
     auto content = bounds;
@@ -1318,28 +1246,7 @@ void MainComponent::resized()
     {
         auto monitorArea = monitorGroup.getBounds().reduced (12);
         takeTop (monitorArea, 22);
-
-        monitorNoteLabel.setBounds (takeTop (monitorArea, 20));
-        takeTop (monitorArea, 6);
-
-        auto controls = takeTop (monitorArea, 26);
-        monitorEnabledToggle.setBounds (takeLeft (controls, 110));
-        muteToggle.setBounds (takeLeft (controls, 70));
-        routingModeCombo.setBounds (controls.reduced (0, 2));
-
-        takeTop (monitorArea, 8);
-        monitorGainSlider.setBounds (takeTop (monitorArea, 26));
-        takeTop (monitorArea, 8);
-
-        auto inRow = takeTop (monitorArea, 26);
-        inputMeter.setBounds (takeRight (inRow, 140).reduced (0, 4));
-        inputLevelLabel.setBounds (inRow);
-
-        takeTop (monitorArea, 6);
-
-        auto outRow = takeTop (monitorArea, 26);
-        outputMeter.setBounds (takeRight (outRow, 140).reduced (0, 4));
-        outputLevelLabel.setBounds (outRow);
+        monitorUI.setBounds (monitorArea);
     }
 
     {
@@ -1845,27 +1752,6 @@ void MainComponent::timerCallback()
     deviceStatusLabel.setText (status, juce::dontSendNotification);
     retryAudioButton.setVisible (audioInitError.isNotEmpty());
 
-    const auto monOn = monitorEnabled.load (std::memory_order_relaxed);
-    const auto isMuted = muted.load (std::memory_order_relaxed);
-    const auto mode = routingMode.load (std::memory_order_relaxed);
-    const auto gainDb = monitorGainDb.load (std::memory_order_relaxed);
-
-    {
-        juce::String routing;
-        if (mode == 2) routing = "Mono -> Stereo";
-        else if (mode == 3) routing = "Stereo -> Mono (all outs)";
-        else if (mode == 4) routing = "Stereo -> Mono (L only)";
-        else routing = "Match channels";
-
-        auto note = juce::String (monOn ? "Monitor ON" : "Monitor OFF");
-        if (isMuted)
-            note += " | MUTE";
-        note += " | " + routing;
-        note += " | Gain " + juce::String (gainDb, 1) + " dB";
-
-        monitorNoteLabel.setText (note, juce::dontSendNotification);
-    }
-
     {
         const auto bypassed = globalBypass.load (std::memory_order_relaxed);
         const auto boostOn = cleanBoostEnabled.load (std::memory_order_relaxed);
@@ -1921,8 +1807,7 @@ void MainComponent::timerCallback()
     if (clipped)
         levelText += " | CLIP";
 
-    inputLevelLabel.setText (levelText, juce::dontSendNotification);
-    inputMeter.setLevelsDb (rmsDb, peakHoldDb, clipped);
+    monitorUI.setInputLevels (rmsDb, peakHoldDb, clipped);
 
     const auto outRms = outputRms.load (std::memory_order_relaxed);
     const auto outPeak = outputPeak.load (std::memory_order_relaxed);
@@ -1944,15 +1829,7 @@ void MainComponent::timerCallback()
         outputPeakHoldDb = juce::jmax (outPeakDb, outputPeakHoldDb - 1.0f);
     }
 
-    const auto outPrefix = (! monOn || isMuted) ? "Output (pre): RMS " : "Output: RMS ";
-    auto outText = juce::String (outPrefix) + juce::String (outRmsDb, 1)
-        + " dB | Peak " + juce::String (outputPeakHoldDb, 1) + " dB";
-
-    if (outClipped)
-        outText += " | CLIP";
-
-    outputLevelLabel.setText (outText, juce::dontSendNotification);
-    outputMeter.setLevelsDb (outRmsDb, outputPeakHoldDb, outClipped);
+    monitorUI.setOutputLevels (outRmsDb, outputPeakHoldDb, outClipped);
 
     // If we didn't manage to persist audio device state during startup, retry periodically once a device is available.
     if (settingsFile.getValue (kKeyAudioDeviceStateXml).isEmpty())

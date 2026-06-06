@@ -10,6 +10,8 @@
 #include "ui/EffectCardComponent.h"
 #include "ui/LevelMeterComponent.h"
 #include "ui/KnobLookAndFeelComponent.h"
+#include "ui/MonitorRowComponent.h"
+#include "ui/PresetManagerUIComponent.h"
 
 class MainComponent final : public juce::Component,
                             private juce::AudioIODeviceCallback,
@@ -146,11 +148,7 @@ private:
     juce::Label versionLabel;
     juce::Label deviceStatusLabel;
 
-    juce::Label presetLabel;
-    juce::ComboBox presetCombo;
-    juce::TextButton presetSaveButton { "Save" };
-    juce::TextButton presetLoadButton { "Load" };
-    juce::TextButton presetDeleteButton { "Delete" };
+    milodikfx::ui::PresetManagerUIComponent presetUI;
 
     juce::GroupComponent deviceGroup;
     juce::GroupComponent monitorGroup;
@@ -160,9 +158,6 @@ private:
     EffectCard overdriveCard;
     EffectCard eqCard;
 
-    juce::Label monitorNoteLabel;
-    juce::Label inputLevelLabel;
-    juce::Label outputLevelLabel;
     juce::Label dspChainNoteLabel;
 
     juce::Label cleanBoostGainLabel;
@@ -177,10 +172,6 @@ private:
     juce::Label eqTrebleLabel;
     juce::Label eqStateLabel;
 
-    juce::ToggleButton monitorEnabledToggle;
-    juce::ToggleButton muteToggle;
-    juce::ComboBox routingModeCombo;
-    juce::Slider monitorGainSlider;
     juce::ToggleButton globalBypassToggle;
 
     juce::Slider cleanBoostGainSlider;
@@ -197,8 +188,7 @@ private:
 
     juce::TextButton retryAudioButton { "Retry audio" };
 
-    LevelMeter inputMeter;
-    LevelMeter outputMeter;
+    milodikfx::ui::MonitorRowComponent monitorUI;
 
     juce::String audioInitError;
     juce::String audioInitNote;
