@@ -22,11 +22,17 @@ class MainComponent final : public juce::Component,
                             private juce::Timer
 {
 public:
+    enum class Theme { Dark, Light, HighContrast };
+
     explicit MainComponent (juce::PropertiesFile& settingsFile);
     ~MainComponent() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    bool keyPressed (const juce::KeyPress& key) override;
+
+    void setTheme (Theme newTheme);
+    Theme getTheme() const { return currentTheme.load (std::memory_order_relaxed); }
 
 private:
     static constexpr const char* kKeyMonitorEnabled = "ui.monitorEnabled";
@@ -34,6 +40,8 @@ private:
     static constexpr const char* kKeyRoutingModeId = "ui.routingModeId";
     static constexpr const char* kKeyMonitorGainDb = "ui.monitorGainDb";
     static constexpr const char* kKeyGlobalBypass = "ui.globalBypass";
+    static constexpr const char* kKeyTheme = "ui.theme";
+    static constexpr const char* kKeyAnimationsEnabled = "ui.animationsEnabled";
 
     static constexpr const char* kKeyCleanBoostEnabled = "dsp.cleanBoost.enabled";
     static constexpr const char* kKeyCleanBoostGainDb = "dsp.cleanBoost.gainDb";
@@ -106,7 +114,9 @@ private:
 
     struct KnobLookAndFeel final : public juce::LookAndFeel_V4
     {
-        KnobLookAndFeel();
+        explicit KnobLookAndFeel(Theme theme = Theme::Dark);
+
+        void setTheme (Theme newTheme);
 
         void drawRotarySlider (juce::Graphics& g,
                               int x,
@@ -117,6 +127,9 @@ private:
                               float rotaryStartAngle,
                               float rotaryEndAngle,
                               juce::Slider& slider) override;
+
+    private:
+        Theme theme = Theme::Dark;
     };
 
     struct EffectCard final : public juce::Component
@@ -124,6 +137,8 @@ private:
         void setTitle (juce::String newTitle);
         void setAccentColour (juce::Colour newAccent);
         void setEnabledState (bool isEnabled);
+        void setTheme (Theme newTheme);
+        void setPulseAnimation (float pulseAmount);
 
         juce::Rectangle<int> getContentBounds() const;
 
@@ -133,21 +148,43 @@ private:
         juce::String title;
         juce::Colour accent { juce::Colours::white };
         bool enabledState = true;
+        Theme theme = Theme::Dark;
+        float pulseAmount = 0.0f;
     };
 
     struct FootswitchButton final : public juce::ToggleButton
     {
         void setAccentColour (juce::Colour newAccent);
+        void setTheme (Theme newTheme);
 
         void paintButton (juce::Graphics& g, bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override;
 
     private:
         juce::Colour accent { juce::Colours::white };
+        Theme theme = Theme::Dark;
+    };
+
+    struct SliderAnimation final
+    {
+        juce::Slider* slider = nullptr;
+        double startValue = 0.0;
+        double targetValue = 0.0;
+        uint32_t startTimeMs = 0;
+        static constexpr uint32_t durationMs = 100;
     };
 
     milodikfx::preset::PresetState capturePresetState() const;
     void applyPresetState (const milodikfx::preset::PresetState& preset);
     void refreshPresetList (const juce::String& selectPresetName);
+
+    void applyThemeToAllComponents();
+    void updateLevelMeterDecay();
+    void processSliderAnimations();
+    void focusNextControl (bool reverse);
+    void adjustFocusedControl (bool increase);
+    juce::Colour getThemeBackground() const;
+    juce::Colour getThemeText() const;
+    juce::Colour getThemeSecondaryText() const;
 
     juce::PropertiesFile& settingsFile;
     milodikfx::preset::PresetManager presetManager;
@@ -168,6 +205,7 @@ private:
     juce::Label titleLabel;
     juce::Label versionLabel;
     juce::Label deviceStatusLabel;
+    juce::Label cpuLoadLabel;
 
     juce::Label presetMetadataLabel;
     juce::Label presetDescriptionLabel;
@@ -266,6 +304,8 @@ private:
     std::atomic<float> outputPeak { 0.0f };
     std::atomic<bool> outputClipped { false };
 
+    std::atomic<float> cpuLoadPercent { 0.0f };
+
     std::atomic<bool> monitorEnabled { true };
     std::atomic<bool> muted { false };
     std::atomic<int> routingMode { 1 }; // matches ComboBox selectedId
@@ -316,6 +356,16 @@ private:
 
     float outputPeakHoldDb = -100.0f;
     uint32_t outputPeakHoldLastUpdateMs = 0;
+
+    std::atomic<Theme> currentTheme { Theme::Dark };
+    std::atomic<bool> animationsEnabled { true };
+
+    std::vector<SliderAnimation> activeSliderAnimations;
+    juce::Component* currentFocusedControl = nullptr;
+    float peakRmsDb = -100.0f;
+    float peakOutputRmsDb = -100.0f;
+    uint32_t lastPeakDecayMs = 0;
+    uint32_t lastAnimationUpdateMs = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };
