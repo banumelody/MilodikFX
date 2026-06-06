@@ -63,6 +63,10 @@ target_sources(MilodikFX
     src/dsp/DSPChainManager.cpp
     src/preset/PresetManager.h
     src/preset/PresetManager.cpp
+    src/ui/KnobComponent.h
+    src/ui/KnobComponent.cpp
+    src/ui/FootswitchComponent.h
+    src/ui/FootswitchComponent.cpp
 )
 
 target_include_directories(MilodikFX
