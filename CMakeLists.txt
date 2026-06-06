@@ -73,6 +73,10 @@ target_sources(MilodikFX
     src/ui/LevelMeterComponent.cpp
     src/ui/KnobLookAndFeelComponent.h
     src/ui/KnobLookAndFeelComponent.cpp
+    src/ui/MeterRowComponent.h
+    src/ui/MeterRowComponent.cpp
+    src/ui/EffectCardContainerComponent.h
+    src/ui/EffectCardContainerComponent.cpp
 )
 
 target_include_directories(MilodikFX
