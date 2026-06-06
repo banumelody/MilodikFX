@@ -77,6 +77,10 @@ target_sources(MilodikFX
     src/ui/MeterRowComponent.cpp
     src/ui/EffectCardContainerComponent.h
     src/ui/EffectCardContainerComponent.cpp
+    src/ui/MonitorRowComponent.h
+    src/ui/MonitorRowComponent.cpp
+    src/ui/PresetManagerUIComponent.h
+    src/ui/PresetManagerUIComponent.cpp
 )
 
 target_include_directories(MilodikFX
