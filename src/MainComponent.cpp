@@ -416,6 +416,13 @@ milodikfx::preset::PresetState MainComponent::capturePresetState() const
 {
     milodikfx::preset::PresetState s;
 
+    // Capture metadata
+    s.author = presetAuthorEditor.getText().toStdString();
+    s.description = presetDescriptionEditor.getText().toStdString();
+    s.category = "";
+    s.modifiedAt = juce::Time::getCurrentTime();
+    s.tags = juce::StringArray();
+
     s.globalBypass = globalBypass.load (std::memory_order_relaxed);
 
     s.cleanBoostEnabled = cleanBoostEnabled.load (std::memory_order_relaxed);
@@ -464,6 +471,14 @@ void MainComponent::applyPresetState (const milodikfx::preset::PresetState& p)
         stateLabel.setColour (juce::Label::textColourId,
                               isOn ? accent : juce::Colours::white.withAlpha (0.5f));
     };
+
+    // Apply metadata
+    presetAuthorEditor.setText (juce::String (p.author), juce::dontSendNotification);
+    presetDescriptionEditor.setText (juce::String (p.description), juce::dontSendNotification);
+    
+    const auto modifiedText = p.modifiedAt.formatted ("%d/%m/%Y %H:%M");
+    presetMetadataLabel.setText ("Modified: " + modifiedText, juce::dontSendNotification);
+    presetDescriptionLabel.setText (juce::String (p.description), juce::dontSendNotification);
 
     globalBypass.store (p.globalBypass, std::memory_order_relaxed);
     audioEngine.setBypassed (p.globalBypass);
@@ -960,6 +975,28 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
                             true);
     };
     addAndMakeVisible (presetUI);
+
+    presetMetadataLabel.setText ("Modified: N/A", juce::dontSendNotification);
+    presetMetadataLabel.setJustificationType (juce::Justification::centredLeft);
+    presetMetadataLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.7f));
+    presetMetadataLabel.setFont (juce::Font (juce::FontOptions (11.0f, juce::Font::plain)));
+    addAndMakeVisible (presetMetadataLabel);
+
+    presetDescriptionLabel.setText ("", juce::dontSendNotification);
+    presetDescriptionLabel.setJustificationType (juce::Justification::centredLeft);
+    presetDescriptionLabel.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.6f));
+    presetDescriptionLabel.setFont (juce::Font (juce::FontOptions (10.0f, juce::Font::italic)));
+    addAndMakeVisible (presetDescriptionLabel);
+
+    presetAuthorEditor.setMultiLine (false, false);
+    presetAuthorEditor.setText ("", juce::dontSendNotification);
+    presetAuthorEditor.setColour (juce::TextEditor::backgroundColourId, juce::Colour (0xff0f1113));
+    addAndMakeVisible (presetAuthorEditor);
+
+    presetDescriptionEditor.setMultiLine (true, true);
+    presetDescriptionEditor.setText ("", juce::dontSendNotification);
+    presetDescriptionEditor.setColour (juce::TextEditor::backgroundColourId, juce::Colour (0xff0f1113));
+    addAndMakeVisible (presetDescriptionEditor);
 
     presetUI.onLoadPressed = [this]
     {
@@ -1805,6 +1842,21 @@ void MainComponent::resized()
     auto presetBar = takeTop (bounds, 44);
     {
         presetUI.setBounds (presetBar.reduced (0, 6));
+    }
+
+    // Preset metadata bar (~60px)
+    auto metadataBar = takeTop (bounds, 60);
+    {
+        auto metaLeft = takeLeft (metadataBar, metadataBar.getWidth() / 2);
+        auto metaRight = metadataBar;
+
+        presetMetadataLabel.setBounds (takeTop (metaLeft, 16));
+        metaLeft.removeFromTop (2);
+        presetAuthorEditor.setBounds (metaLeft.removeFromTop (18));
+
+        presetDescriptionLabel.setBounds (takeTop (metaRight, 16));
+        metaRight.removeFromTop (2);
+        presetDescriptionEditor.setBounds (metaRight.removeFromTop (18));
     }
 
     auto content = bounds;

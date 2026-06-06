@@ -169,6 +169,11 @@ private:
     juce::Label versionLabel;
     juce::Label deviceStatusLabel;
 
+    juce::Label presetMetadataLabel;
+    juce::Label presetDescriptionLabel;
+    juce::TextEditor presetAuthorEditor;
+    juce::TextEditor presetDescriptionEditor;
+
     milodikfx::ui::PresetManagerUIComponent presetUI;
 
     juce::GroupComponent deviceGroup;

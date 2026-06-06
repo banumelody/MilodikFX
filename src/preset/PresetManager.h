@@ -8,6 +8,14 @@ struct PresetState final
 {
     int schemaVersion = 1;
 
+    // Metadata
+    std::string author = "";
+    std::string description = "";
+    std::string category = "";
+    juce::Time createdAt;
+    juce::Time modifiedAt;
+    juce::StringArray tags;
+
     bool globalBypass = false;
 
     bool cleanBoostEnabled = true;

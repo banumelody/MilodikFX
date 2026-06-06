@@ -90,6 +90,21 @@ juce::var PresetManager::stateToVar (const juce::String& presetName, const Prese
     root->setProperty ("schemaVersion", kSchemaVersion);
     root->setProperty ("name", presetName);
 
+    // Metadata
+    auto metadata = juce::DynamicObject::Ptr (new juce::DynamicObject());
+    metadata->setProperty ("author", juce::var (juce::String (state.author)));
+    metadata->setProperty ("description", juce::var (juce::String (state.description)));
+    metadata->setProperty ("category", juce::var (juce::String (state.category)));
+    metadata->setProperty ("createdAt", state.createdAt.toISO8601 (true));
+    metadata->setProperty ("modifiedAt", state.modifiedAt.toISO8601 (true));
+    
+    auto tagsArray = juce::Array<juce::var>();
+    for (int i = 0; i < state.tags.size(); ++i)
+        tagsArray.add (juce::var (state.tags[i]));
+    metadata->setProperty ("tags", tagsArray);
+    
+    root->setProperty ("metadata", juce::var (metadata.get()));
+
     auto dsp = juce::DynamicObject::Ptr (new juce::DynamicObject());
 
     dsp->setProperty ("globalBypass", state.globalBypass);
@@ -166,6 +181,79 @@ bool PresetManager::varToState (const juce::var& v, PresetState& outState)
     const auto& rootProps = rootObj->getProperties();
 
     outState.schemaVersion = (int) getNumber (rootProps, "schemaVersion", kSchemaVersion);
+
+    // Deserialize metadata
+    {
+        const auto metadataVar = rootProps["metadata"];
+        if (auto* metadataObj = metadataVar.getDynamicObject())
+        {
+            const auto& metaProps = metadataObj->getProperties();
+            
+            if (metaProps.contains ("author"))
+                outState.author = metaProps["author"].toString().toStdString();
+            
+            if (metaProps.contains ("description"))
+                outState.description = metaProps["description"].toString().toStdString();
+            
+            if (metaProps.contains ("category"))
+                outState.category = metaProps["category"].toString().toStdString();
+            
+            // Parse createdAt from ISO 8601 string
+            if (metaProps.contains ("createdAt"))
+            {
+                const auto createdAtStr = metaProps["createdAt"].toString();
+                if (! createdAtStr.isEmpty())
+                {
+                    outState.createdAt = juce::Time::fromISO8601 (createdAtStr);
+                }
+                else
+                {
+                    outState.createdAt = juce::Time::getCurrentTime();
+                }
+            }
+            else
+            {
+                outState.createdAt = juce::Time::getCurrentTime();
+            }
+            
+            // Parse modifiedAt from ISO 8601 string
+            if (metaProps.contains ("modifiedAt"))
+            {
+                const auto modifiedAtStr = metaProps["modifiedAt"].toString();
+                if (! modifiedAtStr.isEmpty())
+                {
+                    outState.modifiedAt = juce::Time::fromISO8601 (modifiedAtStr);
+                }
+                else
+                {
+                    outState.modifiedAt = juce::Time::getCurrentTime();
+                }
+            }
+            else
+            {
+                outState.modifiedAt = juce::Time::getCurrentTime();
+            }
+            
+            // Parse tags array
+            if (metaProps.contains ("tags"))
+            {
+                const auto tagsVar = metaProps["tags"];
+                if (tagsVar.isArray())
+                {
+                    for (int i = 0; i < tagsVar.size(); ++i)
+                    {
+                        outState.tags.add (tagsVar[i].toString());
+                    }
+                }
+            }
+        }
+        else
+        {
+            // Set defaults if no metadata found
+            outState.createdAt = juce::Time::getCurrentTime();
+            outState.modifiedAt = juce::Time::getCurrentTime();
+        }
+    }
 
     const auto dspVar = rootProps["dsp"];
     auto* dspObj = dspVar.getDynamicObject();
