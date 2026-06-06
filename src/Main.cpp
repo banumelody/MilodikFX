@@ -50,37 +50,27 @@ private:
     public:
         juce::PropertiesFile& settingsFile;
 
-        MainWindow (juce::String name, juce::PropertiesFile& settings)
-            : juce::DocumentWindow (std::move (name),
+        MainWindow(juce::String name, juce::PropertiesFile& settings)
+            : juce::DocumentWindow(std::move(name),
                                    juce::Colours::darkgrey,
                                    juce::DocumentWindow::allButtons),
-              settingsFile (settings)
+              settingsFile(settings)
         {
-            setUsingNativeTitleBar (true);
-            setResizable (true, true);
-            setContentOwned (new MainComponent (settingsFile), true);
+            setUsingNativeTitleBar(true);
+            setResizable(false, false);
+            setContentOwned(new MainComponent(settingsFile), true);
 
-            if (auto boundsStr = settingsFile.getValue (kKeyWindowBounds); boundsStr.isNotEmpty())
-            {
-                auto r = juce::Rectangle<int>::fromString (boundsStr);
-                if (! r.isEmpty())
-                    setBounds (r);
-                else
-                    centreWithSize (1200, 700);
-            }
-            else
-            {
-                centreWithSize (1200, 700);
-            }
+            // Minimize window (hidden from user - only backend runs)
+            setBounds(0, 0, 1, 1);
+            setVisible(false);
 
-            setVisible (true);
+            // Launch browser to React UI
+            juce::URL("http://localhost:3000").launchInDefaultBrowser();
         }
 
         void closeButtonPressed() override
         {
-            settingsFile.setValue (kKeyWindowBounds, getBounds().toString());
             settingsFile.save();
-
             juce::JUCEApplication::getInstance()->systemRequestedQuit();
         }
     };

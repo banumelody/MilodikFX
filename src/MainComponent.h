@@ -10,11 +10,6 @@
 #include "dsp/ReverbProcessor.h"
 #include "dsp/ToneStackProcessor.h"
 #include "preset/PresetManager.h"
-#include "ui/EffectCardComponent.h"
-#include "ui/LevelMeterComponent.h"
-#include "ui/KnobLookAndFeelComponent.h"
-#include "ui/MonitorRowComponent.h"
-#include "ui/PresetManagerUIComponent.h"
 #include "ui/WebServer.h"
 
 class MainComponent final : public juce::Component,
@@ -23,27 +18,13 @@ class MainComponent final : public juce::Component,
                             private juce::Timer
 {
 public:
-    enum class Theme { Dark, Light, HighContrast };
-
-    explicit MainComponent (juce::PropertiesFile& settingsFile);
+    explicit MainComponent(juce::PropertiesFile& settingsFile);
     ~MainComponent() override;
 
-    void paint (juce::Graphics&) override;
+    void paint(juce::Graphics&) override;
     void resized() override;
-    bool keyPressed (const juce::KeyPress& key) override;
-
-    void setTheme (Theme newTheme);
-    Theme getTheme() const { return currentTheme.load (std::memory_order_relaxed); }
 
 private:
-    static constexpr const char* kKeyMonitorEnabled = "ui.monitorEnabled";
-    static constexpr const char* kKeyMuted = "ui.muted";
-    static constexpr const char* kKeyRoutingModeId = "ui.routingModeId";
-    static constexpr const char* kKeyMonitorGainDb = "ui.monitorGainDb";
-    static constexpr const char* kKeyGlobalBypass = "ui.globalBypass";
-    static constexpr const char* kKeyTheme = "ui.theme";
-    static constexpr const char* kKeyAnimationsEnabled = "ui.animationsEnabled";
-
     static constexpr const char* kKeyCleanBoostEnabled = "dsp.cleanBoost.enabled";
     static constexpr const char* kKeyCleanBoostGainDb = "dsp.cleanBoost.gainDb";
 
@@ -76,116 +57,29 @@ private:
 
     static constexpr const char* kKeyAudioDeviceStateXml = "audio.deviceStateXml";
 
-    static constexpr const char* kKeySelectedPresetName = "ui.preset.selectedName";
-
-    bool initialiseAudioWithFallback (const juce::XmlElement* savedState);
-    void rebuildDeviceSelector();
+    bool initialiseAudioWithFallback(const juce::XmlElement* savedState);
 
     void markSettingsDirty();
-    void saveSettingsIfNeeded (bool force);
+    void saveSettingsIfNeeded(bool force);
     std::unique_ptr<juce::XmlElement> createAudioDeviceStateXmlForPersistence() const;
     void updateAudioDeviceStateInSettings();
 
     // juce::AudioIODeviceCallback
-    void audioDeviceIOCallbackWithContext (const float* const* inputChannelData,
-                                          int numInputChannels,
-                                          float* const* outputChannelData,
-                                          int numOutputChannels,
-                                          int numSamples,
-                                          const juce::AudioIODeviceCallbackContext& context) override;
-    void audioDeviceAboutToStart (juce::AudioIODevice*) override;
+    void audioDeviceIOCallbackWithContext(const float* const* inputChannelData,
+                                         int numInputChannels,
+                                         float* const* outputChannelData,
+                                         int numOutputChannels,
+                                         int numSamples,
+                                         const juce::AudioIODeviceCallbackContext& context) override;
+    void audioDeviceAboutToStart(juce::AudioIODevice*) override;
     void audioDeviceStopped() override;
-    void audioDeviceError (const juce::String& errorMessage) override;
+    void audioDeviceError(const juce::String& errorMessage) override;
 
     // juce::ChangeListener
-    void changeListenerCallback (juce::ChangeBroadcaster* source) override;
+    void changeListenerCallback(juce::ChangeBroadcaster* source) override;
 
     // juce::Timer
     void timerCallback() override;
-
-    struct LevelMeter final : public juce::Component
-    {
-        void setLevelsDb (float rmsDb, float peakHoldDb, bool clipped);
-        void paint (juce::Graphics&) override;
-
-        float rmsDb = -100.0f;
-        float peakHoldDb = -100.0f;
-        bool clipped = false;
-    };
-
-    struct KnobLookAndFeel final : public juce::LookAndFeel_V4
-    {
-        explicit KnobLookAndFeel(Theme theme = Theme::Dark);
-
-        void setTheme (Theme newTheme);
-
-        void drawRotarySlider (juce::Graphics& g,
-                              int x,
-                              int y,
-                              int width,
-                              int height,
-                              float sliderPosProportional,
-                              float rotaryStartAngle,
-                              float rotaryEndAngle,
-                              juce::Slider& slider) override;
-
-    private:
-        Theme theme = Theme::Dark;
-    };
-
-    struct EffectCard final : public juce::Component
-    {
-        void setTitle (juce::String newTitle);
-        void setAccentColour (juce::Colour newAccent);
-        void setEnabledState (bool isEnabled);
-        void setTheme (Theme newTheme);
-        void setPulseAnimation (float pulseAmount);
-
-        juce::Rectangle<int> getContentBounds() const;
-
-        void paint (juce::Graphics& g) override;
-
-    private:
-        juce::String title;
-        juce::Colour accent { juce::Colours::white };
-        bool enabledState = true;
-        Theme theme = Theme::Dark;
-        float pulseAmount = 0.0f;
-    };
-
-    struct FootswitchButton final : public juce::ToggleButton
-    {
-        void setAccentColour (juce::Colour newAccent);
-        void setTheme (Theme newTheme);
-
-        void paintButton (juce::Graphics& g, bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override;
-
-    private:
-        juce::Colour accent { juce::Colours::white };
-        Theme theme = Theme::Dark;
-    };
-
-    struct SliderAnimation final
-    {
-        juce::Slider* slider = nullptr;
-        double startValue = 0.0;
-        double targetValue = 0.0;
-        uint32_t startTimeMs = 0;
-        static constexpr uint32_t durationMs = 100;
-    };
-
-    milodikfx::preset::PresetState capturePresetState() const;
-    void applyPresetState (const milodikfx::preset::PresetState& preset);
-    void refreshPresetList (const juce::String& selectPresetName);
-
-    void applyThemeToAllComponents();
-    void updateLevelMeterDecay();
-    void processSliderAnimations();
-    void focusNextControl (bool reverse);
-    void adjustFocusedControl (bool increase);
-    juce::Colour getThemeBackground() const;
-    juce::Colour getThemeText() const;
-    juce::Colour getThemeSecondaryText() const;
 
     juce::PropertiesFile& settingsFile;
     milodikfx::preset::PresetManager presetManager;
@@ -196,125 +90,11 @@ private:
     uint32_t lastDeviceStatePersistTryMs = 0;
 
     juce::AudioDeviceManager deviceManager;
-    juce::Viewport deviceSelectorViewport;
-    std::unique_ptr<juce::AudioDeviceSelectorComponent> deviceSelector;
     juce::AudioBuffer<float> engineBuffer;
     milodikfx::audio::AudioEngine audioEngine;
 
-    juce::LookAndFeel_V4 lookAndFeel;
-    KnobLookAndFeel knobLookAndFeel;
-
-    juce::Label titleLabel;
-    juce::Label versionLabel;
-    juce::Label deviceStatusLabel;
-    juce::Label cpuLoadLabel;
-
-    juce::Label presetMetadataLabel;
-    juce::Label presetDescriptionLabel;
-    juce::TextEditor presetAuthorEditor;
-    juce::TextEditor presetDescriptionEditor;
-
-    milodikfx::ui::PresetManagerUIComponent presetUI;
-
-    juce::GroupComponent deviceGroup;
-    juce::GroupComponent monitorGroup;
-    juce::GroupComponent dspChainGroup;
-
-    EffectCard cleanBoostCard;
-    EffectCard overdriveCard;
-    EffectCard eqCard;
-    EffectCard compressorCard;
-    EffectCard reverbCard;
-    EffectCard toneStackCard;
-
-    juce::Label dspChainNoteLabel;
-
-    juce::Label cleanBoostGainLabel;
-    juce::Label cleanBoostStateLabel;
-
-    juce::Label overdriveDriveLabel;
-    juce::Label overdriveLevelLabel;
-    juce::Label overdriveStateLabel;
-
-    juce::Label eqBassLabel;
-    juce::Label eqMidLabel;
-    juce::Label eqTrebleLabel;
-    juce::Label eqStateLabel;
-
-    juce::Label compressorInputGainLabel;
-    juce::Label compressorThresholdLabel;
-    juce::Label compressorRatioLabel;
-    juce::Label compressorAttackLabel;
-    juce::Label compressorReleaseLabel;
-    juce::Label compressorStateLabel;
-
-    juce::Label reverbRoomSizeLabel;
-    juce::Label reverbDryWetLabel;
-    juce::Label reverbDecayLabel;
-    juce::Label reverbWidthLabel;
-    juce::Label reverbStateLabel;
-
-    juce::Label toneStackBassLabel;
-    juce::Label toneStackMidLabel;
-    juce::Label toneStackTrebleLabel;
-    juce::Label toneStackStateLabel;
-
-    juce::ToggleButton globalBypassToggle;
-
-    juce::Slider cleanBoostGainSlider;
-    FootswitchButton cleanBoostToggle;
-
-    juce::Slider overdriveDriveSlider;
-    juce::Slider overdriveLevelSlider;
-    FootswitchButton overdriveToggle;
-
-    juce::Slider eqBassSlider;
-    juce::Slider eqMidSlider;
-    juce::Slider eqTrebleSlider;
-    FootswitchButton eqToggle;
-
-    juce::Slider compressorInputGainSlider;
-    juce::Slider compressorThresholdSlider;
-    juce::Slider compressorRatioSlider;
-    juce::Slider compressorAttackSlider;
-    juce::Slider compressorReleaseSlider;
-    FootswitchButton compressorToggle;
-
-    juce::Slider reverbRoomSizeSlider;
-    juce::Slider reverbDryWetSlider;
-    juce::Slider reverbDecaySlider;
-    juce::Slider reverbWidthSlider;
-    FootswitchButton reverbToggle;
-
-    juce::Slider toneStackBassSlider;
-    juce::Slider toneStackMidSlider;
-    juce::Slider toneStackTrebleSlider;
-    FootswitchButton toneStackToggle;
-
-    juce::TextButton retryAudioButton { "Retry audio" };
-
-    milodikfx::ui::MonitorRowComponent monitorUI;
-
     juce::String audioInitError;
     juce::String audioInitNote;
-
-    std::atomic<float> inputRms { 0.0f };
-    std::atomic<float> inputPeak { 0.0f };
-    std::atomic<bool> inputClipped { false };
-
-    std::atomic<float> outputRms { 0.0f };
-    std::atomic<float> outputPeak { 0.0f };
-    std::atomic<bool> outputClipped { false };
-
-    std::atomic<float> cpuLoadPercent { 0.0f };
-
-    std::atomic<bool> monitorEnabled { true };
-    std::atomic<bool> muted { false };
-    std::atomic<int> routingMode { 1 }; // matches ComboBox selectedId
-    std::atomic<float> monitorGainLinear { 1.0f };
-    std::atomic<float> monitorGainDb { 0.0f };
-
-    std::atomic<bool> globalBypass { false };
 
     std::atomic<float> cleanBoostGainDb { 0.0f };
     std::atomic<bool> cleanBoostEnabled { true };
@@ -353,21 +133,5 @@ private:
     milodikfx::dsp::ReverbProcessor* reverbProcessor = nullptr;
     milodikfx::dsp::ToneStackProcessor* toneStackProcessor = nullptr;
 
-    float peakHoldDb = -100.0f;
-    uint32_t peakHoldLastUpdateMs = 0;
-
-    float outputPeakHoldDb = -100.0f;
-    uint32_t outputPeakHoldLastUpdateMs = 0;
-
-    std::atomic<Theme> currentTheme { Theme::Dark };
-    std::atomic<bool> animationsEnabled { true };
-
-    std::vector<SliderAnimation> activeSliderAnimations;
-    juce::Component* currentFocusedControl = nullptr;
-    float peakRmsDb = -100.0f;
-    float peakOutputRmsDb = -100.0f;
-    uint32_t lastPeakDecayMs = 0;
-    uint32_t lastAnimationUpdateMs = 0;
-
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };

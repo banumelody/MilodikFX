@@ -80,24 +80,6 @@ target_sources(MilodikFX
     src/ipc/TunerBridge.cpp
     src/ipc/MetronomeBridge.h
     src/ipc/MetronomeBridge.cpp
-    src/ui/KnobComponent.h
-    src/ui/KnobComponent.cpp
-    src/ui/FootswitchComponent.h
-    src/ui/FootswitchComponent.cpp
-    src/ui/EffectCardComponent.h
-    src/ui/EffectCardComponent.cpp
-    src/ui/LevelMeterComponent.h
-    src/ui/LevelMeterComponent.cpp
-    src/ui/KnobLookAndFeelComponent.h
-    src/ui/KnobLookAndFeelComponent.cpp
-    src/ui/MeterRowComponent.h
-    src/ui/MeterRowComponent.cpp
-    src/ui/EffectCardContainerComponent.h
-    src/ui/EffectCardContainerComponent.cpp
-    src/ui/MonitorRowComponent.h
-    src/ui/MonitorRowComponent.cpp
-    src/ui/PresetManagerUIComponent.h
-    src/ui/PresetManagerUIComponent.cpp
     src/ui/WebServer.h
     src/ui/WebServer.cpp
 )
