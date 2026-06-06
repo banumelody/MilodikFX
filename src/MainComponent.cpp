@@ -1359,11 +1359,12 @@ void MainComponent::resized()
 
         auto layoutFootswitch = [&] (juce::Rectangle<int> footArea, juce::Label& stateLabel, FootswitchButton& button)
         {
-            const auto stateH = juce::jmin (18, footArea.getHeight());
+            const auto stateH = juce::jmin (16, footArea.getHeight() / 3);
             stateLabel.setBounds (takeTop (footArea, stateH));
+            takeTop (footArea, 4);
 
             auto buttonArea = footArea.reduced (0, 2);
-            const auto btnSize = juce::jmin (44, juce::jmin (buttonArea.getWidth(), buttonArea.getHeight()));
+            const auto btnSize = juce::jmin (56, juce::jmin (buttonArea.getWidth(), buttonArea.getHeight()));
             button.setBounds (buttonArea.withSizeKeepingCentre (btnSize, btnSize));
         };
 
@@ -1373,7 +1374,7 @@ void MainComponent::resized()
             label.setBounds (takeTop (contentAbs, juce::jmin (18, contentAbs.getHeight())));
             takeTop (contentAbs, 6);
 
-            const auto footH = juce::jmin (66, contentAbs.getHeight());
+            const auto footH = juce::jmin (72, contentAbs.getHeight());
             auto footArea = takeBottom (contentAbs, footH);
             layoutFootswitch (footArea, stateLabel, button);
 
@@ -1399,7 +1400,7 @@ void MainComponent::resized()
 
             takeTop (contentAbs, 6);
 
-            const auto footH = juce::jmin (66, contentAbs.getHeight());
+            const auto footH = juce::jmin (72, contentAbs.getHeight());
             auto footArea = takeBottom (contentAbs, footH);
             layoutFootswitch (footArea, stateLabel, button);
 
@@ -1441,8 +1442,8 @@ void MainComponent::resized()
 
             takeTop (contentAbs, 6);
 
-            // Footswitch area
-            const auto footH = juce::jmin (48, juce::jmax (40, contentAbs.getHeight() / 4));
+            // Footswitch area - more space for proportional button
+            const auto footH = juce::jmin (60, juce::jmax (50, contentAbs.getHeight() / 3));
             auto footArea = takeBottom (contentAbs, footH);
             layoutFootswitch (footArea, stateLabel, button);
 
