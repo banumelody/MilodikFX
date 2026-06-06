@@ -14,9 +14,17 @@
 
 MilodikFX adalah aplikasi multi-effect gitar dan bass berbasis DSP realtime yang dikembangkan menggunakan C++ dan JUCE.
 
-Visi jangka panjang MilodikFX adalah menjadi platform audio processing profesional yang mampu bersaing dengan solusi kelas dunia seperti Quad Cortex, FM9, Helix, Kemper, dan Neural DSP pada platform desktop maupun hardware khusus.
+Setelah evaluasi Sprint 6, diputuskan bahwa MilodikFX akan melakukan migrasi arsitektur UI dari JUCE Native Components menuju arsitektur Hybrid Frontend menggunakan React, TypeScript, dan TailwindCSS.
 
-Fase awal berfokus pada pengembangan engine DSP berkualitas tinggi pada platform Windows dengan latensi rendah dan kualitas audio profesional.
+Keputusan ini diambil untuk:
+- Mempercepat pengembangan UI
+- Mendukung desain modern
+- Mendukung signal chain visual
+- Mendukung drag & drop routing
+- Mendukung mobile/web companion di masa depan
+- Memisahkan DSP Engine dan UI Layer
+
+Mulai Sprint 7, fokus utama bukan lagi penambahan efek baru, tetapi pembangunan fondasi platform generasi berikutnya. DSP Foundation (Phase A) telah selesai di Sprint 6, dan sekarang akan dimulai Platform Migration (Phase B) dengan arsitektur modern berbasis web.
 
 ---
 
@@ -150,7 +158,7 @@ Alasan:
 
 ## Audio Application Framework
 
-### JUCE
+### JUCE (Phase A & DSP Engine)
 
 Versi minimum:
 
@@ -161,7 +169,7 @@ JUCE digunakan untuk:
 - Audio Device Management
 - Audio Callback
 - DSP Utilities
-- GUI Framework
+- DSP Processor Implementation
 - Cross-platform Support
 - Plugin Framework (fase berikutnya)
 
@@ -173,6 +181,60 @@ Alasan pemilihan:
 - Mempermudah migrasi ke VST3, AU, dan standalone application
 
 ---
+
+### Frontend Stack (Phase B onwards - UI Layer)
+
+#### React
+
+Versi minimum:
+
+- React 18.x
+
+Digunakan untuk:
+
+- Modern UI Development
+- Component-based Architecture
+- State Management
+- Event Handling
+
+#### TypeScript
+
+Versi minimum:
+
+- TypeScript 5.x
+
+Digunakan untuk:
+
+- Type Safety
+- Better Developer Experience
+- Maintainability
+- Code Quality
+
+#### TailwindCSS
+
+Versi minimum:
+
+- Tailwind CSS 3.x
+
+Digunakan untuk:
+
+- Responsive Design System
+- Design Tokens
+- Theme Management
+- Rapid UI Development
+
+---
+
+## Desktop Integration (Phase B onwards)
+
+### Electron (Optional, for future desktop app)
+
+- Desktop App wrapper
+- Native OS integration
+- Main Process ↔ Renderer Process communication
+- IPC to C++ DSP Engine
+
+Alasan: Memungkinkan deployment cross-platform (Windows, macOS, Linux)
 
 ## Build System
 
@@ -541,155 +603,195 @@ Classes:
 
 # 11. Sprint Roadmap
 
-## Sprint 0
+Roadmap dibagi menjadi enam fase utama: DSP Foundation (Phase A, Completed), Platform Migration (Phase B, In Progress), Professional DSP Effects (Phase C), Amp Platform (Phase D), Milodik Ecosystem (Phase E), dan Intelligent Processing (Phase F).
 
-### Hello Audio World
+## Phase A: DSP Foundation (Completed ✓)
 
-Goal:
+Menbangun fondasi DSP Engine yang stabil dengan efek dasar dan preset management.
 
-Membuktikan audio realtime dapat berjalan.
+### Sprint 0 - Hello Audio World
+**Output:** v0.0.1  
+**Deliverables:** Device Detection, Audio Input/Output, Monitoring
 
-Features:
+### Sprint 1 - Audio Engine Foundation
+**Output:** v0.1.0  
+**Deliverables:** Audio Engine, Audio Processor Interface, DSP Chain Manager
 
-- Device Detection
-- Audio Input
-- Audio Output
-- Monitoring
+### Sprint 2 - Clean Boost
+**Output:** v0.2.0  
+**Deliverables:** Gain Processor (0–24 dB)
 
-DSP:
+### Sprint 3 - Overdrive
+**Output:** v0.3.0  
+**Deliverables:** Soft Clipping Processor, Drive Control, Level Control
 
-None
+### Sprint 4 - Three Band EQ
+**Output:** v0.4.0  
+**Deliverables:** Bass (±12 dB @ 50Hz), Mid (±12 dB @ 500Hz), Treble (±12 dB @ 5kHz)
 
-Flow:
+### Sprint 5 - Preset Management
+**Output:** v0.5.0  
+**Deliverables:** Save, Load, Delete presets (JSON format)
 
-```text
-Input
- ↓
-Output
-```
+### Sprint 6 - Extended Effects & UI Polish
+**Output:** v0.7.5  
+**Deliverables:**
+- 3 New Processors: Compressor, Reverb, Tone Stack
+- UI Refactoring: Responsive 2×3 card grid, window maximize
+- Preset Metadata: Author, description, tags, timestamps (ISO 8601)
+- Performance Optimization: Real-time CPU monitoring (0–100%, warning @ 50%)
+- UI Polish: Smooth animations (100ms), Dark/Light/High Contrast themes, keyboard navigation (Tab/arrows)
 
-Acceptance Criteria:
-
-- Audio masuk
-- Audio keluar
-- Tidak crash
-- Buffer Size terbaca
-- Sample Rate terbaca
-
-Output:
-
-v0.0.1
-
----
-
-## Sprint 1
-
-### Audio Engine Foundation
-
-Goal:
-
-Membangun fondasi audio engine.
-
-Features:
-
-- Audio Engine
-- Audio Processor Interface
-- DSP Chain Manager
-
-Output:
-
-v0.1.0
+**Status:** Phase A Complete ✓
 
 ---
 
-## Sprint 2
+## Phase B: Platform Migration (In Progress)
 
-### Clean Boost
+Memigrasikan UI menjadi arsitektur modern berbasis web dengan React, TypeScript, TailwindCSS.
 
-Goal:
+### Sprint 7 - Frontend Foundation
+**Target Output:** v0.8.0  
+**Goal:** Membangun fondasi frontend modern  
+**Deliverables:**
+- React Setup (Vite)
+- TypeScript Configuration
+- TailwindCSS Integration
+- Design Tokens & System
+- Dark/Light Theme Foundation
+- Component Library Setup
+- Frontend Build Pipeline
 
-Membuat efek pertama.
+### Sprint 8 - Backend Bridge
+**Target Output:** v0.9.0  
+**Goal:** Membangun komunikasi antara frontend dan DSP Engine  
+**Deliverables:**
+- Message Bridge (IPC/WebSocket)
+- Event System Architecture
+- Parameter Synchronization Protocol
+- Device State API
+- Preset API (CRUD operations)
 
-Features:
+### Sprint 9 - Modern UI MVP
+**Target Output:** v1.0.0-beta  
+**Goal:** Implementasi UI generasi baru  
+**Deliverables:**
+- Preset Bar (Browser + Save/Load UI)
+- Device Panel (I/O Selection, Latency Monitor)
+- Audio Meter (Stereo Input/Output + Peak Indicators)
+- Effect Cards (Visual representation of DSP chain)
+- Status Bar (CPU Load, Sample Rate, Buffer Size)
+- Complete Theme System
 
-- Gain Processor
+### Sprint 10 - Dynamic Signal Chain
+**Target Output:** v1.0.0 (Release Candidate)  
+**Goal:** Signal chain tidak lagi fixed, mendukung Add/Remove/Reorder  
+**Deliverables:**
+- Add Effect UI
+- Remove Effect UI
+- Reorder Effect (Drag & Drop)
+- Signal Routing Visualization
+- Effect Enable/Disable Toggles
+- Audio Path Animation
 
-Parameters:
-
-- Gain
-
-Output:
-
-v0.2.0
-
----
-
-## Sprint 3
-
-### Overdrive
-
-Goal:
-
-Membuat distortion pertama.
-
-Features:
-
-- Soft Clipping
-
-Parameters:
-
-- Drive
-- Level
-
-Output:
-
-v0.3.0
-
----
-
-## Sprint 4
-
-### Three Band EQ
-
-Goal:
-
-Membentuk karakter tone.
-
-Features:
-
-- Bass
-- Mid
-- Treble
-
-Output:
-
-v0.4.0
+**Milestone Alpha:** React UI + TailwindCSS + Message Bridge + DSP Engine + Dynamic Signal Chain
 
 ---
 
-## Sprint 5
+## Phase C: Professional DSP Effects
 
-### Preset Management
+Menambahkan efek profesional di atas fondasi baru.
 
-Goal:
+### Sprint 11 - Compressor
+**Output:** v1.1.0  
+**Deliverables:** Threshold, Ratio, Attack, Release parameters
 
-Menyimpan konfigurasi efek.
+### Sprint 12 - Delay
+**Output:** v1.2.0  
+**Deliverables:** Time, Feedback, Mix parameters
 
-Features:
+### Sprint 13 - Reverb Enhancement
+**Output:** v1.3.0  
+**Deliverables:** Decay, Mix, Room Size refinement
 
-- Save Preset
-- Load Preset
-- Delete Preset
+### Sprint 14 - Chorus
+**Output:** v1.4.0  
+**Deliverables:** Rate, Depth, Mix parameters
 
-Format:
+### Sprint 15 - Flanger
+**Output:** v1.5.0  
+**Deliverables:** Rate, Feedback, Mix parameters
 
-JSON
-
-Output:
-
-v0.5.0
+### Sprint 16 - Cabinet IR Loader
+**Output:** v1.6.0  
+**Deliverables:** WAV Loader, IR Manager, Convolution Engine
 
 ---
+
+## Phase D: Amp Platform
+
+Membangun platform amp simulator profesional.
+
+### Sprint 17 - Cabinet Manager
+**Output:** v1.7.0  
+**Deliverables:** Cabinet Browser, Categories, Favorites system
+
+### Sprint 18 - British Amp
+**Output:** v1.8.0  
+**Inspired by:** Marshall Style  
+**Deliverables:** Preamp, Tone Stack, Power Amp simulation
+
+### Sprint 19 - American Amp
+**Output:** v1.9.0  
+**Inspired by:** Fender Style
+
+### Sprint 20 - Modern High Gain Amp
+**Output:** v2.0.0  
+**Inspired by:** 5150, Mesa Style
+
+---
+
+## Phase E: Milodik Ecosystem
+
+Membangun ekosistem penggunaan live dan studio.
+
+### Sprint 21 - MIDI Support
+**Output:** v2.1.0  
+**Deliverables:** MIDI Learn, MIDI Mapping
+
+### Sprint 22 - Footswitch Support
+**Output:** v2.2.0  
+**Deliverables:** Scene Switching, Preset Switching via hardware
+
+### Sprint 23 - Performance Mode
+**Output:** v2.3.0  
+**Deliverables:** Live View, Fullscreen Mode, Setlist Mode
+
+### Sprint 24 - Preset Marketplace Foundation
+**Output:** v2.4.0  
+**Deliverables:** Preset Categories, Local Library, Marketplace Architecture
+
+### Sprint 25 - Remote Browser Control
+**Output:** v2.5.0  
+**Deliverables:** Browser UI, Tablet UI, Mobile UI companion
+
+---
+
+## Phase F: Intelligent Processing
+
+Menjadikan MilodikFX platform generasi berikutnya.
+
+### Sprint 26 - Tone Capture Research
+**Output:** Research Release  
+**Deliverables:** Capture Architecture, Benchmark Framework
+
+### Sprint 27 - AI Preset Recommendation
+**Output:** v2.7.0  
+**Deliverables:** Genre Recommendation, Preset Suggestion engine
+
+### Sprint 28 - AI Tone Assistant
+**Output:** v3.0.0  
+**Deliverables:** Tone Assistant, Auto EQ Suggestion, Signal Chain Recommendation
 
 # 12. Project Structure
 
@@ -723,70 +825,38 @@ MilodikFX/
 
 ---
 
-# 13. Long Term Roadmap
+# 13. Long Term Vision
 
-## Phase 2
+MilodikFX akan dibangun sebagai platform modular dengan DSP Engine sebagai core yang dapat diintegrasikan ke berbagai platform:
 
-- Noise Gate
-- Compressor
+```text
+Milodik Engine (C++20 DSP Core)
+        │
+        ├── Desktop App (React UI + Hybrid)
+        ├── Plugin (VST3/AU/LV2)
+        ├── Hardware Platform
+        ├── Web Editor
+        └── Mobile Companion
+```
 
-## Phase 3
+Dengan prinsip arsitektur:
 
-- Delay
-- Chorus
-- Flanger
-
-## Phase 4
-
-- Reverb
-
-## Phase 5
-
-- Cabinet IR Loader
-
-## Phase 6
-
-- Amp Simulator
-
-Targets:
-
-- British Amp
-- American Amp
-- Modern High Gain Amp
-
-## Phase 7
-
-- Plugin Support
-- VST3
-- AU
-- LV2
-
-## Phase 8
-
-- macOS Support
-- Linux Support
-
-## Phase 9
-
-- Tone Capture
-
-## Phase 10
-
-- AI Tone Assistant
-
-## Phase 11
-
-- Dedicated Hardware Platform
+- **DSP Engine** adalah produk utama (C++20, JUCE, Audio Processing)
+- **UI Layer** adalah client independen (React, TypeScript, TailwindCSS)
+- **Audio Processing** tetap 100% berjalan di C++ real-time thread
+- **Frontend** dapat berkembang secara independen tanpa mempengaruhi DSP
+- **Interoperability** antar platform (desktop, plugin, web, mobile)
+- **Siap untuk** future hardware deployment, plugin ecosystem, dan AI integration
 
 ---
 
-# Definition of Success
+# 14. Definition of Success
 
 MilodikFX dianggap berhasil apabila:
 
-1. Gitar dapat dimainkan realtime melalui audio interface.
-2. Latensi nyaman digunakan untuk bermain gitar.
-3. Audio bersih tanpa artefak.
-4. Overdrive dan EQ terdengar musikal.
-5. Preset dapat disimpan dan dipanggil kembali.
-6. Menjadi fondasi yang kuat untuk membangun amp simulator profesional di masa depan.
+1. **Phase A (DSP Foundation) ✓** - Memiliki DSP Engine yang stabil dan modular dengan 6+ efek profesional
+2. **Phase B (Platform Migration)** - Memiliki UI modern berbasis React yang mudah dikembangkan dan di-maintain
+3. **Dynamic Signal Chain** - Mendukung penambahan/penghapusan/pengurutan efek secara dinamis
+4. **Professional Processing** - Mampu menjalankan efek profesional dengan latency <10ms dan CPU load <40%
+5. **Scalable Foundation** - Menjadi fondasi yang kuat untuk amp simulator, tone capture, AI processing, dan hardware
+6. **Cross-Platform Ready** - Dapat berkembang menjadi platform audio profesional lintas perangkat (desktop, plugin, web, mobile)
