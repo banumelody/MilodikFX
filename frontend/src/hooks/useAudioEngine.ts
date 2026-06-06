@@ -27,9 +27,46 @@ export const useAudioEngine = () => {
     }
   }, []);
 
+  const savePreset = useCallback(async (name: string) => {
+    try {
+      await audioEngine.savePreset({ name, processors: {} });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save preset');
+    }
+  }, []);
+
+  const loadPreset = useCallback(async (presetId: string) => {
+    try {
+      await audioEngine.loadPreset(presetId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load preset');
+    }
+  }, []);
+
+  const deletePreset = useCallback(async (presetId: string) => {
+    try {
+      await audioEngine.deletePreset(presetId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete preset');
+    }
+  }, []);
+
+  const listPresets = useCallback(async () => {
+    try {
+      return await audioEngine.getPresets();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to list presets');
+      return [];
+    }
+  }, []);
+
   return {
     isConnected,
     error,
     setParameter,
+    savePreset,
+    loadPreset,
+    deletePreset,
+    listPresets,
   };
 };

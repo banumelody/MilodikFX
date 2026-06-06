@@ -69,6 +69,17 @@ target_sources(MilodikFX
     src/dsp/DSPChainManager.cpp
     src/preset/PresetManager.h
     src/preset/PresetManager.cpp
+    src/ipc/Types.h
+    src/ipc/IPCServer.h
+    src/ipc/IPCServer.cpp
+    src/ipc/Bridges.h
+    src/ipc/Bridges.cpp
+    src/ipc/MessageHandler.h
+    src/ipc/MessageHandler.cpp
+    src/ipc/TunerBridge.h
+    src/ipc/TunerBridge.cpp
+    src/ipc/MetronomeBridge.h
+    src/ipc/MetronomeBridge.cpp
     src/ui/KnobComponent.h
     src/ui/KnobComponent.cpp
     src/ui/FootswitchComponent.h

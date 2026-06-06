@@ -212,6 +212,23 @@ export class MessageBridge {
     });
   }
 
+  async sendMessage(messageType: string, data: any): Promise<any> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket || !this.connected) {
+        reject(new Error('Not connected to audio engine'));
+        return;
+      }
+
+      this.socket.emit(messageType, data, (ack: any) => {
+        if (ack?.error) {
+          reject(new Error(ack.error));
+        } else {
+          resolve(ack);
+        }
+      });
+    });
+  }
+
   on(event: string, callback: Function): void {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, []);
