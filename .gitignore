@@ -6,6 +6,9 @@ out/
 # IDE
 .vs/
 *.user
+*.vcxproj
+*.vcxproj.filters
+*.sln
 
 # OS
 Thumbs.db
@@ -15,5 +18,16 @@ Thumbs.db
 
 # Release artefacts
 MilodikFX-Windows-*.zip
+MilodikFX-v*.zip
 
+# Session state
+.copilot/
+
+# Bug reports and screenshots
 bugs/
+docs/Screenshot*.png
+
+# Temporary files
+*.tmp
+*.log
+*.pdb
