@@ -44,6 +44,7 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
       <button
         onClick={handleClick}
         disabled={disabled}
+        aria-pressed={checked}
         className={`
           ${sizeClasses[size]}
           ${checked ? 'bg-cyan-500' : 'bg-gray-300 dark:bg-gray-600'}

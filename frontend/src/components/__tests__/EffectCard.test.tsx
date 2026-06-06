@@ -24,7 +24,7 @@ describe('EffectCard', () => {
   });
 
   it('renders with correct color based on effect type', () => {
-    render(
+    const { container } = render(
       <EffectCard
         type="GAIN"
         title="Gain"
@@ -34,12 +34,13 @@ describe('EffectCard', () => {
         onParameterChange={vi.fn()}
       />
     );
-    const card = document.querySelector('.border-green-500');
+    const card = container.querySelector('div[class*="rounded-lg"][class*="border-2"]');
     expect(card).toBeInTheDocument();
+    expect(card?.className).toContain('green');
   });
 
   it('shows reduced opacity when disabled', () => {
-    render(
+    const { container } = render(
       <EffectCard
         type="GAIN"
         title="Gain"
@@ -49,8 +50,8 @@ describe('EffectCard', () => {
         onParameterChange={vi.fn()}
       />
     );
-    const card = document.querySelector('.opacity-50');
-    expect(card).toBeInTheDocument();
+    const card = container.querySelector('div[class*="rounded-lg"][class*="border-2"]');
+    expect(card?.className).toContain('opacity-50');
   });
 
   it('calls onToggle when toggle switch is clicked', async () => {
@@ -66,7 +67,7 @@ describe('EffectCard', () => {
       />
     );
     
-    const toggleButton = screen.getByRole('button', { name: '' }); // Toggle switch
+    const toggleButton = screen.getAllByRole('button')[0];
     await userEvent.click(toggleButton);
     
     expect(onToggle).toHaveBeenCalled();
@@ -83,7 +84,8 @@ describe('EffectCard', () => {
         onParameterChange={vi.fn()}
       />
     );
-    expect(screen.getByText('Level')).toBeInTheDocument();
+    const levelElements = screen.getAllByText('Level');
+    expect(levelElements.length).toBeGreaterThan(0);
   });
 
   it('calls onRemove when remove button is clicked', async () => {

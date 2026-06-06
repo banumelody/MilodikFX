@@ -53,6 +53,8 @@ export const Dropdown: React.FC<DropdownProps> = ({
       <button
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
+        role="combobox"
+        aria-expanded={isOpen}
         className={`
           w-full px-4 py-2 text-left bg-gray-100 dark:bg-gray-700
           text-gray-900 dark:text-white rounded-md border border-gray-300

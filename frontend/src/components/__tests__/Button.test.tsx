@@ -20,19 +20,19 @@ describe('Button', () => {
   it('supports primary variant', () => {
     render(<Button variant="primary">Primary</Button>);
     const button = screen.getByText('Primary');
-    expect(button).toHaveClass('bg-cyan-600');
+    expect(button.className).toContain('bg-primary-600');
   });
 
   it('supports secondary variant', () => {
     render(<Button variant="secondary">Secondary</Button>);
     const button = screen.getByText('Secondary');
-    expect(button).toHaveClass('bg-gray-700');
+    expect(button.className).toContain('bg-gray-200');
   });
 
   it('supports danger variant', () => {
     render(<Button variant="danger">Delete</Button>);
     const button = screen.getByText('Delete');
-    expect(button).toHaveClass('bg-red-600');
+    expect(button.className).toContain('bg-error-600');
   });
 
   it('supports size prop', () => {

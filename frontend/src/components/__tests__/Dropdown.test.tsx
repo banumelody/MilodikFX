@@ -19,7 +19,7 @@ describe('Dropdown', () => {
         placeholder="Select an option"
       />
     );
-    expect(screen.getByPlaceholderText('Select an option')).toBeInTheDocument();
+    expect(screen.getByText('Select an option')).toBeInTheDocument();
   });
 
   it('opens dropdown on click', async () => {
@@ -32,8 +32,8 @@ describe('Dropdown', () => {
       />
     );
     
-    const input = screen.getByPlaceholderText('Select');
-    await userEvent.click(input);
+    const button = screen.getByText('Select');
+    await userEvent.click(button);
     
     expect(screen.getByText('Option 1')).toBeInTheDocument();
   });
@@ -49,8 +49,8 @@ describe('Dropdown', () => {
       />
     );
     
-    const input = screen.getByPlaceholderText('Select');
-    await userEvent.click(input);
+    const button = screen.getByText('Select');
+    await userEvent.click(button);
     
     const option = screen.getByText('Option 2');
     await userEvent.click(option);
@@ -66,7 +66,7 @@ describe('Dropdown', () => {
         onChange={vi.fn()}
       />
     );
-    expect(screen.getByDisplayValue('Option 1')).toBeInTheDocument();
+    expect(screen.getByText('Option 1')).toBeInTheDocument();
   });
 
   it('filters options by search', async () => {
@@ -76,12 +76,15 @@ describe('Dropdown', () => {
         value=""
         onChange={vi.fn()}
         placeholder="Search"
+        searchable={true}
       />
     );
     
-    const input = screen.getByPlaceholderText('Search') as HTMLInputElement;
-    await userEvent.click(input);
-    await userEvent.type(input, 'Option 2');
+    const button = screen.getByText('Search');
+    await userEvent.click(button);
+    
+    const searchInput = screen.getByPlaceholderText('Search...') as HTMLInputElement;
+    await userEvent.type(searchInput, 'Option 2');
     
     expect(screen.getByText('Option 2')).toBeInTheDocument();
     expect(screen.queryByText('Option 1')).not.toBeInTheDocument();
@@ -98,7 +101,7 @@ describe('Dropdown', () => {
       />
     );
     
-    const input = screen.getByRole('combobox');
-    expect(input).toBeDisabled();
+    const button = screen.getByRole('combobox');
+    expect(button).toBeDisabled();
   });
 });
