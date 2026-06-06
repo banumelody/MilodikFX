@@ -1,8 +1,30 @@
 #include <JuceHeader.h>
 
 #include "MainComponent.h"
+#include <fstream>
 
 static constexpr const char* kKeyWindowBounds = "ui.windowBounds";
+
+// Simple file logger
+class AppFileLogger : public juce::Logger
+{
+    std::ofstream logFile;
+    
+public:
+    AppFileLogger(const juce::File& file)
+    {
+        logFile.open(file.getFullPathName().toStdString(), std::ios::app);
+    }
+    
+    void logMessage(const juce::String& message) override
+    {
+        if (logFile.is_open())
+        {
+            logFile << message << "\n";
+            logFile.flush();
+        }
+    }
+};
 
 class MilodikFXApplication final : public juce::JUCEApplication
 {
@@ -12,6 +34,14 @@ public:
 
     void initialise (const juce::String&) override
     {
+        // Setup file logger
+        auto exePath = juce::File::getSpecialLocation(juce::File::currentExecutableFile);
+        auto logFile = exePath.getParentDirectory().getChildFile("milodikfx.log");
+        juce::Logger::setCurrentLogger(new AppFileLogger(logFile));
+        
+        juce::Logger::getCurrentLogger()->writeToLog("========== MilodikFX Started ==========");
+        juce::Logger::getCurrentLogger()->writeToLog("Executable: " + exePath.getFullPathName());
+
         juce::PropertiesFile::Options options;
         options.applicationName = getApplicationName();
         options.osxLibrarySubFolder = "Application Support";
@@ -30,8 +60,13 @@ public:
 
         auto file = dir.getChildFile ("MilodikFX.settings");
         settingsFile = std::make_unique<juce::PropertiesFile> (file, options);
+        
+        juce::Logger::getCurrentLogger()->writeToLog("Settings file created");
+        juce::Logger::getCurrentLogger()->writeToLog("Creating MainWindow...");
 
         mainWindow = std::make_unique<MainWindow> (getApplicationName(), *settingsFile);
+        
+        juce::Logger::getCurrentLogger()->writeToLog("MainWindow created successfully");
     }
 
     void shutdown() override

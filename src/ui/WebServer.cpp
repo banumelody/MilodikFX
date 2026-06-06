@@ -4,9 +4,28 @@
 #include <chrono>
 #include <thread>
 
-WebServer::WebServer(int port)
-    : juce::Thread("WebServerThread"), port_(port), running_(false), serverSocket_(nullptr)
+// Initialize Winsock on first use
+static bool initWinsock()
 {
+    static bool initialized = false;
+    if (!initialized)
+    {
+        WSADATA wsaData;
+        int result = WSAStartup(MAKEWORD(2, 2), &wsaData);
+        initialized = (result == 0);
+        if (!initialized)
+        {
+            juce::Logger::getCurrentLogger()->writeToLog("WSAStartup failed");
+        }
+    }
+    return initialized;
+}
+
+WebServer::WebServer(int port)
+    : juce::Thread("WebServerThread"), port_(port), running_(false), serverSocket_(INVALID_SOCKET)
+{
+    juce::Logger::getCurrentLogger()->writeToLog("WebServer created on port " + juce::String(port));
+    initWinsock();
 }
 
 WebServer::~WebServer()
@@ -16,25 +35,66 @@ WebServer::~WebServer()
 
 bool WebServer::start()
 {
-    if (running_.load())
-        return true;
-
-    // Create server socket
-    serverSocket_ = std::make_unique<juce::StreamingSocket>();
+    juce::Logger::getCurrentLogger()->writeToLog("WebServer::start() called for port " + juce::String(port_));
     
-    if (!serverSocket_->createListener(port_))
+    if (running_.load()) {
+        juce::Logger::getCurrentLogger()->writeToLog("WebServer already running");
+        return true;
+    }
+
+    if (!initWinsock())
     {
-        juce::Logger::getCurrentLogger()->writeToLog(
-            "WebServer: Failed to bind to port " + std::to_string(port_));
-        serverSocket_.reset();
+        juce::Logger::getCurrentLogger()->writeToLog("Failed to initialize Winsock");
         return false;
     }
+
+    // Create server socket
+    serverSocket_ = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (serverSocket_ == INVALID_SOCKET)
+    {
+        juce::Logger::getCurrentLogger()->writeToLog("Failed to create socket, error: " + juce::String(WSAGetLastError()));
+        return false;
+    }
+    
+    juce::Logger::getCurrentLogger()->writeToLog("Socket created successfully");
+
+    // Set SO_REUSEADDR to allow quick restart
+    BOOL reuseAddr = TRUE;
+    setsockopt(serverSocket_, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuseAddr, sizeof(reuseAddr));
+
+    // Bind socket to port
+    sockaddr_in serverAddr = {};
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);  // Listen on all interfaces
+    serverAddr.sin_port = htons(port_);
+
+    if (bind(serverSocket_, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR)
+    {
+        int err = WSAGetLastError();
+        juce::Logger::getCurrentLogger()->writeToLog("bind() failed, error: " + juce::String(err));
+        closesocket(serverSocket_);
+        serverSocket_ = INVALID_SOCKET;
+        return false;
+    }
+    
+    juce::Logger::getCurrentLogger()->writeToLog("Socket bound to port " + juce::String(port_));
+
+    // Listen for connections
+    if (listen(serverSocket_, SOMAXCONN) == SOCKET_ERROR)
+    {
+        int err = WSAGetLastError();
+        juce::Logger::getCurrentLogger()->writeToLog("listen() failed, error: " + juce::String(err));
+        closesocket(serverSocket_);
+        serverSocket_ = INVALID_SOCKET;
+        return false;
+    }
+    
+    juce::Logger::getCurrentLogger()->writeToLog("Socket listening on port " + juce::String(port_));
     
     running_.store(true);
     startThread();
     
-    juce::Logger::getCurrentLogger()->writeToLog(
-        "WebServer: Started on port " + std::to_string(port_));
+    juce::Logger::getCurrentLogger()->writeToLog("WebServer thread started");
     
     return true;
 }
@@ -43,10 +103,10 @@ void WebServer::stop()
 {
     running_.store(false);
     
-    if (serverSocket_)
+    if (serverSocket_ != INVALID_SOCKET)
     {
-        serverSocket_->close();
-        serverSocket_.reset();
+        closesocket(serverSocket_);
+        serverSocket_ = INVALID_SOCKET;
     }
     
     if (isThreadRunning())
@@ -88,7 +148,12 @@ std::string WebServer::getResourceDirectory() const
 {
     auto exePath = juce::File::getSpecialLocation(juce::File::currentExecutableFile);
     auto resourceDir = exePath.getParentDirectory().getChildFile("resources");
-    return resourceDir.getFullPathName().toStdString();
+    auto fullPath = resourceDir.getFullPathName();
+    
+    juce::Logger::getCurrentLogger()->writeToLog(
+        "WebServer: Resource directory = " + fullPath);
+    
+    return fullPath.toStdString();
 }
 
 bool WebServer::serveFile(const std::string& filePath, std::string& contentType, std::string& body) const
@@ -109,12 +174,15 @@ bool WebServer::serveFile(const std::string& filePath, std::string& contentType,
     
     auto resourceDir = getResourceDirectory();
     juce::File resourceFile(resourceDir);
-    auto targetFile = resourceFile.getChildFile(juce::String(sanitizedPath));
+    // Navigate to ui/web subdirectory
+    auto webDir = resourceFile.getChildFile("ui").getChildFile("web");
+    auto targetFile = webDir.getChildFile(juce::String(sanitizedPath));
     
     if (!targetFile.existsAsFile())
     {
         juce::Logger::getCurrentLogger()->writeToLog(
-            "WebServer: File not found: " + sanitizedPath);
+            "WebServer: File not found: " + juce::String(sanitizedPath) + 
+            " (searched in " + webDir.getFullPathName() + ")");
         return false;
     }
     
@@ -135,27 +203,35 @@ std::string WebServer::parseHttpRequest(const std::string& request, std::string&
     return method;
 }
 
-void WebServer::handleConnection(juce::StreamingSocket* socket)
+void WebServer::handleConnection(SOCKET clientSocket)
 {
-    if (!socket || !socket->isConnected())
-        return;
-    
     const int bufferSize = 4096;
-    char buffer[bufferSize];
+    char buffer[bufferSize] = {};
     
-    int bytesRead = socket->read(buffer, bufferSize - 1, false);
+    int bytesReceived = recv(clientSocket, buffer, bufferSize - 1, 0);
     
-    if (bytesRead <= 0)
+    if (bytesReceived <= 0)
+    {
+        closesocket(clientSocket);
         return;
+    }
     
-    buffer[bytesRead] = '\0';
+    buffer[bytesReceived] = '\0';
     std::string requestStr(buffer);
     
     std::string filePath;
     std::string method = parseHttpRequest(requestStr, filePath);
     
+    juce::Logger::getCurrentLogger()->writeToLog(
+        "WebServer: HTTP " + juce::String(method) + " " + juce::String(filePath));
+    
     std::string contentType, body;
     bool fileFound = serveFile(filePath, contentType, body);
+    
+    if (!fileFound) {
+        juce::Logger::getCurrentLogger()->writeToLog(
+            "WebServer: File not found: " + juce::String(filePath));
+    }
     
     // Build HTTP response
     std::ostringstream response;
@@ -184,22 +260,54 @@ void WebServer::handleConnection(juce::StreamingSocket* socket)
     }
     
     std::string responseStr = response.str();
-    socket->write(responseStr.c_str(), static_cast<int>(responseStr.length()));
+    const char* data = responseStr.c_str();
+    int totalSize = (int)responseStr.length();
+    int bytesSent = 0;
+    
+    // Keep sending until all data is transmitted
+    while (bytesSent < totalSize)
+    {
+        int sent = send(clientSocket, data + bytesSent, totalSize - bytesSent, 0);
+        if (sent == SOCKET_ERROR)
+        {
+            break;
+        }
+        bytesSent += sent;
+    }
+    
+    closesocket(clientSocket);
 }
 
 void WebServer::run()
 {
-    while (running_.load() && serverSocket_ && serverSocket_->isConnected())
+    juce::Logger::getCurrentLogger()->writeToLog("WebServer thread running, accepting connections on port " + juce::String(port_));
+    
+    while (running_.load() && serverSocket_ != INVALID_SOCKET)
     {
-        auto socket = serverSocket_->waitForNextConnection();
+        sockaddr_in clientAddr = {};
+        int clientAddrLen = sizeof(clientAddr);
         
-        if (socket)
+        // Accept incoming connection with timeout
+        SOCKET clientSocket = accept(serverSocket_, (sockaddr*)&clientAddr, &clientAddrLen);
+        
+        if (clientSocket == INVALID_SOCKET)
         {
-            handleConnection(socket);
+            if (running_.load())
+            {
+                // Only log if we're still supposed to be running
+                int err = WSAGetLastError();
+                if (err != WSAEINTR)  // Ignore "Interrupted" errors
+                {
+                    // Small sleep to avoid busy-waiting on errors
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                }
+            }
+            continue;
         }
         
-        // Small sleep to avoid busy-waiting
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        handleConnection(clientSocket);
     }
+    
+    juce::Logger::getCurrentLogger()->writeToLog("WebServer thread exiting");
 }
 

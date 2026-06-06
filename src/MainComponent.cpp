@@ -1,6 +1,7 @@
 #include "MainComponent.h"
 
 #include <cmath>
+#include <thread>
 
 MainComponent::MainComponent(juce::PropertiesFile& settingsFile)
     : settingsFile(settingsFile),
@@ -8,27 +9,62 @@ MainComponent::MainComponent(juce::PropertiesFile& settingsFile)
       deviceManager(),
       audioEngine()
 {
-    // Setup device manager listener
-    deviceManager.addChangeListener(this);
-
-    // Initialize audio device with fallback
-    auto error = deviceManager.initialiseWithDefaultDevices(2, 2);
-    if (error.isNotEmpty())
-    {
-        audioInitError = error;
-        audioInitNote = "Using dummy audio device";
-    }
+    juce::Logger::getCurrentLogger()->writeToLog("=== MainComponent constructor starting ===");
     
-    deviceManager.addAudioCallback(this);
-
-    // Setup web server to serve React frontend
+    // Setup web server FIRST - before audio (which can hang)
+    juce::Logger::getCurrentLogger()->writeToLog("Creating WebServer on port 3000...");
     webServer = std::make_unique<WebServer>(3000);
+    juce::Logger::getCurrentLogger()->writeToLog("WebServer instance created, calling start()...");
+    
     if (!webServer->start())
     {
-        juce::Logger::getCurrentLogger()->writeToLog("Failed to start web server");
+        juce::Logger::getCurrentLogger()->writeToLog("ERROR: Failed to start web server on port 3000!");
+        // Try alternate ports if 3000 is busy
+        for (int alternatePort = 3001; alternatePort <= 3003; ++alternatePort)
+        {
+            juce::Logger::getCurrentLogger()->writeToLog(
+                "Trying alternate port " + juce::String(alternatePort) + "...");
+            webServer = std::make_unique<WebServer>(alternatePort);
+            if (webServer->start())
+            {
+                juce::Logger::getCurrentLogger()->writeToLog(
+                    "WebServer started successfully on port " + juce::String(alternatePort));
+                break;
+            }
+        }
     }
+    else
+    {
+        juce::Logger::getCurrentLogger()->writeToLog("WebServer started on port 3000");
+    }
+    
+    // Give the WebServer thread time to actually start listening
+    juce::Thread::sleep(500);
+    juce::Logger::getCurrentLogger()->writeToLog("WebServer startup complete, UI should be accessible");
+    
+    // NOW init audio in background (non-blocking)
+    juce::Logger::getCurrentLogger()->writeToLog("Initializing audio device (async, background)...");
+    deviceManager.addChangeListener(this);
+    
+    std::thread audioInitThread([this]() {
+        try {
+            auto error = deviceManager.initialiseWithDefaultDevices(2, 2);
+            if (error.isNotEmpty())
+            {
+                audioInitError = error;
+                audioInitNote = "Using dummy audio device";
+                juce::Logger::getCurrentLogger()->writeToLog("Audio init error: " + error);
+            }
+            deviceManager.addAudioCallback(this);
+            juce::Logger::getCurrentLogger()->writeToLog("Audio device initialized");
+        } catch (const std::exception& e) {
+            juce::Logger::getCurrentLogger()->writeToLog("Exception during audio init: " + juce::String(e.what()));
+        }
+    });
+    audioInitThread.detach();
 
     // Load settings from properties file
+    juce::Logger::getCurrentLogger()->writeToLog("Loading settings...");
     cleanBoostGainDb = static_cast<float>(settingsFile.getDoubleValue(kKeyCleanBoostGainDb, 0.0));
     cleanBoostEnabled = settingsFile.getBoolValue(kKeyCleanBoostEnabled, true);
     
@@ -61,6 +97,8 @@ MainComponent::MainComponent(juce::PropertiesFile& settingsFile)
 
     setSize(100, 100);
     startTimer(1000);
+    
+    juce::Logger::getCurrentLogger()->writeToLog("=== MainComponent constructor complete ===");
 }
 
 MainComponent::~MainComponent()

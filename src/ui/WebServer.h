@@ -5,9 +5,13 @@
 #include <string>
 #include <memory>
 #include <map>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+
+#pragma comment(lib, "Ws2_32.lib")
 
 /**
- * Simple HTTP server for serving embedded web UI.
+ * Simple HTTP server for serving embedded web UI using Windows socket API.
  * Serves static files (HTML, CSS, JS) from a resources directory.
  */
 class WebServer : private juce::Thread
@@ -34,12 +38,12 @@ public:
 private:
     int port_;
     std::atomic<bool> running_;
-    std::unique_ptr<juce::StreamingSocket> serverSocket_;
+    SOCKET serverSocket_;
     
     void run() override;
     std::string getMimeType(const std::string& filePath) const;
     std::string getResourceDirectory() const;
-    void handleConnection(juce::StreamingSocket* socket);
+    void handleConnection(SOCKET clientSocket);
     std::string parseHttpRequest(const std::string& request, std::string& path) const;
 };
 
