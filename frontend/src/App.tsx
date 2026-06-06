@@ -1,5 +1,5 @@
 import { useTheme } from './hooks';
-import { Dashboard } from './components';
+import { DashboardV2 } from './components';
 
 function App() {
   const { theme, toggleTheme } = useTheme();
@@ -7,7 +7,7 @@ function App() {
   return (
     <div className="w-full h-screen bg-gray-950 text-white">
       {/* Dashboard */}
-      <Dashboard />
+      <DashboardV2 />
 
       {/* Theme Toggle - Always accessible */}
       <button

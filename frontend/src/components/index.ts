@@ -82,9 +82,22 @@ export type { TopBarProps } from './TopBar';
 export { MainLayout } from './MainLayout';
 export type { MainLayoutProps } from './MainLayout';
 
+export { PerformTab } from './PerformTab';
+export type { PerformTabProps } from './PerformTab';
+
+export { EditTab } from './EditTab';
+export type { EditTabProps } from './EditTab';
+
+export { LibraryTab } from './LibraryTab';
+export type { LibraryTabProps } from './LibraryTab';
+
+export { SettingsTab } from './SettingsTab';
+export type { SettingsTabProps } from './SettingsTab';
+
 export { default as PresetBar } from './PresetBar';
 export { default as DevicePanel } from './DevicePanel';
 export { default as AudioMeter } from './AudioMeter';
 export { default as EffectCardsGrid } from './EffectCardsGrid';
 export { default as StatusBar } from './StatusBar';
 export { default as Dashboard } from './Dashboard';
+export { default as DashboardV2 } from './DashboardV2';
