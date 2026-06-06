@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(MilodikFX VERSION 0.7.5 LANGUAGES CXX)
+project(MilodikFX VERSION 0.8.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -98,6 +98,8 @@ target_sources(MilodikFX
     src/ui/MonitorRowComponent.cpp
     src/ui/PresetManagerUIComponent.h
     src/ui/PresetManagerUIComponent.cpp
+    src/ui/WebServer.h
+    src/ui/WebServer.cpp
 )
 
 target_include_directories(MilodikFX
@@ -136,6 +138,27 @@ target_link_libraries(MilodikFX
     juce::juce_recommended_config_flags
     juce::juce_recommended_lto_flags
     juce::juce_recommended_warning_flags
+)
+
+# Post-build: Copy frontend files to resources directory
+add_custom_command(TARGET MilodikFX POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+    "$<TARGET_FILE_DIR:MilodikFX>/resources/ui/web/assets"
+    COMMENT "Creating resources directory"
+)
+
+add_custom_command(TARGET MilodikFX POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy
+    "${CMAKE_SOURCE_DIR}/frontend/dist/index.html"
+    "$<TARGET_FILE_DIR:MilodikFX>/resources/ui/web/index.html"
+    COMMENT "Copying frontend HTML"
+)
+
+add_custom_command(TARGET MilodikFX POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_SOURCE_DIR}/frontend/dist/assets"
+    "$<TARGET_FILE_DIR:MilodikFX>/resources/ui/web/assets"
+    COMMENT "Copying frontend assets"
 )
 
 juce_add_console_app(MilodikFX_tests

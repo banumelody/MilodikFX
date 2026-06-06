@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <chrono>
+#include <thread>
 
 static float rmsToDb (float rms)
 {
@@ -2142,12 +2143,33 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     monitorGroup.toBack();
     dspChainGroup.toBack();
 
+    // Initialize WebServer for embedded UI
+    webServer = std::make_unique<WebServer>(3000);
+    if (webServer->start())
+    {
+        juce::Logger::getCurrentLogger()->writeToLog("MainComponent: WebServer started successfully");
+        
+        // Small delay to ensure server is ready
+        std::this_thread::sleep_for (std::chrono::milliseconds (500));
+        
+        // Launch browser to embedded server
+        juce::URL ("http://localhost:3000").launchInDefaultBrowser();
+    }
+    else
+    {
+        juce::Logger::getCurrentLogger()->writeToLog("MainComponent: Failed to start WebServer");
+    }
+
     startTimerHz (30);
 }
 
 MainComponent::~MainComponent()
 {
     stopTimer();
+
+    // Stop web server before shutting down
+    if (webServer)
+        webServer->stop();
 
     deviceManager.removeChangeListener (this);
     deviceManager.removeAudioCallback (this);

@@ -15,6 +15,7 @@
 #include "ui/KnobLookAndFeelComponent.h"
 #include "ui/MonitorRowComponent.h"
 #include "ui/PresetManagerUIComponent.h"
+#include "ui/WebServer.h"
 
 class MainComponent final : public juce::Component,
                             private juce::AudioIODeviceCallback,
@@ -188,6 +189,7 @@ private:
 
     juce::PropertiesFile& settingsFile;
     milodikfx::preset::PresetManager presetManager;
+    std::unique_ptr<WebServer> webServer;
 
     bool settingsDirty = false;
     uint32_t lastSettingsSaveMs = 0;
