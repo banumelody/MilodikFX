@@ -65,11 +65,11 @@ private:
                 if (! r.isEmpty())
                     setBounds (r);
                 else
-                    centreWithSize (960, 600);
+                    centreWithSize (1200, 700);
             }
             else
             {
-                centreWithSize (960, 600);
+                centreWithSize (1200, 700);
             }
 
             setVisible (true);
