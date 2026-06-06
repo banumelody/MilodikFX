@@ -94,6 +94,12 @@ export type { LibraryTabProps } from './LibraryTab';
 export { SettingsTab } from './SettingsTab';
 export type { SettingsTabProps } from './SettingsTab';
 
+export { Modal } from './Modal';
+export type { ModalProps } from './Modal';
+
+export { AddEffectModal } from './AddEffectModal';
+export type { AddEffectModalProps } from './AddEffectModal';
+
 export { default as PresetBar } from './PresetBar';
 export { default as DevicePanel } from './DevicePanel';
 export { default as AudioMeter } from './AudioMeter';

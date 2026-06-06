@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { SignalChainCanvas, SceneGrid, ExpressionAssignment, Effect } from './index';
+import { SignalChainCanvas, SceneGrid, ExpressionAssignment, AddEffectModal, Effect } from './index';
 
 export interface PerformTabProps {
   effects?: Effect[];
   scenes?: Array<{ id: number; name: string }>;
-  onAddEffect?: () => void;
+  onAddEffect?: (effectType: string) => void;
   onRemoveEffect?: (effectId: string) => void;
   onReorderEffects?: (newOrder: string[]) => void;
   onSceneSelect?: (sceneId: number) => void;
@@ -24,10 +24,19 @@ export const PerformTab: React.FC<PerformTabProps> = ({
   onSceneSelect,
 }) => {
   const [selectedScene, setSelectedScene] = useState<number>(1);
+  const [showAddEffectModal, setShowAddEffectModal] = useState(false);
 
   const handleSceneSelect = (sceneId: number) => {
     setSelectedScene(sceneId);
     onSceneSelect?.(sceneId);
+  };
+
+  const handleAddEffectClick = () => {
+    setShowAddEffectModal(true);
+  };
+
+  const handleSelectEffectType = (effectType: string) => {
+    onAddEffect?.(effectType);
   };
 
   return (
@@ -37,7 +46,7 @@ export const PerformTab: React.FC<PerformTabProps> = ({
         <h2 className="text-xl font-bold text-white">Signal Chain</h2>
         <SignalChainCanvas
           effects={effects}
-          onAdd={onAddEffect || (() => {})}
+          onAdd={handleAddEffectClick}
           onRemove={onRemoveEffect || (() => {})}
           onReorder={onReorderEffects || (() => {})}
         />
@@ -95,6 +104,13 @@ export const PerformTab: React.FC<PerformTabProps> = ({
           />
         </div>
       </div>
+
+      {/* Add Effect Modal */}
+      <AddEffectModal
+        isOpen={showAddEffectModal}
+        onClose={() => setShowAddEffectModal(false)}
+        onSelectEffect={handleSelectEffectType}
+      />
     </div>
   );
 };

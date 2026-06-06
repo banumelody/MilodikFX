@@ -50,11 +50,11 @@ export const DashboardV2: React.FC<DashboardV2Props> = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const handleAddEffect = () => {
+  const handleAddEffect = (effectType: string) => {
     const newEffect: Effect = {
       id: `effect-${Date.now()}`,
-      name: 'New Effect',
-      type: 'GAIN',
+      name: effectType.charAt(0).toUpperCase() + effectType.slice(1).toLowerCase(),
+      type: effectType,
       position: effects.length,
     };
     setEffects([...effects, newEffect]);
