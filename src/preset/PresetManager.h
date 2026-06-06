@@ -21,6 +21,24 @@ struct PresetState final
     float eqBassDb = 0.0f;
     float eqMidDb = 0.0f;
     float eqTrebleDb = 0.0f;
+
+    bool compressorEnabled = true;
+    float compressorInputGainDb = 0.0f;
+    float compressorThresholdDb = -24.0f;
+    float compressorRatio = 4.0f;
+    float compressorAttackMs = 10.0f;
+    float compressorReleaseMs = 100.0f;
+
+    bool reverbEnabled = true;
+    float reverbRoomSize = 0.5f;
+    float reverbDryWetMix = 0.5f;
+    float reverbDecayTime = 2.0f;
+    float reverbWidth = 1.0f;
+
+    bool toneStackEnabled = true;
+    float toneStackBassDb = 0.0f;
+    float toneStackMidDb = 0.0f;
+    float toneStackTrebleDb = 0.0f;
 };
 
 class PresetManager final

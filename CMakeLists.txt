@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(MilodikFX VERSION 0.6.0 LANGUAGES CXX)
+project(MilodikFX VERSION 0.7.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -59,6 +59,12 @@ target_sources(MilodikFX
     src/dsp/OverdriveProcessor.cpp
     src/dsp/EQProcessor.h
     src/dsp/EQProcessor.cpp
+    src/dsp/CompressorProcessor.h
+    src/dsp/CompressorProcessor.cpp
+    src/dsp/ReverbProcessor.h
+    src/dsp/ReverbProcessor.cpp
+    src/dsp/ToneStackProcessor.h
+    src/dsp/ToneStackProcessor.cpp
     src/dsp/DSPChainManager.h
     src/dsp/DSPChainManager.cpp
     src/preset/PresetManager.h

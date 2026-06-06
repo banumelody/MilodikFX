@@ -112,6 +112,30 @@ juce::var PresetManager::stateToVar (const juce::String& presetName, const Prese
     eq->setProperty ("trebleDb", (double) state.eqTrebleDb);
     dsp->setProperty ("eq", juce::var (eq.get()));
 
+    auto compressor = juce::DynamicObject::Ptr (new juce::DynamicObject());
+    compressor->setProperty ("enabled", state.compressorEnabled);
+    compressor->setProperty ("inputGainDb", (double) state.compressorInputGainDb);
+    compressor->setProperty ("thresholdDb", (double) state.compressorThresholdDb);
+    compressor->setProperty ("ratio", (double) state.compressorRatio);
+    compressor->setProperty ("attackMs", (double) state.compressorAttackMs);
+    compressor->setProperty ("releaseMs", (double) state.compressorReleaseMs);
+    dsp->setProperty ("compressor", juce::var (compressor.get()));
+
+    auto reverb = juce::DynamicObject::Ptr (new juce::DynamicObject());
+    reverb->setProperty ("enabled", state.reverbEnabled);
+    reverb->setProperty ("roomSize", (double) state.reverbRoomSize);
+    reverb->setProperty ("dryWetMix", (double) state.reverbDryWetMix);
+    reverb->setProperty ("decayTime", (double) state.reverbDecayTime);
+    reverb->setProperty ("width", (double) state.reverbWidth);
+    dsp->setProperty ("reverb", juce::var (reverb.get()));
+
+    auto toneStack = juce::DynamicObject::Ptr (new juce::DynamicObject());
+    toneStack->setProperty ("enabled", state.toneStackEnabled);
+    toneStack->setProperty ("bassDb", (double) state.toneStackBassDb);
+    toneStack->setProperty ("midDb", (double) state.toneStackMidDb);
+    toneStack->setProperty ("trebleDb", (double) state.toneStackTrebleDb);
+    dsp->setProperty ("toneStack", juce::var (toneStack.get()));
+
     root->setProperty ("dsp", juce::var (dsp.get()));
 
     return juce::var (root.get());
@@ -185,6 +209,45 @@ bool PresetManager::varToState (const juce::var& v, PresetState& outState)
         }
     }
 
+    {
+        const auto compVar = dspProps["compressor"];
+        if (auto* compObj = compVar.getDynamicObject())
+        {
+            const auto& p = compObj->getProperties();
+            outState.compressorEnabled = getBool (p, "enabled", true);
+            outState.compressorInputGainDb = (float) getNumber (p, "inputGainDb", 0.0);
+            outState.compressorThresholdDb = (float) getNumber (p, "thresholdDb", -24.0);
+            outState.compressorRatio = (float) getNumber (p, "ratio", 4.0);
+            outState.compressorAttackMs = (float) getNumber (p, "attackMs", 10.0);
+            outState.compressorReleaseMs = (float) getNumber (p, "releaseMs", 100.0);
+        }
+    }
+
+    {
+        const auto revVar = dspProps["reverb"];
+        if (auto* revObj = revVar.getDynamicObject())
+        {
+            const auto& p = revObj->getProperties();
+            outState.reverbEnabled = getBool (p, "enabled", true);
+            outState.reverbRoomSize = (float) getNumber (p, "roomSize", 0.5);
+            outState.reverbDryWetMix = (float) getNumber (p, "dryWetMix", 0.5);
+            outState.reverbDecayTime = (float) getNumber (p, "decayTime", 2.0);
+            outState.reverbWidth = (float) getNumber (p, "width", 1.0);
+        }
+    }
+
+    {
+        const auto tsVar = dspProps["toneStack"];
+        if (auto* tsObj = tsVar.getDynamicObject())
+        {
+            const auto& p = tsObj->getProperties();
+            outState.toneStackEnabled = getBool (p, "enabled", true);
+            outState.toneStackBassDb = (float) getNumber (p, "bassDb", 0.0);
+            outState.toneStackMidDb = (float) getNumber (p, "midDb", 0.0);
+            outState.toneStackTrebleDb = (float) getNumber (p, "trebleDb", 0.0);
+        }
+    }
+
     outState.cleanBoostGainDb = juce::jlimit (0.0f, 24.0f, outState.cleanBoostGainDb);
     outState.overdriveDrivePct = clampPct (outState.overdriveDrivePct);
     outState.overdriveLevelPct = clampPct (outState.overdriveLevelPct);
@@ -192,6 +255,21 @@ bool PresetManager::varToState (const juce::var& v, PresetState& outState)
     outState.eqBassDb = clampDb12 (outState.eqBassDb);
     outState.eqMidDb = clampDb12 (outState.eqMidDb);
     outState.eqTrebleDb = clampDb12 (outState.eqTrebleDb);
+
+    outState.compressorInputGainDb = juce::jlimit (-12.0f, 12.0f, outState.compressorInputGainDb);
+    outState.compressorThresholdDb = juce::jlimit (-60.0f, 0.0f, outState.compressorThresholdDb);
+    outState.compressorRatio = juce::jlimit (1.0f, 16.0f, outState.compressorRatio);
+    outState.compressorAttackMs = juce::jlimit (0.1f, 100.0f, outState.compressorAttackMs);
+    outState.compressorReleaseMs = juce::jlimit (10.0f, 1000.0f, outState.compressorReleaseMs);
+
+    outState.reverbRoomSize = juce::jlimit (0.0f, 1.0f, outState.reverbRoomSize);
+    outState.reverbDryWetMix = juce::jlimit (0.0f, 1.0f, outState.reverbDryWetMix);
+    outState.reverbDecayTime = juce::jlimit (0.5f, 10.0f, outState.reverbDecayTime);
+    outState.reverbWidth = juce::jlimit (0.0f, 1.0f, outState.reverbWidth);
+
+    outState.toneStackBassDb = clampDb12 (outState.toneStackBassDb);
+    outState.toneStackMidDb = clampDb12 (outState.toneStackMidDb);
+    outState.toneStackTrebleDb = clampDb12 (outState.toneStackTrebleDb);
 
     return true;
 }

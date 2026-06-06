@@ -430,6 +430,24 @@ milodikfx::preset::PresetState MainComponent::capturePresetState() const
     s.eqMidDb = eqMidDb.load (std::memory_order_relaxed);
     s.eqTrebleDb = eqTrebleDb.load (std::memory_order_relaxed);
 
+    s.compressorEnabled = compressorEnabled.load (std::memory_order_relaxed);
+    s.compressorInputGainDb = compressorInputGainDb.load (std::memory_order_relaxed);
+    s.compressorThresholdDb = compressorThresholdDb.load (std::memory_order_relaxed);
+    s.compressorRatio = compressorRatio.load (std::memory_order_relaxed);
+    s.compressorAttackMs = compressorAttackMs.load (std::memory_order_relaxed);
+    s.compressorReleaseMs = compressorReleaseMs.load (std::memory_order_relaxed);
+
+    s.reverbEnabled = reverbEnabled.load (std::memory_order_relaxed);
+    s.reverbRoomSize = reverbRoomSize.load (std::memory_order_relaxed);
+    s.reverbDryWetMix = reverbDryWetMix.load (std::memory_order_relaxed);
+    s.reverbDecayTime = reverbDecayTime.load (std::memory_order_relaxed);
+    s.reverbWidth = reverbWidth.load (std::memory_order_relaxed);
+
+    s.toneStackEnabled = toneStackEnabled.load (std::memory_order_relaxed);
+    s.toneStackBassDb = toneStackBassDb.load (std::memory_order_relaxed);
+    s.toneStackMidDb = toneStackMidDb.load (std::memory_order_relaxed);
+    s.toneStackTrebleDb = toneStackTrebleDb.load (std::memory_order_relaxed);
+
     return s;
 }
 
@@ -509,6 +527,103 @@ void MainComponent::applyPresetState (const milodikfx::preset::PresetState& p)
     settingsFile.setValue (kKeyEqEnabled, p.eqEnabled);
     setEffectStateUi (eqCard, eqStateLabel, p.eqEnabled, eqAccent);
 
+    const auto compressorAccent = juce::Colour (0xffff6b35);
+    const auto reverbAccent = juce::Colour (0xff35b1ff);
+    const auto toneStackAccent = juce::Colour (0xff9d4edd);
+
+    compressorInputGainSlider.setValue (p.compressorInputGainDb, juce::dontSendNotification);
+    compressorInputGainDb.store (p.compressorInputGainDb, std::memory_order_relaxed);
+    if (compressorProcessor != nullptr)
+        compressorProcessor->setInputGainDb (p.compressorInputGainDb);
+    settingsFile.setValue (kKeyCompressorInputGainDb, (double) p.compressorInputGainDb);
+
+    compressorThresholdSlider.setValue (p.compressorThresholdDb, juce::dontSendNotification);
+    compressorThresholdDb.store (p.compressorThresholdDb, std::memory_order_relaxed);
+    if (compressorProcessor != nullptr)
+        compressorProcessor->setThresholdDb (p.compressorThresholdDb);
+    settingsFile.setValue (kKeyCompressorThresholdDb, (double) p.compressorThresholdDb);
+
+    compressorRatioSlider.setValue (p.compressorRatio, juce::dontSendNotification);
+    compressorRatio.store (p.compressorRatio, std::memory_order_relaxed);
+    if (compressorProcessor != nullptr)
+        compressorProcessor->setRatio (p.compressorRatio);
+    settingsFile.setValue (kKeyCompressorRatio, (double) p.compressorRatio);
+
+    compressorAttackSlider.setValue (p.compressorAttackMs, juce::dontSendNotification);
+    compressorAttackMs.store (p.compressorAttackMs, std::memory_order_relaxed);
+    if (compressorProcessor != nullptr)
+        compressorProcessor->setAttackMs (p.compressorAttackMs);
+    settingsFile.setValue (kKeyCompressorAttackMs, (double) p.compressorAttackMs);
+
+    compressorReleaseSlider.setValue (p.compressorReleaseMs, juce::dontSendNotification);
+    compressorReleaseMs.store (p.compressorReleaseMs, std::memory_order_relaxed);
+    if (compressorProcessor != nullptr)
+        compressorProcessor->setReleaseMs (p.compressorReleaseMs);
+    settingsFile.setValue (kKeyCompressorReleaseMs, (double) p.compressorReleaseMs);
+
+    compressorToggle.setToggleState (p.compressorEnabled, juce::dontSendNotification);
+    compressorEnabled.store (p.compressorEnabled, std::memory_order_relaxed);
+    if (compressorProcessor != nullptr)
+        compressorProcessor->setEnabled (p.compressorEnabled);
+    settingsFile.setValue (kKeyCompressorEnabled, p.compressorEnabled);
+    setEffectStateUi (compressorCard, compressorStateLabel, p.compressorEnabled, compressorAccent);
+
+    reverbRoomSizeSlider.setValue (p.reverbRoomSize, juce::dontSendNotification);
+    reverbRoomSize.store (p.reverbRoomSize, std::memory_order_relaxed);
+    if (reverbProcessor != nullptr)
+        reverbProcessor->setRoomSize (p.reverbRoomSize);
+    settingsFile.setValue (kKeyReverbRoomSize, (double) p.reverbRoomSize);
+
+    reverbDryWetSlider.setValue (p.reverbDryWetMix, juce::dontSendNotification);
+    reverbDryWetMix.store (p.reverbDryWetMix, std::memory_order_relaxed);
+    if (reverbProcessor != nullptr)
+        reverbProcessor->setDryWetMix (p.reverbDryWetMix);
+    settingsFile.setValue (kKeyReverbDryWetMix, (double) p.reverbDryWetMix);
+
+    reverbDecaySlider.setValue (p.reverbDecayTime, juce::dontSendNotification);
+    reverbDecayTime.store (p.reverbDecayTime, std::memory_order_relaxed);
+    if (reverbProcessor != nullptr)
+        reverbProcessor->setDecayTime (p.reverbDecayTime);
+    settingsFile.setValue (kKeyReverbDecayTime, (double) p.reverbDecayTime);
+
+    reverbWidthSlider.setValue (p.reverbWidth, juce::dontSendNotification);
+    reverbWidth.store (p.reverbWidth, std::memory_order_relaxed);
+    if (reverbProcessor != nullptr)
+        reverbProcessor->setWidth (p.reverbWidth);
+    settingsFile.setValue (kKeyReverbWidth, (double) p.reverbWidth);
+
+    reverbToggle.setToggleState (p.reverbEnabled, juce::dontSendNotification);
+    reverbEnabled.store (p.reverbEnabled, std::memory_order_relaxed);
+    if (reverbProcessor != nullptr)
+        reverbProcessor->setEnabled (p.reverbEnabled);
+    settingsFile.setValue (kKeyReverbEnabled, p.reverbEnabled);
+    setEffectStateUi (reverbCard, reverbStateLabel, p.reverbEnabled, reverbAccent);
+
+    toneStackBassSlider.setValue (p.toneStackBassDb, juce::dontSendNotification);
+    toneStackBassDb.store (p.toneStackBassDb, std::memory_order_relaxed);
+    if (toneStackProcessor != nullptr)
+        toneStackProcessor->setBassDb (p.toneStackBassDb);
+    settingsFile.setValue (kKeyToneStackBassDb, (double) p.toneStackBassDb);
+
+    toneStackMidSlider.setValue (p.toneStackMidDb, juce::dontSendNotification);
+    toneStackMidDb.store (p.toneStackMidDb, std::memory_order_relaxed);
+    if (toneStackProcessor != nullptr)
+        toneStackProcessor->setMidDb (p.toneStackMidDb);
+    settingsFile.setValue (kKeyToneStackMidDb, (double) p.toneStackMidDb);
+
+    toneStackTrebleSlider.setValue (p.toneStackTrebleDb, juce::dontSendNotification);
+    toneStackTrebleDb.store (p.toneStackTrebleDb, std::memory_order_relaxed);
+    if (toneStackProcessor != nullptr)
+        toneStackProcessor->setTrebleDb (p.toneStackTrebleDb);
+    settingsFile.setValue (kKeyToneStackTrebleDb, (double) p.toneStackTrebleDb);
+
+    toneStackToggle.setToggleState (p.toneStackEnabled, juce::dontSendNotification);
+    toneStackEnabled.store (p.toneStackEnabled, std::memory_order_relaxed);
+    if (toneStackProcessor != nullptr)
+        toneStackProcessor->setEnabled (p.toneStackEnabled);
+    settingsFile.setValue (kKeyToneStackEnabled, p.toneStackEnabled);
+    setEffectStateUi (toneStackCard, toneStackStateLabel, p.toneStackEnabled, toneStackAccent);
+
     markSettingsDirty();
     saveSettingsIfNeeded (true);
 }
@@ -558,6 +673,24 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     double persistedEqTrebleDb = 0.0;
     bool persistedEqEnabled = true;
 
+    double persistedCompressorInputGainDb = 0.0;
+    double persistedCompressorThresholdDb = -24.0;
+    double persistedCompressorRatio = 4.0;
+    double persistedCompressorAttackMs = 10.0;
+    double persistedCompressorReleaseMs = 100.0;
+    bool persistedCompressorEnabled = true;
+
+    double persistedReverbRoomSize = 0.5;
+    double persistedReverbDryWetMix = 0.5;
+    double persistedReverbDecayTime = 2.0;
+    double persistedReverbWidth = 1.0;
+    bool persistedReverbEnabled = true;
+
+    double persistedToneStackBassDb = 0.0;
+    double persistedToneStackMidDb = 0.0;
+    double persistedToneStackTrebleDb = 0.0;
+    bool persistedToneStackEnabled = true;
+
     juce::String persistedAudioXml;
     juce::String persistedPresetName;
 
@@ -579,6 +712,24 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     persistedEqTrebleDb = settingsFile.getDoubleValue (kKeyEqTrebleDb, 0.0);
     persistedEqEnabled = settingsFile.getBoolValue (kKeyEqEnabled, true);
 
+    persistedCompressorInputGainDb = settingsFile.getDoubleValue (kKeyCompressorInputGainDb, 0.0);
+    persistedCompressorThresholdDb = settingsFile.getDoubleValue (kKeyCompressorThresholdDb, -24.0);
+    persistedCompressorRatio = settingsFile.getDoubleValue (kKeyCompressorRatio, 4.0);
+    persistedCompressorAttackMs = settingsFile.getDoubleValue (kKeyCompressorAttackMs, 10.0);
+    persistedCompressorReleaseMs = settingsFile.getDoubleValue (kKeyCompressorReleaseMs, 100.0);
+    persistedCompressorEnabled = settingsFile.getBoolValue (kKeyCompressorEnabled, true);
+
+    persistedReverbRoomSize = settingsFile.getDoubleValue (kKeyReverbRoomSize, 0.5);
+    persistedReverbDryWetMix = settingsFile.getDoubleValue (kKeyReverbDryWetMix, 0.5);
+    persistedReverbDecayTime = settingsFile.getDoubleValue (kKeyReverbDecayTime, 2.0);
+    persistedReverbWidth = settingsFile.getDoubleValue (kKeyReverbWidth, 1.0);
+    persistedReverbEnabled = settingsFile.getBoolValue (kKeyReverbEnabled, true);
+
+    persistedToneStackBassDb = settingsFile.getDoubleValue (kKeyToneStackBassDb, 0.0);
+    persistedToneStackMidDb = settingsFile.getDoubleValue (kKeyToneStackMidDb, 0.0);
+    persistedToneStackTrebleDb = settingsFile.getDoubleValue (kKeyToneStackTrebleDb, 0.0);
+    persistedToneStackEnabled = settingsFile.getBoolValue (kKeyToneStackEnabled, true);
+
     persistedAudioXml = settingsFile.getValue (kKeyAudioDeviceStateXml);
     persistedPresetName = settingsFile.getValue (kKeySelectedPresetName, "Default Clean");
 
@@ -592,6 +743,21 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     persistedEqBassDb = juce::jlimit (-12.0, 12.0, persistedEqBassDb);
     persistedEqMidDb = juce::jlimit (-12.0, 12.0, persistedEqMidDb);
     persistedEqTrebleDb = juce::jlimit (-12.0, 12.0, persistedEqTrebleDb);
+
+    persistedCompressorInputGainDb = juce::jlimit (-12.0, 12.0, persistedCompressorInputGainDb);
+    persistedCompressorThresholdDb = juce::jlimit (-60.0, 0.0, persistedCompressorThresholdDb);
+    persistedCompressorRatio = juce::jlimit (1.0, 16.0, persistedCompressorRatio);
+    persistedCompressorAttackMs = juce::jlimit (0.1, 100.0, persistedCompressorAttackMs);
+    persistedCompressorReleaseMs = juce::jlimit (10.0, 1000.0, persistedCompressorReleaseMs);
+
+    persistedReverbRoomSize = juce::jlimit (0.0, 1.0, persistedReverbRoomSize);
+    persistedReverbDryWetMix = juce::jlimit (0.0, 1.0, persistedReverbDryWetMix);
+    persistedReverbDecayTime = juce::jlimit (0.5, 10.0, persistedReverbDecayTime);
+    persistedReverbWidth = juce::jlimit (0.0, 1.0, persistedReverbWidth);
+
+    persistedToneStackBassDb = juce::jlimit (-12.0, 12.0, persistedToneStackBassDb);
+    persistedToneStackMidDb = juce::jlimit (-12.0, 12.0, persistedToneStackMidDb);
+    persistedToneStackTrebleDb = juce::jlimit (-12.0, 12.0, persistedToneStackTrebleDb);
 
     monitorEnabled.store (persistedMonitor, std::memory_order_relaxed);
     muted.store (persistedMute, std::memory_order_relaxed);
@@ -613,6 +779,24 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     eqMidDb.store ((float) persistedEqMidDb, std::memory_order_relaxed);
     eqTrebleDb.store ((float) persistedEqTrebleDb, std::memory_order_relaxed);
     eqEnabled.store (persistedEqEnabled, std::memory_order_relaxed);
+
+    compressorInputGainDb.store ((float) persistedCompressorInputGainDb, std::memory_order_relaxed);
+    compressorThresholdDb.store ((float) persistedCompressorThresholdDb, std::memory_order_relaxed);
+    compressorRatio.store ((float) persistedCompressorRatio, std::memory_order_relaxed);
+    compressorAttackMs.store ((float) persistedCompressorAttackMs, std::memory_order_relaxed);
+    compressorReleaseMs.store ((float) persistedCompressorReleaseMs, std::memory_order_relaxed);
+    compressorEnabled.store (persistedCompressorEnabled, std::memory_order_relaxed);
+
+    reverbRoomSize.store ((float) persistedReverbRoomSize, std::memory_order_relaxed);
+    reverbDryWetMix.store ((float) persistedReverbDryWetMix, std::memory_order_relaxed);
+    reverbDecayTime.store ((float) persistedReverbDecayTime, std::memory_order_relaxed);
+    reverbWidth.store ((float) persistedReverbWidth, std::memory_order_relaxed);
+    reverbEnabled.store (persistedReverbEnabled, std::memory_order_relaxed);
+
+    toneStackBassDb.store ((float) persistedToneStackBassDb, std::memory_order_relaxed);
+    toneStackMidDb.store ((float) persistedToneStackMidDb, std::memory_order_relaxed);
+    toneStackTrebleDb.store ((float) persistedToneStackTrebleDb, std::memory_order_relaxed);
+    toneStackEnabled.store (persistedToneStackEnabled, std::memory_order_relaxed);
 
     if (auto* processor = audioEngine.getChain().addProcessor (std::make_unique<milodikfx::dsp::GainProcessor>()))
         cleanBoostProcessor = dynamic_cast<milodikfx::dsp::GainProcessor*> (processor);
@@ -644,6 +828,42 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
         eqProcessor->setEnabled (persistedEqEnabled);
     }
 
+    if (auto* processor = audioEngine.getChain().addProcessor (std::make_unique<milodikfx::dsp::CompressorProcessor>()))
+        compressorProcessor = dynamic_cast<milodikfx::dsp::CompressorProcessor*> (processor);
+
+    if (auto* processor = audioEngine.getChain().addProcessor (std::make_unique<milodikfx::dsp::ReverbProcessor>()))
+        reverbProcessor = dynamic_cast<milodikfx::dsp::ReverbProcessor*> (processor);
+
+    if (auto* processor = audioEngine.getChain().addProcessor (std::make_unique<milodikfx::dsp::ToneStackProcessor>()))
+        toneStackProcessor = dynamic_cast<milodikfx::dsp::ToneStackProcessor*> (processor);
+
+    if (compressorProcessor != nullptr)
+    {
+        compressorProcessor->setInputGainDb ((float) persistedCompressorInputGainDb);
+        compressorProcessor->setThresholdDb ((float) persistedCompressorThresholdDb);
+        compressorProcessor->setRatio ((float) persistedCompressorRatio);
+        compressorProcessor->setAttackMs ((float) persistedCompressorAttackMs);
+        compressorProcessor->setReleaseMs ((float) persistedCompressorReleaseMs);
+        compressorProcessor->setEnabled (persistedCompressorEnabled);
+    }
+
+    if (reverbProcessor != nullptr)
+    {
+        reverbProcessor->setRoomSize ((float) persistedReverbRoomSize);
+        reverbProcessor->setDryWetMix ((float) persistedReverbDryWetMix);
+        reverbProcessor->setDecayTime ((float) persistedReverbDecayTime);
+        reverbProcessor->setWidth ((float) persistedReverbWidth);
+        reverbProcessor->setEnabled (persistedReverbEnabled);
+    }
+
+    if (toneStackProcessor != nullptr)
+    {
+        toneStackProcessor->setBassDb ((float) persistedToneStackBassDb);
+        toneStackProcessor->setMidDb ((float) persistedToneStackMidDb);
+        toneStackProcessor->setTrebleDb ((float) persistedToneStackTrebleDb);
+        toneStackProcessor->setEnabled (persistedToneStackEnabled);
+    }
+
     std::unique_ptr<juce::XmlElement> persistedAudioState;
     if (persistedAudioXml.isNotEmpty())
         persistedAudioState = juce::parseXML (persistedAudioXml);
@@ -663,6 +883,21 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     settingsFile.setValue (kKeyEqMidDb, persistedEqMidDb);
     settingsFile.setValue (kKeyEqTrebleDb, persistedEqTrebleDb);
     settingsFile.setValue (kKeyEqEnabled, persistedEqEnabled);
+    settingsFile.setValue (kKeyCompressorInputGainDb, persistedCompressorInputGainDb);
+    settingsFile.setValue (kKeyCompressorThresholdDb, persistedCompressorThresholdDb);
+    settingsFile.setValue (kKeyCompressorRatio, persistedCompressorRatio);
+    settingsFile.setValue (kKeyCompressorAttackMs, persistedCompressorAttackMs);
+    settingsFile.setValue (kKeyCompressorReleaseMs, persistedCompressorReleaseMs);
+    settingsFile.setValue (kKeyCompressorEnabled, persistedCompressorEnabled);
+    settingsFile.setValue (kKeyReverbRoomSize, persistedReverbRoomSize);
+    settingsFile.setValue (kKeyReverbDryWetMix, persistedReverbDryWetMix);
+    settingsFile.setValue (kKeyReverbDecayTime, persistedReverbDecayTime);
+    settingsFile.setValue (kKeyReverbWidth, persistedReverbWidth);
+    settingsFile.setValue (kKeyReverbEnabled, persistedReverbEnabled);
+    settingsFile.setValue (kKeyToneStackBassDb, persistedToneStackBassDb);
+    settingsFile.setValue (kKeyToneStackMidDb, persistedToneStackMidDb);
+    settingsFile.setValue (kKeyToneStackTrebleDb, persistedToneStackTrebleDb);
+    settingsFile.setValue (kKeyToneStackEnabled, persistedToneStackEnabled);
     settingsFile.setValue (kKeySelectedPresetName, persistedPresetName);
     markSettingsDirty();
     saveSettingsIfNeeded (true);
@@ -823,11 +1058,26 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     eqCard.setAccentColour (juce::Colour (0xff3aa3ff));
     addAndMakeVisible (eqCard);
 
+    compressorCard.setTitle ("COMPRESSOR");
+    compressorCard.setAccentColour (juce::Colour (0xffff6b35));
+    addAndMakeVisible (compressorCard);
+
+    reverbCard.setTitle ("REVERB");
+    reverbCard.setAccentColour (juce::Colour (0xff35b1ff));
+    addAndMakeVisible (reverbCard);
+
+    toneStackCard.setTitle ("TONE STACK");
+    toneStackCard.setAccentColour (juce::Colour (0xff9d4edd));
+    addAndMakeVisible (toneStackCard);
+
     cleanBoostCard.setEnabledState (persistedCleanBoostEnabled);
     overdriveCard.setEnabledState (persistedOverdriveEnabled);
-     eqCard.setEnabledState (persistedEqEnabled);
+    eqCard.setEnabledState (persistedEqEnabled);
+    compressorCard.setEnabledState (persistedCompressorEnabled);
+    reverbCard.setEnabledState (persistedReverbEnabled);
+    toneStackCard.setEnabledState (persistedToneStackEnabled);
 
-    dspChainNoteLabel.setText ("DSP Chain: Clean Boost -> Overdrive -> EQ", juce::dontSendNotification);
+    dspChainNoteLabel.setText ("DSP Chain: Clean Boost -> Overdrive -> EQ -> Compressor -> Reverb -> Tone Stack", juce::dontSendNotification);
     dspChainNoteLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (dspChainNoteLabel);
 
@@ -1107,6 +1357,363 @@ MainComponent::MainComponent (juce::PropertiesFile& settings)
     };
     addAndMakeVisible (eqToggle);
 
+    // Compressor controls
+    const auto compressorAccent = juce::Colour (0xffff6b35);
+
+    compressorInputGainLabel.setText ("Input Gain", juce::dontSendNotification);
+    compressorInputGainLabel.setJustificationType (juce::Justification::centred);
+    addAndMakeVisible (compressorInputGainLabel);
+
+    configureKnob (compressorInputGainSlider, compressorAccent);
+    compressorInputGainSlider.setTextValueSuffix (" dB");
+    compressorInputGainSlider.setNumDecimalPlacesToDisplay (1);
+    compressorInputGainSlider.setDoubleClickReturnValue (true, 0.0);
+    compressorInputGainSlider.setPopupDisplayEnabled (true, false, this);
+    compressorInputGainSlider.setRange (-12.0, 12.0, 0.1);
+    compressorInputGainSlider.setValue (persistedCompressorInputGainDb, juce::dontSendNotification);
+    compressorInputGainSlider.onValueChange = [this]
+    {
+        const auto db = (float) compressorInputGainSlider.getValue();
+        compressorInputGainDb.store (db, std::memory_order_relaxed);
+        if (compressorProcessor != nullptr)
+            compressorProcessor->setInputGainDb (db);
+
+        settingsFile.setValue (kKeyCompressorInputGainDb, (double) db);
+        markSettingsDirty();
+    };
+    addAndMakeVisible (compressorInputGainSlider);
+
+    compressorThresholdLabel.setText ("Threshold", juce::dontSendNotification);
+    compressorThresholdLabel.setJustificationType (juce::Justification::centred);
+    addAndMakeVisible (compressorThresholdLabel);
+
+    configureKnob (compressorThresholdSlider, compressorAccent);
+    compressorThresholdSlider.setTextValueSuffix (" dB");
+    compressorThresholdSlider.setNumDecimalPlacesToDisplay (1);
+    compressorThresholdSlider.setDoubleClickReturnValue (true, -24.0);
+    compressorThresholdSlider.setPopupDisplayEnabled (true, false, this);
+    compressorThresholdSlider.setRange (-60.0, 0.0, 0.1);
+    compressorThresholdSlider.setValue (persistedCompressorThresholdDb, juce::dontSendNotification);
+    compressorThresholdSlider.onValueChange = [this]
+    {
+        const auto db = (float) compressorThresholdSlider.getValue();
+        compressorThresholdDb.store (db, std::memory_order_relaxed);
+        if (compressorProcessor != nullptr)
+            compressorProcessor->setThresholdDb (db);
+
+        settingsFile.setValue (kKeyCompressorThresholdDb, (double) db);
+        markSettingsDirty();
+    };
+    addAndMakeVisible (compressorThresholdSlider);
+
+    compressorRatioLabel.setText ("Ratio", juce::dontSendNotification);
+    compressorRatioLabel.setJustificationType (juce::Justification::centred);
+    addAndMakeVisible (compressorRatioLabel);
+
+    configureKnob (compressorRatioSlider, compressorAccent);
+    compressorRatioSlider.setTextValueSuffix (":1");
+    compressorRatioSlider.setNumDecimalPlacesToDisplay (1);
+    compressorRatioSlider.setDoubleClickReturnValue (true, 4.0);
+    compressorRatioSlider.setPopupDisplayEnabled (true, false, this);
+    compressorRatioSlider.setRange (1.0, 16.0, 0.1);
+    compressorRatioSlider.setValue (persistedCompressorRatio, juce::dontSendNotification);
+    compressorRatioSlider.onValueChange = [this]
+    {
+        const auto ratio = (float) compressorRatioSlider.getValue();
+        compressorRatio.store (ratio, std::memory_order_relaxed);
+        if (compressorProcessor != nullptr)
+            compressorProcessor->setRatio (ratio);
+
+        settingsFile.setValue (kKeyCompressorRatio, (double) ratio);
+        markSettingsDirty();
+    };
+    addAndMakeVisible (compressorRatioSlider);
+
+    compressorAttackLabel.setText ("Attack", juce::dontSendNotification);
+    compressorAttackLabel.setJustificationType (juce::Justification::centred);
+    addAndMakeVisible (compressorAttackLabel);
+
+    configureKnob (compressorAttackSlider, compressorAccent);
+    compressorAttackSlider.setTextValueSuffix (" ms");
+    compressorAttackSlider.setNumDecimalPlacesToDisplay (1);
+    compressorAttackSlider.setDoubleClickReturnValue (true, 10.0);
+    compressorAttackSlider.setPopupDisplayEnabled (true, false, this);
+    compressorAttackSlider.setRange (0.1, 100.0, 0.1);
+    compressorAttackSlider.setValue (persistedCompressorAttackMs, juce::dontSendNotification);
+    compressorAttackSlider.onValueChange = [this]
+    {
+        const auto ms = (float) compressorAttackSlider.getValue();
+        compressorAttackMs.store (ms, std::memory_order_relaxed);
+        if (compressorProcessor != nullptr)
+            compressorProcessor->setAttackMs (ms);
+
+        settingsFile.setValue (kKeyCompressorAttackMs, (double) ms);
+        markSettingsDirty();
+    };
+    addAndMakeVisible (compressorAttackSlider);
+
+    compressorReleaseLabel.setText ("Release", juce::dontSendNotification);
+    compressorReleaseLabel.setJustificationType (juce::Justification::centred);
+    addAndMakeVisible (compressorReleaseLabel);
+
+    configureKnob (compressorReleaseSlider, compressorAccent);
+    compressorReleaseSlider.setTextValueSuffix (" ms");
+    compressorReleaseSlider.setNumDecimalPlacesToDisplay (1);
+    compressorReleaseSlider.setDoubleClickReturnValue (true, 100.0);
+    compressorReleaseSlider.setPopupDisplayEnabled (true, false, this);
+    compressorReleaseSlider.setRange (10.0, 1000.0, 1.0);
+    compressorReleaseSlider.setValue (persistedCompressorReleaseMs, juce::dontSendNotification);
+    compressorReleaseSlider.onValueChange = [this]
+    {
+        const auto ms = (float) compressorReleaseSlider.getValue();
+        compressorReleaseMs.store (ms, std::memory_order_relaxed);
+        if (compressorProcessor != nullptr)
+            compressorProcessor->setReleaseMs (ms);
+
+        settingsFile.setValue (kKeyCompressorReleaseMs, (double) ms);
+        markSettingsDirty();
+    };
+    addAndMakeVisible (compressorReleaseSlider);
+
+    compressorStateLabel.setJustificationType (juce::Justification::centred);
+    compressorStateLabel.setFont (juce::Font (juce::FontOptions (12.0f, juce::Font::bold)));
+    addAndMakeVisible (compressorStateLabel);
+
+    compressorToggle.setButtonText ({});
+    compressorToggle.setAccentColour (compressorAccent);
+    compressorToggle.setToggleState (persistedCompressorEnabled, juce::dontSendNotification);
+    setEffectStateUi (compressorCard, compressorStateLabel, persistedCompressorEnabled, compressorAccent);
+
+    compressorToggle.onClick = [this, compressorAccent, setEffectStateUi]
+    {
+        const auto v = compressorToggle.getToggleState();
+        compressorEnabled.store (v, std::memory_order_relaxed);
+        if (compressorProcessor != nullptr)
+            compressorProcessor->setEnabled (v);
+
+        settingsFile.setValue (kKeyCompressorEnabled, v);
+        markSettingsDirty();
+
+        setEffectStateUi (compressorCard, compressorStateLabel, v, compressorAccent);
+    };
+    addAndMakeVisible (compressorToggle);
+
+    // Reverb controls
+    const auto reverbAccent = juce::Colour (0xff35b1ff);
+
+    reverbRoomSizeLabel.setText ("Room Size", juce::dontSendNotification);
+    reverbRoomSizeLabel.setJustificationType (juce::Justification::centred);
+    addAndMakeVisible (reverbRoomSizeLabel);
+
+    configureKnob (reverbRoomSizeSlider, reverbAccent);
+    reverbRoomSizeSlider.setTextValueSuffix ("");
+    reverbRoomSizeSlider.setNumDecimalPlacesToDisplay (2);
+    reverbRoomSizeSlider.setDoubleClickReturnValue (true, 0.5);
+    reverbRoomSizeSlider.setPopupDisplayEnabled (true, false, this);
+    reverbRoomSizeSlider.setRange (0.0, 1.0, 0.01);
+    reverbRoomSizeSlider.setValue (persistedReverbRoomSize, juce::dontSendNotification);
+    reverbRoomSizeSlider.onValueChange = [this]
+    {
+        const auto size = (float) reverbRoomSizeSlider.getValue();
+        reverbRoomSize.store (size, std::memory_order_relaxed);
+        if (reverbProcessor != nullptr)
+            reverbProcessor->setRoomSize (size);
+
+        settingsFile.setValue (kKeyReverbRoomSize, (double) size);
+        markSettingsDirty();
+    };
+    addAndMakeVisible (reverbRoomSizeSlider);
+
+    reverbDryWetLabel.setText ("Dry/Wet", juce::dontSendNotification);
+    reverbDryWetLabel.setJustificationType (juce::Justification::centred);
+    addAndMakeVisible (reverbDryWetLabel);
+
+    configureKnob (reverbDryWetSlider, reverbAccent);
+    reverbDryWetSlider.setTextValueSuffix ("");
+    reverbDryWetSlider.setNumDecimalPlacesToDisplay (2);
+    reverbDryWetSlider.setDoubleClickReturnValue (true, 0.5);
+    reverbDryWetSlider.setPopupDisplayEnabled (true, false, this);
+    reverbDryWetSlider.setRange (0.0, 1.0, 0.01);
+    reverbDryWetSlider.setValue (persistedReverbDryWetMix, juce::dontSendNotification);
+    reverbDryWetSlider.onValueChange = [this]
+    {
+        const auto mix = (float) reverbDryWetSlider.getValue();
+        reverbDryWetMix.store (mix, std::memory_order_relaxed);
+        if (reverbProcessor != nullptr)
+            reverbProcessor->setDryWetMix (mix);
+
+        settingsFile.setValue (kKeyReverbDryWetMix, (double) mix);
+        markSettingsDirty();
+    };
+    addAndMakeVisible (reverbDryWetSlider);
+
+    reverbDecayLabel.setText ("Decay", juce::dontSendNotification);
+    reverbDecayLabel.setJustificationType (juce::Justification::centred);
+    addAndMakeVisible (reverbDecayLabel);
+
+    configureKnob (reverbDecaySlider, reverbAccent);
+    reverbDecaySlider.setTextValueSuffix (" s");
+    reverbDecaySlider.setNumDecimalPlacesToDisplay (2);
+    reverbDecaySlider.setDoubleClickReturnValue (true, 2.0);
+    reverbDecaySlider.setPopupDisplayEnabled (true, false, this);
+    reverbDecaySlider.setRange (0.5, 10.0, 0.1);
+    reverbDecaySlider.setValue (persistedReverbDecayTime, juce::dontSendNotification);
+    reverbDecaySlider.onValueChange = [this]
+    {
+        const auto time = (float) reverbDecaySlider.getValue();
+        reverbDecayTime.store (time, std::memory_order_relaxed);
+        if (reverbProcessor != nullptr)
+            reverbProcessor->setDecayTime (time);
+
+        settingsFile.setValue (kKeyReverbDecayTime, (double) time);
+        markSettingsDirty();
+    };
+    addAndMakeVisible (reverbDecaySlider);
+
+    reverbWidthLabel.setText ("Width", juce::dontSendNotification);
+    reverbWidthLabel.setJustificationType (juce::Justification::centred);
+    addAndMakeVisible (reverbWidthLabel);
+
+    configureKnob (reverbWidthSlider, reverbAccent);
+    reverbWidthSlider.setTextValueSuffix ("");
+    reverbWidthSlider.setNumDecimalPlacesToDisplay (2);
+    reverbWidthSlider.setDoubleClickReturnValue (true, 1.0);
+    reverbWidthSlider.setPopupDisplayEnabled (true, false, this);
+    reverbWidthSlider.setRange (0.0, 1.0, 0.01);
+    reverbWidthSlider.setValue (persistedReverbWidth, juce::dontSendNotification);
+    reverbWidthSlider.onValueChange = [this]
+    {
+        const auto width = (float) reverbWidthSlider.getValue();
+        reverbWidth.store (width, std::memory_order_relaxed);
+        if (reverbProcessor != nullptr)
+            reverbProcessor->setWidth (width);
+
+        settingsFile.setValue (kKeyReverbWidth, (double) width);
+        markSettingsDirty();
+    };
+    addAndMakeVisible (reverbWidthSlider);
+
+    reverbStateLabel.setJustificationType (juce::Justification::centred);
+    reverbStateLabel.setFont (juce::Font (juce::FontOptions (12.0f, juce::Font::bold)));
+    addAndMakeVisible (reverbStateLabel);
+
+    reverbToggle.setButtonText ({});
+    reverbToggle.setAccentColour (reverbAccent);
+    reverbToggle.setToggleState (persistedReverbEnabled, juce::dontSendNotification);
+    setEffectStateUi (reverbCard, reverbStateLabel, persistedReverbEnabled, reverbAccent);
+
+    reverbToggle.onClick = [this, reverbAccent, setEffectStateUi]
+    {
+        const auto v = reverbToggle.getToggleState();
+        reverbEnabled.store (v, std::memory_order_relaxed);
+        if (reverbProcessor != nullptr)
+            reverbProcessor->setEnabled (v);
+
+        settingsFile.setValue (kKeyReverbEnabled, v);
+        markSettingsDirty();
+
+        setEffectStateUi (reverbCard, reverbStateLabel, v, reverbAccent);
+    };
+    addAndMakeVisible (reverbToggle);
+
+    // Tone Stack controls
+    const auto toneStackAccent = juce::Colour (0xff9d4edd);
+
+    toneStackBassLabel.setText ("Bass", juce::dontSendNotification);
+    toneStackBassLabel.setJustificationType (juce::Justification::centred);
+    toneStackBassLabel.setMinimumHorizontalScale (0.75f);
+    addAndMakeVisible (toneStackBassLabel);
+
+    configureKnob (toneStackBassSlider, toneStackAccent);
+    toneStackBassSlider.setTextValueSuffix (" dB");
+    toneStackBassSlider.setNumDecimalPlacesToDisplay (1);
+    toneStackBassSlider.setDoubleClickReturnValue (true, 0.0);
+    toneStackBassSlider.setPopupDisplayEnabled (true, false, this);
+    toneStackBassSlider.setRange (-12.0, 12.0, 0.1);
+    toneStackBassSlider.setValue (persistedToneStackBassDb, juce::dontSendNotification);
+    toneStackBassSlider.onValueChange = [this]
+    {
+        const auto db = (float) toneStackBassSlider.getValue();
+        toneStackBassDb.store (db, std::memory_order_relaxed);
+        if (toneStackProcessor != nullptr)
+            toneStackProcessor->setBassDb (db);
+
+        settingsFile.setValue (kKeyToneStackBassDb, (double) db);
+        markSettingsDirty();
+    };
+    addAndMakeVisible (toneStackBassSlider);
+
+    toneStackMidLabel.setText ("Mid", juce::dontSendNotification);
+    toneStackMidLabel.setJustificationType (juce::Justification::centred);
+    toneStackMidLabel.setMinimumHorizontalScale (0.75f);
+    addAndMakeVisible (toneStackMidLabel);
+
+    configureKnob (toneStackMidSlider, toneStackAccent);
+    toneStackMidSlider.setTextValueSuffix (" dB");
+    toneStackMidSlider.setNumDecimalPlacesToDisplay (1);
+    toneStackMidSlider.setDoubleClickReturnValue (true, 0.0);
+    toneStackMidSlider.setPopupDisplayEnabled (true, false, this);
+    toneStackMidSlider.setRange (-12.0, 12.0, 0.1);
+    toneStackMidSlider.setValue (persistedToneStackMidDb, juce::dontSendNotification);
+    toneStackMidSlider.onValueChange = [this]
+    {
+        const auto db = (float) toneStackMidSlider.getValue();
+        toneStackMidDb.store (db, std::memory_order_relaxed);
+        if (toneStackProcessor != nullptr)
+            toneStackProcessor->setMidDb (db);
+
+        settingsFile.setValue (kKeyToneStackMidDb, (double) db);
+        markSettingsDirty();
+    };
+    addAndMakeVisible (toneStackMidSlider);
+
+    toneStackTrebleLabel.setText ("Treble", juce::dontSendNotification);
+    toneStackTrebleLabel.setJustificationType (juce::Justification::centred);
+    toneStackTrebleLabel.setMinimumHorizontalScale (0.75f);
+    addAndMakeVisible (toneStackTrebleLabel);
+
+    configureKnob (toneStackTrebleSlider, toneStackAccent);
+    toneStackTrebleSlider.setTextValueSuffix (" dB");
+    toneStackTrebleSlider.setNumDecimalPlacesToDisplay (1);
+    toneStackTrebleSlider.setDoubleClickReturnValue (true, 0.0);
+    toneStackTrebleSlider.setPopupDisplayEnabled (true, false, this);
+    toneStackTrebleSlider.setRange (-12.0, 12.0, 0.1);
+    toneStackTrebleSlider.setValue (persistedToneStackTrebleDb, juce::dontSendNotification);
+    toneStackTrebleSlider.onValueChange = [this]
+    {
+        const auto db = (float) toneStackTrebleSlider.getValue();
+        toneStackTrebleDb.store (db, std::memory_order_relaxed);
+        if (toneStackProcessor != nullptr)
+            toneStackProcessor->setTrebleDb (db);
+
+        settingsFile.setValue (kKeyToneStackTrebleDb, (double) db);
+        markSettingsDirty();
+    };
+    addAndMakeVisible (toneStackTrebleSlider);
+
+    toneStackStateLabel.setJustificationType (juce::Justification::centred);
+    toneStackStateLabel.setFont (juce::Font (juce::FontOptions (12.0f, juce::Font::bold)));
+    addAndMakeVisible (toneStackStateLabel);
+
+    toneStackToggle.setButtonText ({});
+    toneStackToggle.setAccentColour (toneStackAccent);
+    toneStackToggle.setToggleState (persistedToneStackEnabled, juce::dontSendNotification);
+    setEffectStateUi (toneStackCard, toneStackStateLabel, persistedToneStackEnabled, toneStackAccent);
+
+    toneStackToggle.onClick = [this, toneStackAccent, setEffectStateUi]
+    {
+        const auto v = toneStackToggle.getToggleState();
+        toneStackEnabled.store (v, std::memory_order_relaxed);
+        if (toneStackProcessor != nullptr)
+            toneStackProcessor->setEnabled (v);
+
+        settingsFile.setValue (kKeyToneStackEnabled, v);
+        markSettingsDirty();
+
+        setEffectStateUi (toneStackCard, toneStackStateLabel, v, toneStackAccent);
+    };
+    addAndMakeVisible (toneStackToggle);
+
     retryAudioButton.onClick = [this]
     {
         initialiseAudioWithFallback (nullptr);
@@ -1329,14 +1936,14 @@ void MainComponent::resized()
         };
 
         auto layoutThreeKnobCard = [&] (EffectCard& card,
-                                        juce::Label& bassLabel,
-                                        juce::Label& midLabel,
-                                        juce::Label& trebleLabel,
-                                        juce::Slider& bassKnob,
-                                        juce::Slider& midKnob,
-                                        juce::Slider& trebleKnob,
-                                        juce::Label& stateLabel,
-                                        FootswitchButton& button)
+                                         juce::Label& bassLabel,
+                                         juce::Label& midLabel,
+                                         juce::Label& trebleLabel,
+                                         juce::Slider& bassKnob,
+                                         juce::Slider& midKnob,
+                                         juce::Slider& trebleKnob,
+                                         juce::Label& stateLabel,
+                                         FootswitchButton& button)
         {
             auto contentAbs = card.getContentBounds().translated (card.getX(), card.getY());
 
@@ -1369,8 +1976,147 @@ void MainComponent::resized()
             trebleKnob.setBounds (knobsArea.reduced (inset));
         };
 
+        auto layoutFourKnobCard = [&] (EffectCard& card,
+                                       juce::Label& label1,
+                                       juce::Label& label2,
+                                       juce::Label& label3,
+                                       juce::Label& label4,
+                                       juce::Slider& knob1,
+                                       juce::Slider& knob2,
+                                       juce::Slider& knob3,
+                                       juce::Slider& knob4,
+                                       juce::Label& stateLabel,
+                                       FootswitchButton& button)
+        {
+            auto contentAbs = card.getContentBounds().translated (card.getX(), card.getY());
+
+            // Labels row (4 columns)
+            auto labelsRow = takeTop (contentAbs, juce::jmin (16, contentAbs.getHeight()));
+            const auto colW = labelsRow.getWidth() / 4;
+            label1.setBounds (takeLeft (labelsRow, colW).reduced (1, 0));
+            label2.setBounds (takeLeft (labelsRow, colW).reduced (1, 0));
+            label3.setBounds (takeLeft (labelsRow, colW).reduced (1, 0));
+            label4.setBounds (labelsRow.reduced (1, 0));
+
+            takeTop (contentAbs, 6);
+
+            // Footswitch area
+            const auto footH = juce::jmin (60, juce::jmax (50, contentAbs.getHeight() / 3));
+            auto footArea = takeBottom (contentAbs, footH);
+            layoutFootswitch (footArea, stateLabel, button);
+
+            // Knobs horizontal (4-column layout)
+            auto knobsArea = contentAbs;
+            const auto minDim = juce::jmin (knobsArea.getWidth(), knobsArea.getHeight());
+            const auto inset = juce::jlimit (2, 8, minDim / 16);
+
+            const int gap = juce::jmin (6, juce::jmax (2, knobsArea.getWidth() / 40));
+            const int w = juce::jmax (0, (knobsArea.getWidth() - gap * 3) / 4);
+
+            knob1.setBounds (takeLeft (knobsArea, w).reduced (inset));
+            takeLeft (knobsArea, gap);
+            knob2.setBounds (takeLeft (knobsArea, w).reduced (inset));
+            takeLeft (knobsArea, gap);
+            knob3.setBounds (takeLeft (knobsArea, w).reduced (inset));
+            takeLeft (knobsArea, gap);
+            knob4.setBounds (knobsArea.reduced (inset));
+        };
+
+        auto layoutFiveKnobCard = [&] (EffectCard& card,
+                                       juce::Label& label1,
+                                       juce::Label& label2,
+                                       juce::Label& label3,
+                                       juce::Label& label4,
+                                       juce::Label& label5,
+                                       juce::Slider& knob1,
+                                       juce::Slider& knob2,
+                                       juce::Slider& knob3,
+                                       juce::Slider& knob4,
+                                       juce::Slider& knob5,
+                                       juce::Label& stateLabel,
+                                       FootswitchButton& button)
+        {
+            auto contentAbs = card.getContentBounds().translated (card.getX(), card.getY());
+
+            // Labels row (5 columns, may wrap to 2 rows on smaller cards)
+            if (contentAbs.getWidth() < 180)
+            {
+                // 2 rows of labels
+                auto labelsRow1 = takeTop (contentAbs, juce::jmin (14, contentAbs.getHeight()));
+                const auto colW1 = labelsRow1.getWidth() / 3;
+                label1.setBounds (takeLeft (labelsRow1, colW1).reduced (1, 0));
+                label2.setBounds (takeLeft (labelsRow1, colW1).reduced (1, 0));
+                label3.setBounds (labelsRow1.reduced (1, 0));
+
+                auto labelsRow2 = takeTop (contentAbs, juce::jmin (14, contentAbs.getHeight()));
+                const auto colW2 = labelsRow2.getWidth() / 2;
+                label4.setBounds (takeLeft (labelsRow2, colW2).reduced (1, 0));
+                label5.setBounds (labelsRow2.reduced (1, 0));
+            }
+            else
+            {
+                // 1 row of labels (5 columns)
+                auto labelsRow = takeTop (contentAbs, juce::jmin (16, contentAbs.getHeight()));
+                const auto colW = labelsRow.getWidth() / 5;
+                label1.setBounds (takeLeft (labelsRow, colW).reduced (1, 0));
+                label2.setBounds (takeLeft (labelsRow, colW).reduced (1, 0));
+                label3.setBounds (takeLeft (labelsRow, colW).reduced (1, 0));
+                label4.setBounds (takeLeft (labelsRow, colW).reduced (1, 0));
+                label5.setBounds (labelsRow.reduced (1, 0));
+            }
+
+            takeTop (contentAbs, 4);
+
+            // Footswitch area
+            const auto footH = juce::jmin (60, juce::jmax (50, contentAbs.getHeight() / 3));
+            auto footArea = takeBottom (contentAbs, footH);
+            layoutFootswitch (footArea, stateLabel, button);
+
+            // Knobs (5-column layout or 2 rows of knobs)
+            auto knobsArea = contentAbs;
+            const auto minDim = juce::jmin (knobsArea.getWidth(), knobsArea.getHeight());
+            const auto inset = juce::jlimit (2, 6, minDim / 16);
+
+            if (knobsArea.getWidth() < 180)
+            {
+                // 2 rows of knobs
+                const int gap = juce::jmin (4, juce::jmax (1, knobsArea.getWidth() / 40));
+                const int w = juce::jmax (0, (knobsArea.getWidth() - gap * 2) / 3);
+
+                auto topRow = takeTop (knobsArea, knobsArea.getHeight() / 2);
+                knob1.setBounds (takeLeft (topRow, w).reduced (inset));
+                takeLeft (topRow, gap);
+                knob2.setBounds (takeLeft (topRow, w).reduced (inset));
+                takeLeft (topRow, gap);
+                knob3.setBounds (topRow.reduced (inset));
+
+                takeTop (knobsArea, 3);
+
+                const int w2 = juce::jmax (0, (knobsArea.getWidth() - gap * 1) / 2);
+                knob4.setBounds (takeLeft (knobsArea, w2).reduced (inset));
+                takeLeft (knobsArea, gap);
+                knob5.setBounds (knobsArea.reduced (inset));
+            }
+            else
+            {
+                // 1 row of knobs
+                const int gap = juce::jmin (5, juce::jmax (2, knobsArea.getWidth() / 40));
+                const int w = juce::jmax (0, (knobsArea.getWidth() - gap * 4) / 5);
+
+                knob1.setBounds (takeLeft (knobsArea, w).reduced (inset));
+                takeLeft (knobsArea, gap);
+                knob2.setBounds (takeLeft (knobsArea, w).reduced (inset));
+                takeLeft (knobsArea, gap);
+                knob3.setBounds (takeLeft (knobsArea, w).reduced (inset));
+                takeLeft (knobsArea, gap);
+                knob4.setBounds (takeLeft (knobsArea, w).reduced (inset));
+                takeLeft (knobsArea, gap);
+                knob5.setBounds (knobsArea.reduced (inset));
+            }
+        };
+
         // Pedalboard cards: 3 columns when space allows, otherwise 2+1, otherwise stack vertically.
-        constexpr int kCardCount = 3;
+        constexpr int kCardCount = 6;
 
         int columns = 1;
         if (chainArea.getWidth() >= (kMinCardWidth * 3 + kCardGap * 2))
@@ -1394,7 +2140,7 @@ void MainComponent::resized()
         const int totalH = cardHeight * rows + vGap * (rows - 1);
         int y = chainArea.getY() + (chainArea.getHeight() - totalH) / 2;
 
-        EffectCard* cards[kCardCount] { &cleanBoostCard, &overdriveCard, &eqCard };
+        EffectCard* cards[kCardCount] { &cleanBoostCard, &overdriveCard, &eqCard, &compressorCard, &reverbCard, &toneStackCard };
         int index = 0;
 
         for (int r = 0; r < rows; ++r)
@@ -1430,6 +2176,42 @@ void MainComponent::resized()
                              eqTrebleSlider,
                              eqStateLabel,
                              eqToggle);
+
+        layoutFiveKnobCard (compressorCard,
+                            compressorInputGainLabel,
+                            compressorThresholdLabel,
+                            compressorRatioLabel,
+                            compressorAttackLabel,
+                            compressorReleaseLabel,
+                            compressorInputGainSlider,
+                            compressorThresholdSlider,
+                            compressorRatioSlider,
+                            compressorAttackSlider,
+                            compressorReleaseSlider,
+                            compressorStateLabel,
+                            compressorToggle);
+
+        layoutFourKnobCard (reverbCard,
+                            reverbRoomSizeLabel,
+                            reverbDryWetLabel,
+                            reverbDecayLabel,
+                            reverbWidthLabel,
+                            reverbRoomSizeSlider,
+                            reverbDryWetSlider,
+                            reverbDecaySlider,
+                            reverbWidthSlider,
+                            reverbStateLabel,
+                            reverbToggle);
+
+        layoutThreeKnobCard (toneStackCard,
+                             toneStackBassLabel,
+                             toneStackMidLabel,
+                             toneStackTrebleLabel,
+                             toneStackBassSlider,
+                             toneStackMidSlider,
+                             toneStackTrebleSlider,
+                             toneStackStateLabel,
+                             toneStackToggle);
     }
 }
 
@@ -1766,6 +2548,18 @@ void MainComponent::timerCallback()
         const auto eqMid = eqMidDb.load (std::memory_order_relaxed);
         const auto eqTreble = eqTrebleDb.load (std::memory_order_relaxed);
 
+        const auto compOn = compressorEnabled.load (std::memory_order_relaxed);
+        const auto compThresh = compressorThresholdDb.load (std::memory_order_relaxed);
+        const auto compRatio = compressorRatio.load (std::memory_order_relaxed);
+
+        const auto reverbOn = reverbEnabled.load (std::memory_order_relaxed);
+        const auto reverbMix = reverbDryWetMix.load (std::memory_order_relaxed);
+
+        const auto toneOn = toneStackEnabled.load (std::memory_order_relaxed);
+        const auto toneBass = toneStackBassDb.load (std::memory_order_relaxed);
+        const auto toneMid = toneStackMidDb.load (std::memory_order_relaxed);
+        const auto toneTreble = toneStackTrebleDb.load (std::memory_order_relaxed);
+
         juce::String chain = bypassed ? "Bypassed"
                                       : "Clean Boost " + juce::String (boostOn ? "ON" : "OFF")
                                             + " | Gain " + juce::String (boostDb, 1) + " dB"
@@ -1775,7 +2569,16 @@ void MainComponent::timerCallback()
                                             + " -> EQ " + juce::String (eqOn ? "ON" : "OFF")
                                             + " | Bass " + juce::String (eqBass, 1) + " dB"
                                             + " | Mid " + juce::String (eqMid, 1) + " dB"
-                                            + " | Treble " + juce::String (eqTreble, 1) + " dB";
+                                            + " | Treble " + juce::String (eqTreble, 1) + " dB"
+                                            + " -> Compressor " + juce::String (compOn ? "ON" : "OFF")
+                                            + " | Thresh " + juce::String (compThresh, 1) + " dB"
+                                            + " | Ratio " + juce::String (compRatio, 1) + ":1"
+                                            + " -> Reverb " + juce::String (reverbOn ? "ON" : "OFF")
+                                            + " | Mix " + juce::String (reverbMix, 2)
+                                            + " -> Tone Stack " + juce::String (toneOn ? "ON" : "OFF")
+                                            + " | B:" + juce::String (toneBass, 1)
+                                            + " M:" + juce::String (toneMid, 1)
+                                            + " T:" + juce::String (toneTreble, 1) + " dB";
 
         dspChainNoteLabel.setText ("DSP Chain: " + chain, juce::dontSendNotification);
     }

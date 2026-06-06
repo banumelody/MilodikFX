@@ -6,6 +6,9 @@
 #include "dsp/GainProcessor.h"
 #include "dsp/OverdriveProcessor.h"
 #include "dsp/EQProcessor.h"
+#include "dsp/CompressorProcessor.h"
+#include "dsp/ReverbProcessor.h"
+#include "dsp/ToneStackProcessor.h"
 #include "preset/PresetManager.h"
 #include "ui/EffectCardComponent.h"
 #include "ui/LevelMeterComponent.h"
@@ -43,6 +46,24 @@ private:
     static constexpr const char* kKeyEqBassDb = "dsp.eq.bassDb";
     static constexpr const char* kKeyEqMidDb = "dsp.eq.midDb";
     static constexpr const char* kKeyEqTrebleDb = "dsp.eq.trebleDb";
+
+    static constexpr const char* kKeyCompressorEnabled = "dsp.compressor.enabled";
+    static constexpr const char* kKeyCompressorInputGainDb = "dsp.compressor.inputGainDb";
+    static constexpr const char* kKeyCompressorThresholdDb = "dsp.compressor.thresholdDb";
+    static constexpr const char* kKeyCompressorRatio = "dsp.compressor.ratio";
+    static constexpr const char* kKeyCompressorAttackMs = "dsp.compressor.attackMs";
+    static constexpr const char* kKeyCompressorReleaseMs = "dsp.compressor.releaseMs";
+
+    static constexpr const char* kKeyReverbEnabled = "dsp.reverb.enabled";
+    static constexpr const char* kKeyReverbRoomSize = "dsp.reverb.roomSize";
+    static constexpr const char* kKeyReverbDryWetMix = "dsp.reverb.dryWetMix";
+    static constexpr const char* kKeyReverbDecayTime = "dsp.reverb.decayTime";
+    static constexpr const char* kKeyReverbWidth = "dsp.reverb.width";
+
+    static constexpr const char* kKeyToneStackEnabled = "dsp.toneStack.enabled";
+    static constexpr const char* kKeyToneStackBassDb = "dsp.toneStack.bassDb";
+    static constexpr const char* kKeyToneStackMidDb = "dsp.toneStack.midDb";
+    static constexpr const char* kKeyToneStackTrebleDb = "dsp.toneStack.trebleDb";
 
     static constexpr const char* kKeyAudioDeviceStateXml = "audio.deviceStateXml";
 
@@ -157,6 +178,9 @@ private:
     EffectCard cleanBoostCard;
     EffectCard overdriveCard;
     EffectCard eqCard;
+    EffectCard compressorCard;
+    EffectCard reverbCard;
+    EffectCard toneStackCard;
 
     juce::Label dspChainNoteLabel;
 
@@ -172,6 +196,24 @@ private:
     juce::Label eqTrebleLabel;
     juce::Label eqStateLabel;
 
+    juce::Label compressorInputGainLabel;
+    juce::Label compressorThresholdLabel;
+    juce::Label compressorRatioLabel;
+    juce::Label compressorAttackLabel;
+    juce::Label compressorReleaseLabel;
+    juce::Label compressorStateLabel;
+
+    juce::Label reverbRoomSizeLabel;
+    juce::Label reverbDryWetLabel;
+    juce::Label reverbDecayLabel;
+    juce::Label reverbWidthLabel;
+    juce::Label reverbStateLabel;
+
+    juce::Label toneStackBassLabel;
+    juce::Label toneStackMidLabel;
+    juce::Label toneStackTrebleLabel;
+    juce::Label toneStackStateLabel;
+
     juce::ToggleButton globalBypassToggle;
 
     juce::Slider cleanBoostGainSlider;
@@ -185,6 +227,24 @@ private:
     juce::Slider eqMidSlider;
     juce::Slider eqTrebleSlider;
     FootswitchButton eqToggle;
+
+    juce::Slider compressorInputGainSlider;
+    juce::Slider compressorThresholdSlider;
+    juce::Slider compressorRatioSlider;
+    juce::Slider compressorAttackSlider;
+    juce::Slider compressorReleaseSlider;
+    FootswitchButton compressorToggle;
+
+    juce::Slider reverbRoomSizeSlider;
+    juce::Slider reverbDryWetSlider;
+    juce::Slider reverbDecaySlider;
+    juce::Slider reverbWidthSlider;
+    FootswitchButton reverbToggle;
+
+    juce::Slider toneStackBassSlider;
+    juce::Slider toneStackMidSlider;
+    juce::Slider toneStackTrebleSlider;
+    FootswitchButton toneStackToggle;
 
     juce::TextButton retryAudioButton { "Retry audio" };
 
@@ -221,9 +281,30 @@ private:
     std::atomic<float> eqTrebleDb { 0.0f };
     std::atomic<bool> eqEnabled { true };
 
+    std::atomic<float> compressorInputGainDb { 0.0f };
+    std::atomic<float> compressorThresholdDb { -24.0f };
+    std::atomic<float> compressorRatio { 4.0f };
+    std::atomic<float> compressorAttackMs { 10.0f };
+    std::atomic<float> compressorReleaseMs { 100.0f };
+    std::atomic<bool> compressorEnabled { true };
+
+    std::atomic<float> reverbRoomSize { 0.5f };
+    std::atomic<float> reverbDryWetMix { 0.5f };
+    std::atomic<float> reverbDecayTime { 2.0f };
+    std::atomic<float> reverbWidth { 1.0f };
+    std::atomic<bool> reverbEnabled { true };
+
+    std::atomic<float> toneStackBassDb { 0.0f };
+    std::atomic<float> toneStackMidDb { 0.0f };
+    std::atomic<float> toneStackTrebleDb { 0.0f };
+    std::atomic<bool> toneStackEnabled { true };
+
     milodikfx::dsp::GainProcessor* cleanBoostProcessor = nullptr;
     milodikfx::dsp::OverdriveProcessor* overdriveProcessor = nullptr;
     milodikfx::dsp::EQProcessor* eqProcessor = nullptr;
+    milodikfx::dsp::CompressorProcessor* compressorProcessor = nullptr;
+    milodikfx::dsp::ReverbProcessor* reverbProcessor = nullptr;
+    milodikfx::dsp::ToneStackProcessor* toneStackProcessor = nullptr;
 
     float peakHoldDb = -100.0f;
     uint32_t peakHoldLastUpdateMs = 0;
