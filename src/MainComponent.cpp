@@ -1793,13 +1793,15 @@ void MainComponent::resized()
 
     auto bounds = getLocalBounds().reduced (12);
 
-    auto header = takeTop (bounds, 48);
+    // Header section: title, version (~50px)
+    auto header = takeTop (bounds, 50);
     auto titleArea = takeLeft (header, 220);
     titleLabel.setBounds (takeTop (titleArea, 28));
     versionLabel.setBounds (titleArea);
     retryAudioButton.setBounds (takeRight (header, 120));
     deviceStatusLabel.setBounds (header);
 
+    // Preset bar
     auto presetBar = takeTop (bounds, 44);
     {
         presetUI.setBounds (presetBar.reduced (0, 6));
@@ -1807,54 +1809,33 @@ void MainComponent::resized()
 
     auto content = bounds;
 
-    const auto desiredTopRowH = (int) (content.getHeight() * 0.6f);
-    constexpr int kMinChainH = 260;
-
-    int topRowH = desiredTopRowH;
-
-    // Prefer keeping enough vertical space for the DSP chain row; otherwise the EQ card gets cramped.
-    const int maxTopRowH = juce::jmax (0, content.getHeight() - kMinChainH);
-
-    // Only enforce the usual minimum when there's enough space for both panels + chain.
-    const int minTopRowH = (content.getHeight() >= 160 + kMinChainH) ? 160 : 0;
-
-    topRowH = juce::jlimit (minTopRowH, content.getHeight(), topRowH);
-    topRowH = juce::jmin (topRowH, maxTopRowH);
-
-    auto topRow = takeTop (content, topRowH);
-
-    constexpr int kMinRightPanelW = 260;
-    int leftW = (int) (topRow.getWidth() * 0.65f);
-    leftW = juce::jlimit (220, juce::jmax (220, topRow.getWidth() - kMinRightPanelW), leftW);
-
-    auto left = takeLeft (topRow, leftW);
-    auto right = topRow;
-
-    deviceGroup.setBounds (left);
-    monitorGroup.setBounds (right);
-    dspChainGroup.setBounds (content);
-
+    // Device group (~80px)
+    auto deviceArea = takeTop (content, 80);
+    deviceGroup.setBounds (deviceArea);
     {
-        auto deviceArea = deviceGroup.getBounds().reduced (12);
-        takeTop (deviceArea, 22);
-
-        deviceSelectorViewport.setBounds (deviceArea);
+        auto internalArea = deviceArea.reduced (12);
+        takeTop (internalArea, 22);
+        deviceSelectorViewport.setBounds (internalArea);
 
         if (deviceSelector != nullptr)
         {
-            // Give the selector enough height so its internal layout doesn't spill out;
-            // the viewport will scroll/clip as needed.
-            const auto w = juce::jmax (1, deviceArea.getWidth());
-            const auto h = juce::jmax (deviceArea.getHeight(), 520);
+            const auto w = juce::jmax (1, internalArea.getWidth());
+            const auto h = juce::jmax (internalArea.getHeight(), 520);
             deviceSelector->setSize (w, h);
         }
     }
 
+    // Monitor group (~120px)
+    auto monitorArea = takeTop (content, 120);
+    monitorGroup.setBounds (monitorArea);
     {
-        auto monitorArea = monitorGroup.getBounds().reduced (12);
-        takeTop (monitorArea, 22);
-        monitorUI.setBounds (monitorArea);
+        auto internalArea = monitorArea.reduced (12);
+        takeTop (internalArea, 22);
+        monitorUI.setBounds (internalArea);
     }
+
+    // DSP Chain group - remaining space (should be ~400px for 1200x700)
+    dspChainGroup.setBounds (content);
 
     {
         auto chainArea = dspChainGroup.getBounds().reduced (12);
@@ -1866,10 +1847,53 @@ void MainComponent::resized()
 
         takeTop (chainArea, 8);
 
-        constexpr int kCardGap = 14;
-        constexpr int kMaxCardWidth = 260;
-        constexpr int kMinCardWidth = 160;
-        constexpr int kMaxCardHeight = 260;
+        // Improved card layout: 2x3 grid with better proportions
+        constexpr int kCardGap = 12;  // Gap between cards
+        constexpr int kMinCardW = 160;
+        constexpr int kMinCardH = 140;
+
+        // Determine layout columns based on available space
+        int columns = 1;
+        if (chainArea.getWidth() >= (kMinCardW * 3 + kCardGap * 2))
+            columns = 3;
+        else if (chainArea.getWidth() >= (kMinCardW * 2 + kCardGap))
+            columns = 2;
+
+        constexpr int kCardCount = 6;
+        const int rows = (kCardCount + columns - 1) / columns;
+
+        const int hGap = (columns > 1) ? juce::jmin (kCardGap, chainArea.getWidth() / (columns * 10)) : 0;
+        const int vGap = (rows > 1) ? juce::jmin (kCardGap, chainArea.getHeight() / (rows * 10)) : 0;
+
+        const int availableForCards = juce::jmax (0, chainArea.getWidth() - hGap * (columns - 1));
+        int perCardW = availableForCards / columns;
+        perCardW = juce::jlimit (kMinCardW, 400, perCardW);
+
+        const int availableForCardsH = juce::jmax (0, chainArea.getHeight() - vGap * (rows - 1));
+        int perCardH = availableForCardsH / rows;
+        perCardH = juce::jlimit (kMinCardH, 250, perCardH);
+
+        const int totalH = perCardH * rows + vGap * (rows - 1);
+        int y = chainArea.getY() + (chainArea.getHeight() - totalH) / 2;
+
+        EffectCard* cards[kCardCount] { &cleanBoostCard, &overdriveCard, &eqCard, &compressorCard, &reverbCard, &toneStackCard };
+        int index = 0;
+
+        for (int r = 0; r < rows; ++r)
+        {
+            const int itemsThisRow = juce::jmin (columns, kCardCount - index);
+            const int rowW = perCardW * itemsThisRow + hGap * (itemsThisRow - 1);
+            int x = chainArea.getX() + (chainArea.getWidth() - rowW) / 2;
+
+            for (int c = 0; c < itemsThisRow; ++c)
+            {
+                cards[index]->setBounds (x, y, perCardW, perCardH);
+                x += perCardW + hGap;
+                ++index;
+            }
+
+            y += perCardH + vGap;
+        }
 
         auto layoutFootswitch = [&] (juce::Rectangle<int> footArea, juce::Label& stateLabel, FootswitchButton& button)
         {
@@ -1878,14 +1902,14 @@ void MainComponent::resized()
             takeTop (footArea, 4);
 
             auto buttonArea = footArea.reduced (0, 2);
-            const auto btnSize = juce::jmin (56, juce::jmin (buttonArea.getWidth(), buttonArea.getHeight()));
+            const auto btnSize = juce::jmin (40, juce::jmin (buttonArea.getWidth(), buttonArea.getHeight()));
             button.setBounds (buttonArea.withSizeKeepingCentre (btnSize, btnSize));
         };
 
         auto layoutOneKnobCard = [&] (EffectCard& card, juce::Label& label, juce::Slider& knob, juce::Label& stateLabel, FootswitchButton& button)
         {
             auto contentAbs = card.getContentBounds().translated (card.getX(), card.getY());
-            label.setBounds (takeTop (contentAbs, juce::jmin (18, contentAbs.getHeight())));
+            label.setBounds (takeTop (contentAbs, 18));
             takeTop (contentAbs, 6);
 
             const auto footH = juce::jmin (72, contentAbs.getHeight());
@@ -1907,7 +1931,7 @@ void MainComponent::resized()
         {
             auto contentAbs = card.getContentBounds().translated (card.getX(), card.getY());
 
-            auto labelsRow = takeTop (contentAbs, juce::jmin (18, contentAbs.getHeight()));
+            auto labelsRow = takeTop (contentAbs, 18);
             auto leftHalf = takeLeft (labelsRow, labelsRow.getWidth() / 2);
             leftLabel.setBounds (leftHalf);
             rightLabel.setBounds (labelsRow);
@@ -1936,19 +1960,18 @@ void MainComponent::resized()
         };
 
         auto layoutThreeKnobCard = [&] (EffectCard& card,
-                                         juce::Label& bassLabel,
-                                         juce::Label& midLabel,
-                                         juce::Label& trebleLabel,
-                                         juce::Slider& bassKnob,
-                                         juce::Slider& midKnob,
-                                         juce::Slider& trebleKnob,
-                                         juce::Label& stateLabel,
-                                         FootswitchButton& button)
+                                       juce::Label& bassLabel,
+                                       juce::Label& midLabel,
+                                       juce::Label& trebleLabel,
+                                       juce::Slider& bassKnob,
+                                       juce::Slider& midKnob,
+                                       juce::Slider& trebleKnob,
+                                       juce::Label& stateLabel,
+                                       FootswitchButton& button)
         {
             auto contentAbs = card.getContentBounds().translated (card.getX(), card.getY());
 
-            // Labels row (Bass, Mid, Treble)
-            auto labelsRow = takeTop (contentAbs, juce::jmin (16, contentAbs.getHeight()));
+            auto labelsRow = takeTop (contentAbs, 18);
             const auto colW = labelsRow.getWidth() / 3;
             bassLabel.setBounds (takeLeft (labelsRow, colW).reduced (2, 0));
             midLabel.setBounds (takeLeft (labelsRow, colW).reduced (2, 0));
@@ -1956,12 +1979,10 @@ void MainComponent::resized()
 
             takeTop (contentAbs, 6);
 
-            // Footswitch area - more space for proportional button
             const auto footH = juce::jmin (60, juce::jmax (50, contentAbs.getHeight() / 3));
             auto footArea = takeBottom (contentAbs, footH);
             layoutFootswitch (footArea, stateLabel, button);
 
-            // Knobs always horizontal (3-column layout)
             auto knobsArea = contentAbs;
             const auto minDim = juce::jmin (knobsArea.getWidth(), knobsArea.getHeight());
             const auto inset = juce::jlimit (2, 8, minDim / 16);
@@ -1990,8 +2011,7 @@ void MainComponent::resized()
         {
             auto contentAbs = card.getContentBounds().translated (card.getX(), card.getY());
 
-            // Labels row (4 columns)
-            auto labelsRow = takeTop (contentAbs, juce::jmin (16, contentAbs.getHeight()));
+            auto labelsRow = takeTop (contentAbs, 18);
             const auto colW = labelsRow.getWidth() / 4;
             label1.setBounds (takeLeft (labelsRow, colW).reduced (1, 0));
             label2.setBounds (takeLeft (labelsRow, colW).reduced (1, 0));
@@ -2000,12 +2020,10 @@ void MainComponent::resized()
 
             takeTop (contentAbs, 6);
 
-            // Footswitch area
             const auto footH = juce::jmin (60, juce::jmax (50, contentAbs.getHeight() / 3));
             auto footArea = takeBottom (contentAbs, footH);
             layoutFootswitch (footArea, stateLabel, button);
 
-            // Knobs horizontal (4-column layout)
             auto knobsArea = contentAbs;
             const auto minDim = juce::jmin (knobsArea.getWidth(), knobsArea.getHeight());
             const auto inset = juce::jlimit (2, 8, minDim / 16);
@@ -2038,25 +2056,22 @@ void MainComponent::resized()
         {
             auto contentAbs = card.getContentBounds().translated (card.getX(), card.getY());
 
-            // Labels row (5 columns, may wrap to 2 rows on smaller cards)
             if (contentAbs.getWidth() < 180)
             {
-                // 2 rows of labels
-                auto labelsRow1 = takeTop (contentAbs, juce::jmin (14, contentAbs.getHeight()));
+                auto labelsRow1 = takeTop (contentAbs, 16);
                 const auto colW1 = labelsRow1.getWidth() / 3;
                 label1.setBounds (takeLeft (labelsRow1, colW1).reduced (1, 0));
                 label2.setBounds (takeLeft (labelsRow1, colW1).reduced (1, 0));
                 label3.setBounds (labelsRow1.reduced (1, 0));
 
-                auto labelsRow2 = takeTop (contentAbs, juce::jmin (14, contentAbs.getHeight()));
+                auto labelsRow2 = takeTop (contentAbs, 16);
                 const auto colW2 = labelsRow2.getWidth() / 2;
                 label4.setBounds (takeLeft (labelsRow2, colW2).reduced (1, 0));
                 label5.setBounds (labelsRow2.reduced (1, 0));
             }
             else
             {
-                // 1 row of labels (5 columns)
-                auto labelsRow = takeTop (contentAbs, juce::jmin (16, contentAbs.getHeight()));
+                auto labelsRow = takeTop (contentAbs, 18);
                 const auto colW = labelsRow.getWidth() / 5;
                 label1.setBounds (takeLeft (labelsRow, colW).reduced (1, 0));
                 label2.setBounds (takeLeft (labelsRow, colW).reduced (1, 0));
@@ -2067,19 +2082,16 @@ void MainComponent::resized()
 
             takeTop (contentAbs, 4);
 
-            // Footswitch area
             const auto footH = juce::jmin (60, juce::jmax (50, contentAbs.getHeight() / 3));
             auto footArea = takeBottom (contentAbs, footH);
             layoutFootswitch (footArea, stateLabel, button);
 
-            // Knobs (5-column layout or 2 rows of knobs)
             auto knobsArea = contentAbs;
             const auto minDim = juce::jmin (knobsArea.getWidth(), knobsArea.getHeight());
             const auto inset = juce::jlimit (2, 6, minDim / 16);
 
             if (knobsArea.getWidth() < 180)
             {
-                // 2 rows of knobs
                 const int gap = juce::jmin (4, juce::jmax (1, knobsArea.getWidth() / 40));
                 const int w = juce::jmax (0, (knobsArea.getWidth() - gap * 2) / 3);
 
@@ -2099,7 +2111,6 @@ void MainComponent::resized()
             }
             else
             {
-                // 1 row of knobs
                 const int gap = juce::jmin (5, juce::jmax (2, knobsArea.getWidth() / 40));
                 const int w = juce::jmax (0, (knobsArea.getWidth() - gap * 4) / 5);
 
@@ -2114,50 +2125,6 @@ void MainComponent::resized()
                 knob5.setBounds (knobsArea.reduced (inset));
             }
         };
-
-        // Pedalboard cards: 3 columns when space allows, otherwise 2+1, otherwise stack vertically.
-        constexpr int kCardCount = 6;
-
-        int columns = 1;
-        if (chainArea.getWidth() >= (kMinCardWidth * 3 + kCardGap * 2))
-            columns = 3;
-        else if (chainArea.getWidth() >= (kMinCardWidth * 2 + kCardGap))
-            columns = 2;
-
-        const int rows = (kCardCount + columns - 1) / columns;
-
-        const int hGap = (columns > 1) ? juce::jmin (kCardGap, chainArea.getWidth() / (columns * 10)) : 0;
-        const int vGap = (rows > 1) ? juce::jmin (kCardGap, chainArea.getHeight() / (rows * 10)) : 0;
-
-        const int minCardWidth = juce::jmin (kMinCardWidth, chainArea.getWidth());
-        const int availableW = juce::jmax (0, chainArea.getWidth() - hGap * (columns - 1));
-        int cardWidth = availableW / columns;
-        cardWidth = juce::jlimit (minCardWidth, kMaxCardWidth, cardWidth);
-
-        const int availableH = juce::jmax (0, chainArea.getHeight() - vGap * (rows - 1));
-        const int cardHeight = juce::jmin (kMaxCardHeight, availableH / rows);
-
-        const int totalH = cardHeight * rows + vGap * (rows - 1);
-        int y = chainArea.getY() + (chainArea.getHeight() - totalH) / 2;
-
-        EffectCard* cards[kCardCount] { &cleanBoostCard, &overdriveCard, &eqCard, &compressorCard, &reverbCard, &toneStackCard };
-        int index = 0;
-
-        for (int r = 0; r < rows; ++r)
-        {
-            const int itemsThisRow = juce::jmin (columns, kCardCount - index);
-            const int rowW = cardWidth * itemsThisRow + hGap * (itemsThisRow - 1);
-            int x = chainArea.getX() + (chainArea.getWidth() - rowW) / 2;
-
-            for (int c = 0; c < itemsThisRow; ++c)
-            {
-                cards[index]->setBounds (x, y, cardWidth, cardHeight);
-                x += cardWidth + hGap;
-                ++index;
-            }
-
-            y += cardHeight + vGap;
-        }
 
         layoutOneKnobCard (cleanBoostCard, cleanBoostGainLabel, cleanBoostGainSlider, cleanBoostStateLabel, cleanBoostToggle);
         layoutTwoKnobCard (overdriveCard,

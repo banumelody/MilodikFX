@@ -57,6 +57,7 @@ private:
               settingsFile (settings)
         {
             setUsingNativeTitleBar (true);
+            setResizable (true, true);
             setContentOwned (new MainComponent (settingsFile), true);
 
             if (auto boundsStr = settingsFile.getValue (kKeyWindowBounds); boundsStr.isNotEmpty())
