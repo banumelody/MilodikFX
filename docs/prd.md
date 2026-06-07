@@ -651,7 +651,7 @@ Menbangun fondasi DSP Engine yang stabil dengan efek dasar dan preset management
 Memigrasikan UI menjadi arsitektur modern berbasis web dengan React, TypeScript, TailwindCSS.
 
 ### Sprint 7 - Frontend Foundation + Full HTML/JS Migration
-**Status:** ✅ COMPLETED  
+**Status:** ✅ COMPLETED & VERIFIED  
 **Output:** v0.8.0  
 **Goal:** Membangun fondasi frontend modern dengan pure HTML/JS + C++ backend  
 **Deliverables:** ✅
@@ -662,10 +662,11 @@ Memigrasikan UI menjadi arsitektur modern berbasis web dengan React, TypeScript,
 - Dark/Light Theme + Responsive Design
 - Component Library (28 reusable components, atomic → composite → container)
 - Frontend Build Pipeline (optimized production build)
-- C++ REST API Server (WebServer component on :3000)
+- C++ WebServer (non-blocking socket, per-connection threading, port 3000)
 - Full HTML/JS Migration (removed all C++ UI components, JUCE window hidden)
 - Comprehensive Testing (40+ unit tests, 30+ E2E scenarios)
 - Single .exe Bundle (6.93 MB, production-ready distribution)
+- WebServer verified: HTTP 200 OK, multiple concurrent connections, reliable
 
 ### Sprint 8 - Backend Bridge (Next)
 **Target Output:** v0.9.0  
