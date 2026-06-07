@@ -28,9 +28,22 @@ function createWindow() {
     console.log('[Main] Loading React dev server from http://localhost:3000');
   } else {
     // Production: Load from built files in frontend/dist
+    // __dirname is electron/ folder, so we need to go up to root, then into frontend/dist
     const prodPath = path.join(__dirname, '../frontend/dist/index.html');
-    mainWindow.loadFile(prodPath);
-    console.log('[Main] Loading production build from:', prodPath);
+    
+    // Verify file exists before loading
+    const fs = require('fs');
+    if (fs.existsSync(prodPath)) {
+      mainWindow.loadFile(prodPath);
+      console.log('[Main] Loading production build from:', prodPath);
+      // Enable DevTools for production debugging
+      mainWindow.webContents.openDevTools();
+    } else {
+      console.error('[Main] Production build not found at:', prodPath);
+      console.log('[Main] Falling back to dev server...');
+      mainWindow.loadURL('http://localhost:3000');
+      mainWindow.webContents.openDevTools();
+    }
   }
 
   mainWindow.on('closed', () => {
