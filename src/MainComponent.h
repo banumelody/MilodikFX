@@ -56,6 +56,7 @@ private:
     static constexpr const char* kKeyToneStackTrebleDb = "dsp.toneStack.trebleDb";
 
     static constexpr const char* kKeyAudioDeviceStateXml = "audio.deviceStateXml";
+    static constexpr const char* kKeyPresetSelectedName = "ui.preset.selectedName";
 
     bool initialiseAudioWithFallback(const juce::XmlElement* savedState);
 
@@ -95,6 +96,7 @@ private:
 
     juce::String audioInitError;
     juce::String audioInitNote;
+    juce::String presetSelectedName;
 
     std::atomic<float> cleanBoostGainDb { 0.0f };
     std::atomic<bool> cleanBoostEnabled { true };

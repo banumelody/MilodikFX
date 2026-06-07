@@ -107,3 +107,4 @@ export { default as EffectCardsGrid } from './EffectCardsGrid';
 export { default as StatusBar } from './StatusBar';
 export { default as Dashboard } from './Dashboard';
 export { default as DashboardV2 } from './DashboardV2';
+export { PerformView } from './PerformView';

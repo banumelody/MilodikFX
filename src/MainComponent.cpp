@@ -97,6 +97,7 @@ MainComponent::MainComponent(juce::PropertiesFile& settingsFile)
 
     setSize(100, 100);
     startTimer(1000);
+    saveSettingsIfNeeded(true);
     
     juce::Logger::getCurrentLogger()->writeToLog("=== MainComponent constructor complete ===");
 }
@@ -188,6 +189,7 @@ void MainComponent::updateAudioDeviceStateInSettings()
 {
     auto xml = createAudioDeviceStateXmlForPersistence();
     settingsFile.setValue(kKeyAudioDeviceStateXml, xml->toString());
+    markSettingsDirty();
 }
 
 void MainComponent::audioDeviceIOCallbackWithContext(
