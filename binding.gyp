@@ -3,8 +3,7 @@
     {
       "target_name": "audio_binding",
       "sources": [
-        "src/native/src/binding.cc",
-        "src/native/src/audio_engine_wrapper.cc"
+        "src/native/src/binding.cc"
       ],
       "include_dirs": [
         "<!(node -p \"require('node-addon-api').include_dir\")",
