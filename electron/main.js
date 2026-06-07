@@ -22,10 +22,15 @@ function createWindow() {
 
   // Load React app
   if (isDev) {
+    // Development: Load from Vite dev server on localhost:3000
     mainWindow.loadURL('http://localhost:3000');
     mainWindow.webContents.openDevTools();
+    console.log('[Main] Loading React dev server from http://localhost:3000');
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../frontend/build/index.html'));
+    // Production: Load from built files in frontend/dist
+    const prodPath = path.join(__dirname, '../frontend/dist/index.html');
+    mainWindow.loadFile(prodPath);
+    console.log('[Main] Loading production build from:', prodPath);
   }
 
   mainWindow.on('closed', () => {

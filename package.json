@@ -21,8 +21,7 @@
     "postinstall-frontend": "cd frontend && npm install"
   },
   "dependencies": {
-    "electron-is-dev": "^1.0.1",
-    "electron-squirrel-startup": "^1.1.0"
+    "electron-is-dev": "^1.0.1"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

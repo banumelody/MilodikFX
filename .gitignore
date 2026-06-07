@@ -31,3 +31,14 @@ docs/Screenshot*.png
 *.tmp
 *.log
 *.pdb
+
+# Dependencies
+node_modules/
+.npm/
+yarn.lock
+package-lock.json
+
+# Electron build
+build/Release/
+dist/
+*.exe
