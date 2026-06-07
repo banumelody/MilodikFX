@@ -7,12 +7,21 @@
 #include <map>
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <thread>
+#include <vector>
 
 #pragma comment(lib, "Ws2_32.lib")
 
 /**
- * Simple HTTP server for serving embedded web UI using Windows socket API.
+ * Reliable HTTP server for serving embedded web UI using Windows Winsock2 API.
  * Serves static files (HTML, CSS, JS) from a resources directory.
+ * 
+ * Key improvements:
+ * - Proper SO_REUSEADDR and socket initialization
+ * - Non-blocking listening socket with timeout
+ * - Per-connection thread handling (no blocking on main accept loop)
+ * - Robust error handling and logging
+ * - Proper socket state management
  */
 class WebServer : private juce::Thread
 {
@@ -39,11 +48,14 @@ private:
     int port_;
     std::atomic<bool> running_;
     SOCKET serverSocket_;
+    std::vector<std::thread> connectionThreads_;
     
     void run() override;
     std::string getMimeType(const std::string& filePath) const;
     std::string getResourceDirectory() const;
+    void handleConnectionAsync(SOCKET clientSocket);
     void handleConnection(SOCKET clientSocket);
     std::string parseHttpRequest(const std::string& request, std::string& path) const;
+    bool setSocketNonBlocking(SOCKET sock, bool nonBlocking);
 };
 
