@@ -101,7 +101,7 @@ export const IpcTestComponent: React.FC = () => {
     value: number
   ) => {
     try {
-      const response = await audioEngine.setParameter(effect, parameter, value);
+      await audioEngine.setParameter(effect, parameter, value);
       setStatus((prev) => ({
         ...prev,
         lastMessage: `Parameter updated: ${effect}.${parameter} = ${value}`,
@@ -118,7 +118,7 @@ export const IpcTestComponent: React.FC = () => {
   const handleDeviceChange = async (deviceId: string) => {
     setSelectedDevice(deviceId);
     try {
-      const response = await audioEngine.setDevice(deviceId);
+      await audioEngine.setDevice(deviceId);
       setStatus((prev) => ({
         ...prev,
         lastMessage: `Device changed to: ${deviceId}`,
