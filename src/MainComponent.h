@@ -13,6 +13,9 @@
 #include "ui/WebServer.h"
 #include "api/DevicesHandler.h"
 #include "api/ParametersHandler.h"
+#include "api/EffectsHandler.h"
+#include "api/LevelsHandler.h"
+#include "api/PresetsHandler.h"
 
 class MainComponent final : public juce::Component,
                             private juce::AudioIODeviceCallback,

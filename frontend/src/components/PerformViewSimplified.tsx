@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import RotaryKnob from './RotaryKnob';
+import * as audioApi from '../services/audioApi';
 
 type EffectItem = { id: string; type: string };
 
@@ -9,8 +10,10 @@ function id(prefix = 'id') {
 
 export function PerformViewSimplified() {
   const [masterVolume, setMasterVolume] = useState(-6);
-  const [inputLevel, setInputLevel] = useState(-12);
-  const [outputLevel, setOutputLevel] = useState(-10);
+  const [inputLevel, setInputLevel] = useState(-60);
+  const [outputLevel, setOutputLevel] = useState(-60);
+  const [devices, setDevices] = useState<audioApi.Device>({ input: [], output: [], selectedInput: '', selectedOutput: '', sampleRate: 48000, bufferSize: 256 });
+  const levelUnsubscribeRef = useRef<(() => void) | null>(null);
 
   // UI state for tests / simplified interactions
   const [activeTab, setActiveTab] = useState<'perform' | 'edit' | 'library' | 'settings'>('perform');
@@ -20,11 +23,47 @@ export function PerformViewSimplified() {
   const draggingId = useRef<string | null>(null);
   const [themeDark, setThemeDark] = useState(true);
 
+  // Fetch devices on mount
+  useEffect(() => {
+    const loadDevices = async () => {
+      try {
+        const devs = await audioApi.getDevices();
+        setDevices(devs);
+      } catch (err) {
+        console.error('Failed to load devices:', err);
+      }
+    };
+    loadDevices();
+  }, []);
+
+  // Subscribe to levels
+  useEffect(() => {
+    levelUnsubscribeRef.current = audioApi.subscribeLevels(
+      (levels) => {
+        setInputLevel(levels.inputLevel);
+        setOutputLevel(levels.outputLevel);
+      },
+      100 // poll every 100ms
+    );
+    return () => {
+      if (levelUnsubscribeRef.current) levelUnsubscribeRef.current();
+    };
+  }, []);
+
   // Expose a global setter for E2E testing; keep for test automation
   useEffect(() => {
-    (window as any).__setMasterVolume = (v: number) => setMasterVolume(v);
+    (window as any).__setMasterVolume = (v: number) => {
+      setMasterVolume(v);
+      audioApi.setMasterVolume(v).catch(err => console.error('Failed to set master volume:', err));
+    };
     return () => { delete (window as any).__setMasterVolume; };
   }, []);
+
+  // Handle master volume change
+  const handleMasterVolumeChange = (value: number) => {
+    setMasterVolume(value);
+    audioApi.setMasterVolume(value).catch(err => console.error('Failed to set master volume:', err));
+  };
 
   // Ensure initial body class expected by tests
   useEffect(() => {
@@ -42,6 +81,10 @@ export function PerformViewSimplified() {
     const e: EffectItem = { id: id('e'), type };
     setScenes(prev => ({ ...prev, [currentScene]: [...(prev[currentScene] || []), e] }));
     setShowAddEffectModal(false);
+    
+    // Toggle effect on in backend
+    audioApi.toggleEffect(type.toLowerCase(), true)
+      .catch(err => console.error(`Failed to toggle effect ${type}:`, err));
   };
 
   const removeEffect = (effectId: string) => {
@@ -193,12 +236,15 @@ export function PerformViewSimplified() {
 
         {/* RIGHT */}
         <aside data-cy="right-panel" style={{ width: 280, backgroundColor: '#1a202c', borderLeft: '1px solid #334155', padding: 16, overflowY: 'auto' }}>
+          <h3 style={{ marginBottom: 12, color: '#94a3b8', fontSize: 12, textTransform: 'uppercase' }}>AUDIO DEVICE</h3>
+          {devices.selectedOutput && <div style={{ fontSize: 12, color: '#cbd5e1', marginBottom: 16 }}>Output: {devices.selectedOutput}</div>}
+          
           <h3 style={{ marginBottom: 12, color: '#94a3b8', fontSize: 12, textTransform: 'uppercase' }}>MASTER VOLUME</h3>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
             <div data-cy="master-volume">
               <div data-cy="master-volume-knob">
-                <RotaryKnob value={masterVolume} onChange={(v) => setMasterVolume(v)} min={-60} max={6} step={1} size={92} accentColor="#22c55e" showValue={false} />
+                <RotaryKnob value={masterVolume} onChange={handleMasterVolumeChange} min={-60} max={6} step={1} size={92} accentColor="#22c55e" showValue={false} />
               </div>
               <input data-cy="master-volume-input" type="number" value={masterVolume} onChange={(e) => setMasterVolume(Number(e.target.value))} style={{ position: 'absolute', left: -9999, width: 1, height: 1, opacity: 0 }} />
             </div>

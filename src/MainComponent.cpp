@@ -46,8 +46,18 @@ MainComponent::MainComponent(juce::PropertiesFile& settingsFile)
     juce::Logger::getCurrentLogger()->writeToLog("Registering REST API handlers...");
     auto devicesHandler = std::make_shared<DevicesHandler>(deviceManager);
     auto parametersHandler = std::make_shared<ParametersHandler>(audioEngine, settingsFile);
+    auto effectsHandler = std::make_shared<EffectsHandler>(audioEngine.getChain());
+    auto levelsHandler = std::make_shared<LevelsHandler>();
+    auto presetsHandler = std::make_shared<PresetsHandler>(
+        juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+            .getChildFile("MilodikFX/Presets")
+    );
+    
     webServer->registerApiHandler("/api/devices", devicesHandler);
     webServer->registerApiHandler("/api/parameters", parametersHandler);
+    webServer->registerApiHandler("/api/effects", effectsHandler);
+    webServer->registerApiHandler("/api/levels", levelsHandler);
+    webServer->registerApiHandler("/api/presets", presetsHandler);
     juce::Logger::getCurrentLogger()->writeToLog("REST API handlers registered");
     
     // NOW init audio in background (non-blocking)

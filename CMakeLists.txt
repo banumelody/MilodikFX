@@ -88,6 +88,12 @@ target_sources(MilodikFX
     src/api/DevicesHandler.cpp
     src/api/ParametersHandler.h
     src/api/ParametersHandler.cpp
+    src/api/EffectsHandler.h
+    src/api/EffectsHandler.cpp
+    src/api/LevelsHandler.h
+    src/api/LevelsHandler.cpp
+    src/api/PresetsHandler.h
+    src/api/PresetsHandler.cpp
 )
 
 target_include_directories(MilodikFX
