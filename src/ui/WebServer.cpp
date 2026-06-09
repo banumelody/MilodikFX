@@ -273,15 +273,25 @@ bool WebServer::serveFile(const std::string& filePath, std::string& contentType,
     return true;
 }
 
-std::string WebServer::parseHttpRequest(const std::string& request, std::string& path) const
+std::string WebServer::parseHttpRequest(const std::string& request, std::string& path, std::string& method) const
 {
     std::istringstream stream(request);
-    std::string method, requestPath, httpVersion;
+    std::string requestPath, httpVersion;
     
     stream >> method >> requestPath >> httpVersion;
     
-    path = requestPath;
-    return method;
+    // Parse path and query string
+    size_t questionMarkPos = requestPath.find('?');
+    if (questionMarkPos != std::string::npos)
+    {
+        path = requestPath.substr(0, questionMarkPos);
+        return requestPath.substr(questionMarkPos + 1); // query string
+    }
+    else
+    {
+        path = requestPath;
+        return ""; // no query string
+    }
 }
 
 void WebServer::handleConnectionAsync(SOCKET clientSocket)
@@ -312,7 +322,7 @@ void WebServer::handleConnection(SOCKET clientSocket)
     if (clientSocket == INVALID_SOCKET)
         return;
 
-    const int bufferSize = 4096;
+    const int bufferSize = 8192;
     char buffer[bufferSize] = {};
     
     // Set a receive timeout (5 seconds)
@@ -337,46 +347,83 @@ void WebServer::handleConnection(SOCKET clientSocket)
     buffer[bytesReceived] = '\0';
     std::string requestStr(buffer);
     
-    std::string filePath;
-    std::string method = parseHttpRequest(requestStr, filePath);
+    // Parse HTTP request
+    std::string filePath, method;
+    std::string query = parseHttpRequest(requestStr, filePath, method);
     
     juce::Logger::getCurrentLogger()->writeToLog(
         "WebServer: HTTP " + juce::String(method) + " " + juce::String(filePath));
     
-    std::string contentType, body;
-    bool fileFound = serveFile(filePath, contentType, body);
-    
-    if (!fileFound)
+    // Extract request body for POST/PUT (simple parsing: skip headers, everything after \r\n\r\n)
+    std::string requestBody;
+    size_t bodyStart = requestStr.find("\r\n\r\n");
+    if (bodyStart != std::string::npos)
     {
-        juce::Logger::getCurrentLogger()->writeToLog(
-            "WebServer: File not found: " + juce::String(filePath));
+        requestBody = requestStr.substr(bodyStart + 4);
     }
     
     // Build HTTP response
     std::ostringstream response;
+    std::string responseBody;
+    std::string responseContentType = "text/html";
+    int responseStatusCode = 200;
     
-    if (fileFound)
+    // Check if this is a REST API request
+    if (filePath.find("/api/") == 0)
     {
-        response << "HTTP/1.1 200 OK\r\n";
-        response << "Content-Type: " << contentType << "\r\n";
-        response << "Content-Length: " << body.length() << "\r\n";
-        response << "Access-Control-Allow-Origin: *\r\n";
-        response << "Cache-Control: no-cache\r\n";
-        response << "Connection: close\r\n";
-        response << "\r\n";
-        response << body;
+        juce::Logger::getCurrentLogger()->writeToLog(
+            "WebServer: Routing REST API request: " + juce::String(method) + " " + juce::String(filePath));
+        
+        // Dispatch to REST API handler
+        auto apiResponse = dispatcher_.dispatch(method, filePath, query, requestBody);
+        responseStatusCode = apiResponse.statusCode;
+        responseContentType = apiResponse.contentType;
+        responseBody = apiResponse.body;
     }
     else
     {
-        std::string notFoundBody = "<!DOCTYPE html><html><body><h1>404 - File Not Found</h1>"
-                                   "<p>The requested file was not found.</p></body></html>";
-        response << "HTTP/1.1 404 Not Found\r\n";
-        response << "Content-Type: text/html\r\n";
-        response << "Content-Length: " << notFoundBody.length() << "\r\n";
-        response << "Connection: close\r\n";
-        response << "\r\n";
-        response << notFoundBody;
+        // Serve static file
+        std::string contentType;
+        bool fileFound = serveFile(filePath, contentType, responseBody);
+        
+        if (fileFound)
+        {
+            responseStatusCode = 200;
+            responseContentType = contentType;
+        }
+        else
+        {
+            responseStatusCode = 404;
+            responseContentType = "text/html";
+            responseBody = "<!DOCTYPE html><html><body><h1>404 - File Not Found</h1>"
+                          "<p>The requested file was not found.</p></body></html>";
+            juce::Logger::getCurrentLogger()->writeToLog(
+                "WebServer: File not found: " + juce::String(filePath));
+        }
     }
+    
+    // Build HTTP response header
+    std::string statusLine;
+    switch (responseStatusCode)
+    {
+        case 200: statusLine = "HTTP/1.1 200 OK"; break;
+        case 400: statusLine = "HTTP/1.1 400 Bad Request"; break;
+        case 404: statusLine = "HTTP/1.1 404 Not Found"; break;
+        case 405: statusLine = "HTTP/1.1 405 Method Not Allowed"; break;
+        case 500: statusLine = "HTTP/1.1 500 Internal Server Error"; break;
+        default: statusLine = "HTTP/1.1 200 OK"; break;
+    }
+    
+    response << statusLine << "\r\n";
+    response << "Content-Type: " << responseContentType << "\r\n";
+    response << "Content-Length: " << responseBody.length() << "\r\n";
+    response << "Access-Control-Allow-Origin: *\r\n";
+    response << "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n";
+    response << "Access-Control-Allow-Headers: Content-Type\r\n";
+    response << "Cache-Control: no-cache\r\n";
+    response << "Connection: close\r\n";
+    response << "\r\n";
+    response << responseBody;
     
     std::string responseStr = response.str();
     const char* data = responseStr.c_str();

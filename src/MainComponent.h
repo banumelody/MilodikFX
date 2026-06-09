@@ -11,6 +11,7 @@
 #include "dsp/ToneStackProcessor.h"
 #include "preset/PresetManager.h"
 #include "ui/WebServer.h"
+#include "api/DevicesHandler.h"
 
 class MainComponent final : public juce::Component,
                             private juce::AudioIODeviceCallback,

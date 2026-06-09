@@ -82,6 +82,10 @@ target_sources(MilodikFX
     src/ipc/MetronomeBridge.cpp
     src/ui/WebServer.h
     src/ui/WebServer.cpp
+    src/api/HttpHandler.h
+    src/api/RestApiDispatcher.h
+    src/api/DevicesHandler.h
+    src/api/DevicesHandler.cpp
 )
 
 target_include_directories(MilodikFX

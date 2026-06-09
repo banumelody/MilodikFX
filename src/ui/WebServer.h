@@ -10,6 +10,9 @@
 #include <thread>
 #include <vector>
 
+#include "../api/RestApiDispatcher.h"
+#include "../api/HttpHandler.h"
+
 #pragma comment(lib, "Ws2_32.lib")
 
 /**
@@ -44,18 +47,29 @@ public:
      */
     bool serveFile(const std::string& filePath, std::string& contentType, std::string& body) const;
 
+    /**
+     * Register a REST API handler for a path
+     * @param pathPrefix e.g., "/api/devices"
+     * @param handler The handler to handle requests for this path
+     */
+    void registerApiHandler(const std::string& pathPrefix, std::shared_ptr<HttpHandler> handler)
+    {
+        dispatcher_.registerHandler(pathPrefix, handler);
+    }
+
 private:
     int port_;
     std::atomic<bool> running_;
     SOCKET serverSocket_;
     std::vector<std::thread> connectionThreads_;
+    RestApiDispatcher dispatcher_;
     
     void run() override;
     std::string getMimeType(const std::string& filePath) const;
     std::string getResourceDirectory() const;
     void handleConnectionAsync(SOCKET clientSocket);
     void handleConnection(SOCKET clientSocket);
-    std::string parseHttpRequest(const std::string& request, std::string& path) const;
+    std::string parseHttpRequest(const std::string& request, std::string& path, std::string& method) const;
     bool setSocketNonBlocking(SOCKET sock, bool nonBlocking);
 };
 
