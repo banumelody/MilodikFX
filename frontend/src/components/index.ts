@@ -108,3 +108,7 @@ export { default as StatusBar } from './StatusBar';
 export { default as Dashboard } from './Dashboard';
 export { default as DashboardV2 } from './DashboardV2';
 export { PerformView } from './PerformView';
+export { PerformViewSimplified } from './PerformViewSimplified';
+
+export { RotaryKnob } from './RotaryKnob';
+export type { RotaryKnobProps } from './RotaryKnob';

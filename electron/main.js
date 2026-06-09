@@ -1,6 +1,13 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
-const isDev = require('electron-is-dev');
+const isDev = false; // force production behavior for local debugging (loads frontend/dist)
+
+// Disable hardware acceleration to avoid white/blank renderer on some Windows GPU drivers
+try {
+  app.disableHardwareAcceleration();
+} catch (e) {
+  console.warn('[Main] disableHardwareAcceleration failed:', e);
+}
 
 let mainWindow;
 
@@ -15,8 +22,9 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       enableRemoteModule: false,
-      sandbox: true
+    sandbox: false
     },
+    backgroundColor: '#0f172a',
     icon: path.join(__dirname, 'assets', 'icon.png')
   });
 
@@ -28,16 +36,68 @@ function createWindow() {
     console.log('[Main] Loading React dev server from http://localhost:3000');
   } else {
     // Production: Load from built files in frontend/dist
-    // __dirname is electron/ folder, so we need to go up to root, then into frontend/dist
-    const prodPath = path.join(__dirname, '../frontend/dist/index.html');
-    
-    // Verify file exists before loading
+    // Try multiple candidate locations (dev vs packaged)
     const fs = require('fs');
+    const candidates = [
+      path.join(__dirname, '../frontend/dist/index.html'), // dev layout
+      path.join(process.resourcesPath || '', 'app', 'frontend', 'dist', 'index.html'), // packaged (app/frontend/...)
+      path.join(process.resourcesPath || '', 'frontend', 'dist', 'index.html') // packaged alternative
+    ];
+    let prodPath = candidates.find(p => p && fs.existsSync(p));
+
+    // If none found, fall back to default relative path (helps during debugging)
+    if (!prodPath) prodPath = path.join(__dirname, '../frontend/dist/index.html');
+
+    // Verify file exists before loading
     if (fs.existsSync(prodPath)) {
+      // Write the index.html contents to debug folder before loading to ensure we're loading the right file
+      try {
+        const htmlContent = fs.readFileSync(prodPath, 'utf8');
+        const dbgDir = path.join(app.getPath('userData'), 'milodikfx-debug');
+        if (!fs.existsSync(dbgDir)) fs.mkdirSync(dbgDir, { recursive: true });
+        fs.writeFileSync(path.join(dbgDir, 'index_html_snapshot.txt'), htmlContent, 'utf8');
+        console.log('[Main] Wrote index.html snapshot to debug folder');
+      } catch (err) {
+        console.error('[Main] Failed to snapshot index.html:', err);
+      }
+
       mainWindow.loadFile(prodPath);
       console.log('[Main] Loading production build from:', prodPath);
       // Enable DevTools for production debugging
       mainWindow.webContents.openDevTools();
+
+      // Attach renderer debug listeners to capture console messages and load failures
+      mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+        console.log(`[Renderer Console] level=${level} ${message} (${sourceId}:${line})`);
+      });
+
+      mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+        console.error('[Renderer] did-fail-load', { errorCode, errorDescription, validatedURL, isMainFrame });
+      });
+
+      mainWindow.webContents.on('crashed', () => {
+        console.error('[Renderer] crashed');
+      });
+
+      // After the page finishes loading, dump the DOM to a debug file for inspection
+      mainWindow.webContents.on('did-finish-load', async () => {
+        try {
+          const html = await mainWindow.webContents.executeJavaScript('document.documentElement.outerHTML');
+          const dbgDir = path.join(app.getPath('userData'), 'milodikfx-debug');
+          if (!fs.existsSync(dbgDir)) fs.mkdirSync(dbgDir, { recursive: true });
+          const outPath = path.join(dbgDir, `renderer_dump_${Date.now()}.html`);
+          fs.writeFileSync(outPath, html, 'utf8');
+          console.log('[Main] Renderer DOM dumped to', outPath);
+
+          // Also capture the innerText of the root element to see if React mounted
+          const rootText = await mainWindow.webContents.executeJavaScript('(function(){ const r = document.getElementById("root"); return r ? r.innerText : "<no-root>"; })()');
+          fs.writeFileSync(path.join(dbgDir, `root_text_${Date.now()}.txt`), rootText, 'utf8');
+          console.log('[Main] Root text written');
+        } catch (err) {
+          console.error('[Main] Failed to dump renderer DOM:', err);
+        }
+      });
+
     } else {
       console.error('[Main] Production build not found at:', prodPath);
       console.log('[Main] Falling back to dev server...');

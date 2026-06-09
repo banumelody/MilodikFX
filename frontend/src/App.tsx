@@ -1,12 +1,7 @@
-import { PerformView } from './components';
+import { PerformViewSimplified } from './components/PerformViewSimplified';
 
 function App() {
-  return (
-    <div className="w-full h-screen bg-gray-950 text-white">
-      {/* PerformView - Full Perform Tab UI */}
-      <PerformView />
-    </div>
-  );
+  return <PerformViewSimplified />;
 }
 
 export default App;

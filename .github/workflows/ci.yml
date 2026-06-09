@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18]
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+
+      - name: Run unit & component tests (Vitest)
+        run: |
+          cd frontend
+          npm run test -- --run
+
+      - name: Start preview server for E2E
+        run: |
+          cd frontend
+          npx vite preview --port 5173 --strictPort &
+          npx wait-on http://localhost:5173 --timeout 60000
+
+      - name: Run Cypress E2E (headless)
+        uses: cypress-io/github-action@v5
+        with:
+          working-directory: frontend
+          browser: electron
+          start: npm run preview -- --port 5173
+          wait-on: 'http://localhost:5173'
+          wait-on-timeout: 60
+          record: false
+
+      - name: Upload vitest coverage (if produced)
+        if: always()
+        run: echo "No coverage upload configured"
