@@ -45,39 +45,51 @@ HttpHandler::Response DevicesHandler::handleGet(
 {
     try
     {
-        // Get current setup
-        auto setup = deviceManager_.getAudioDeviceSetup();
-        
         juce::StringArray inputDevices, outputDevices;
+        std::string selectedInput = "Default";
+        std::string selectedOutput = "Default";
+        double sampleRate = 48000.0;
+        int bufferSize = 256;
         
-        // Enumerate devices for the current device type
-        if (auto* type = deviceManager_.getCurrentDeviceTypeObject())
+        // Try to get current setup (may fail if audio not yet initialized)
+        try
         {
-            type->scanForDevices();
-            inputDevices = type->getDeviceNames(true);   // true = input
-            outputDevices = type->getDeviceNames(false); // false = output
+            auto setup = deviceManager_.getAudioDeviceSetup();
+            selectedInput = setup.inputDeviceName.toStdString();
+            selectedOutput = setup.outputDeviceName.toStdString();
+            sampleRate = setup.sampleRate;
+            bufferSize = setup.bufferSize;
+            
+            if (selectedInput.empty()) selectedInput = "Default";
+            if (selectedOutput.empty()) selectedOutput = "Default";
         }
-        else
+        catch (...)
         {
-            return {
-                500,
-                "application/json",
-                R"({"error":"No audio device type available"})"
-            };
+            // Audio not yet initialized, use defaults
         }
         
-        std::string selectedInput = setup.inputDeviceName.toStdString();
-        std::string selectedOutput = setup.outputDeviceName.toStdString();
-        if (selectedInput.empty()) selectedInput = "Default";
-        if (selectedOutput.empty()) selectedOutput = "Default";
+        // Try to enumerate devices (may fail if audio not yet initialized)
+        try
+        {
+            if (auto* type = deviceManager_.getCurrentDeviceTypeObject())
+            {
+                type->scanForDevices();
+                inputDevices = type->getDeviceNames(true);   // true = input
+                outputDevices = type->getDeviceNames(false); // false = output
+            }
+        }
+        catch (...)
+        {
+            // Device enumeration failed, return empty list
+        }
         
         std::string json = buildDevicesJson(
             inputDevices,
             outputDevices,
             selectedInput,
             selectedOutput,
-            setup.sampleRate,
-            setup.bufferSize
+            sampleRate,
+            bufferSize
         );
         
         return { 200, "application/json", json };

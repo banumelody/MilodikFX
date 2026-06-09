@@ -86,6 +86,8 @@ target_sources(MilodikFX
     src/api/RestApiDispatcher.h
     src/api/DevicesHandler.h
     src/api/DevicesHandler.cpp
+    src/api/ParametersHandler.h
+    src/api/ParametersHandler.cpp
 )
 
 target_include_directories(MilodikFX

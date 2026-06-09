@@ -45,7 +45,9 @@ MainComponent::MainComponent(juce::PropertiesFile& settingsFile)
     // Register REST API handlers
     juce::Logger::getCurrentLogger()->writeToLog("Registering REST API handlers...");
     auto devicesHandler = std::make_shared<DevicesHandler>(deviceManager);
+    auto parametersHandler = std::make_shared<ParametersHandler>(audioEngine, settingsFile);
     webServer->registerApiHandler("/api/devices", devicesHandler);
+    webServer->registerApiHandler("/api/parameters", parametersHandler);
     juce::Logger::getCurrentLogger()->writeToLog("REST API handlers registered");
     
     // NOW init audio in background (non-blocking)
