@@ -268,8 +268,10 @@ bool WebServer::serveFile(const std::string& filePath, std::string& contentType,
     }
     
     body = targetFile.loadFileAsString().toStdString();
-    contentType = getMimeType(filePath);
-    
+    // Use sanitizedPath (resolved filename) when detecting MIME type so that
+    // requests to "/" correctly map to index.html and return text/html.
+    contentType = getMimeType(sanitizedPath);
+
     return true;
 }
 
