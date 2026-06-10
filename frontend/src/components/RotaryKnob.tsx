@@ -126,9 +126,9 @@ export function RotaryKnob({
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-    background: 'radial-gradient(circle at 35% 25%, #20242b 0%, #0b0f14 45%, #050609 100%)',
-    border: '1px solid rgba(255,255,255,0.03)',
-    boxShadow: 'inset 0 6px 14px rgba(0,0,0,0.75), 0 10px 30px rgba(0,0,0,0.75)',
+    background: 'radial-gradient(circle at 35% 25%, #2a2f36 0%, #0b0f14 45%, #050609 100%)',
+    border: '1px solid rgba(255,255,255,0.04)',
+    boxShadow: 'inset 0 6px 14px rgba(0,0,0,0.6), 0 12px 30px rgba(0,0,0,0.8)',
     overflow: 'hidden'
   };
 
@@ -217,6 +217,26 @@ export function RotaryKnob({
     marginTop: 2,
   };
 
+  // ticks (visual markers around the ring)
+  const tickCount = 12;
+  const ticks = Array.from({ length: tickCount }).map((_, i) => {
+    const tAngle = startAngle + (i / (tickCount - 1)) * angleRange;
+    const tickStyle: React.CSSProperties = {
+      position: 'absolute',
+      left: '50%',
+      top: '50%',
+      width: Math.max(2, Math.floor(size * 0.02)),
+      height: Math.max(6, Math.floor(size * 0.06)),
+      background: 'rgba(255,255,255,0.08)',
+      transformOrigin: '50% 50%',
+      transform: `translate(-50%, ${-Math.floor(size * 0.42)}px) rotate(${tAngle}deg)`,
+      borderRadius: 2,
+      zIndex: 2,
+      pointerEvents: 'none'
+    };
+    return <div key={i} style={tickStyle} />;
+  });
+
   return (
     <div style={wrapperStyle}>
       <div
@@ -235,6 +255,9 @@ export function RotaryKnob({
 
         <div style={ringInnerGlowStyle} />
         <div style={topHighlightStyle} />
+
+        {/* ticks */}
+        {ticks}
 
         {/* pointer */}
         <div style={indicatorStyle} />
