@@ -1,4 +1,5 @@
 #include "MainComponent.h"
+#include "api/HealthHandler.h"
 
 #include <cmath>
 #include <thread>
@@ -41,23 +42,34 @@ MainComponent::MainComponent(juce::PropertiesFile& settingsFile)
     // Give the WebServer thread time to actually start listening
     juce::Thread::sleep(500);
     juce::Logger::getCurrentLogger()->writeToLog("WebServer startup complete, UI should be accessible");
-    
+
+    // Instantiate DSP processors and add to chain
+    juce::Logger::getCurrentLogger()->writeToLog("Initializing DSP chain (creating processors)...");
+    {
+        auto& chain = audioEngine.getChain();
+        cleanBoostProcessor = dynamic_cast<milodikfx::dsp::GainProcessor*>(chain.addProcessor(std::make_unique<milodikfx::dsp::GainProcessor>()));
+        overdriveProcessor = dynamic_cast<milodikfx::dsp::OverdriveProcessor*>(chain.addProcessor(std::make_unique<milodikfx::dsp::OverdriveProcessor>()));
+        eqProcessor = dynamic_cast<milodikfx::dsp::EQProcessor*>(chain.addProcessor(std::make_unique<milodikfx::dsp::EQProcessor>()));
+        compressorProcessor = dynamic_cast<milodikfx::dsp::CompressorProcessor*>(chain.addProcessor(std::make_unique<milodikfx::dsp::CompressorProcessor>()));
+        reverbProcessor = dynamic_cast<milodikfx::dsp::ReverbProcessor*>(chain.addProcessor(std::make_unique<milodikfx::dsp::ReverbProcessor>()));
+        toneStackProcessor = dynamic_cast<milodikfx::dsp::ToneStackProcessor*>(chain.addProcessor(std::make_unique<milodikfx::dsp::ToneStackProcessor>()));
+    }
+
     // Register REST API handlers
     juce::Logger::getCurrentLogger()->writeToLog("Registering REST API handlers...");
     auto devicesHandler = std::make_shared<DevicesHandler>(deviceManager);
     auto parametersHandler = std::make_shared<ParametersHandler>(audioEngine, settingsFile);
     auto effectsHandler = std::make_shared<EffectsHandler>(audioEngine.getChain());
     auto levelsHandler = std::make_shared<LevelsHandler>();
-    auto presetsHandler = std::make_shared<PresetsHandler>(
-        juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
-            .getChildFile("MilodikFX/Presets")
-    );
+    auto presetsHandler = std::make_shared<PresetsHandler>(presetManager, audioEngine);
+    auto healthHandler = std::make_shared<HealthHandler>();
     
     webServer->registerApiHandler("/api/devices", devicesHandler);
     webServer->registerApiHandler("/api/parameters", parametersHandler);
     webServer->registerApiHandler("/api/effects", effectsHandler);
     webServer->registerApiHandler("/api/levels", levelsHandler);
     webServer->registerApiHandler("/api/presets", presetsHandler);
+    webServer->registerApiHandler("/api/health", healthHandler);
     juce::Logger::getCurrentLogger()->writeToLog("REST API handlers registered");
     
     // NOW init audio in background (non-blocking)
@@ -112,6 +124,50 @@ MainComponent::MainComponent(juce::PropertiesFile& settingsFile)
     toneStackMidDb = static_cast<float>(settingsFile.getDoubleValue(kKeyToneStackMidDb, 0.0));
     toneStackTrebleDb = static_cast<float>(settingsFile.getDoubleValue(kKeyToneStackTrebleDb, 0.0));
     toneStackEnabled = settingsFile.getBoolValue(kKeyToneStackEnabled, true);
+
+    // Apply loaded settings to processors if present
+    if (cleanBoostProcessor)
+    {
+        cleanBoostProcessor->setEnabled(cleanBoostEnabled.load());
+        cleanBoostProcessor->setGainDb(cleanBoostGainDb.load());
+    }
+    if (overdriveProcessor)
+    {
+        overdriveProcessor->setEnabled(overdriveEnabled.load());
+        overdriveProcessor->setDrivePercent(overdriveDrivePct.load());
+        overdriveProcessor->setLevelPercent(overdriveLevelPct.load());
+    }
+    if (eqProcessor)
+    {
+        eqProcessor->setEnabled(eqEnabled.load());
+        eqProcessor->setBassDb(eqBassDb.load());
+        eqProcessor->setMidDb(eqMidDb.load());
+        eqProcessor->setTrebleDb(eqTrebleDb.load());
+    }
+    if (compressorProcessor)
+    {
+        compressorProcessor->setEnabled(compressorEnabled.load());
+        compressorProcessor->setInputGainDb(compressorInputGainDb.load());
+        compressorProcessor->setThresholdDb(compressorThresholdDb.load());
+        compressorProcessor->setRatio(compressorRatio.load());
+        compressorProcessor->setAttackMs(compressorAttackMs.load());
+        compressorProcessor->setReleaseMs(compressorReleaseMs.load());
+    }
+    if (reverbProcessor)
+    {
+        reverbProcessor->setEnabled(reverbEnabled.load());
+        reverbProcessor->setRoomSize(reverbRoomSize.load());
+        reverbProcessor->setDryWetMix(reverbDryWetMix.load());
+        reverbProcessor->setDecayTime(reverbDecayTime.load());
+        reverbProcessor->setWidth(reverbWidth.load());
+    }
+    if (toneStackProcessor)
+    {
+        toneStackProcessor->setEnabled(toneStackEnabled.load());
+        toneStackProcessor->setBassDb(toneStackBassDb.load());
+        toneStackProcessor->setMidDb(toneStackMidDb.load());
+        toneStackProcessor->setTrebleDb(toneStackTrebleDb.load());
+    }
 
     setSize(100, 100);
     startTimer(1000);

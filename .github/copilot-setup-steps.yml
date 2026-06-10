@@ -1,0 +1,204 @@
+# Copilot Cloud Agent Setup Configuration
+# This configuration enables the Copilot cloud agent to reliably run frontend E2E tests
+# using Cypress against a Vite preview server.
+#
+# Reference: https://github.com/features/copilot/pro/agents
+
+version: 1
+name: "MilodikFX Frontend E2E Testing"
+description: "Configure Node.js 18 environment and run Cypress E2E tests against Vite preview"
+
+# ==============================================================================
+# PREINSTALL & ENVIRONMENT SETUP
+# ==============================================================================
+preinstall:
+  - name: "Node.js 18"
+    type: "runtime"
+    version: "18.x"
+    installer: "nvm" # Node Version Manager (cross-platform)
+
+  - name: "npm dependencies (frontend)"
+    type: "package_manager"
+    working_directory: "frontend"
+    command: "npm ci"
+    description: "Install frontend dependencies with exact versions from package-lock.json"
+
+# ==============================================================================
+# BUILD & PREPARATION STEPS
+# ==============================================================================
+setup_steps:
+  - step_id: "build_frontend"
+    name: "Build Frontend"
+    working_directory: "frontend"
+    command: "npm run build"
+    timeout: 300  # seconds (5 minutes)
+    exit_code_check: true
+    description: |
+      Build the React frontend using Vite.
+      Output: frontend/dist/
+    on_error: "fail"
+
+  - step_id: "verify_build"
+    name: "Verify Build Artifacts"
+    working_directory: "frontend"
+    command: |
+      if [ ! -d "dist" ]; then
+        echo "ERROR: frontend/dist not found after build"
+        exit 1
+      fi
+      if [ ! -f "dist/index.html" ]; then
+        echo "ERROR: dist/index.html not found"
+        exit 1
+      fi
+      echo "✓ Build artifacts verified"
+    timeout: 30
+    exit_code_check: true
+    description: "Ensure frontend/dist exists and contains index.html"
+    on_error: "fail"
+
+  - step_id: "start_preview_server"
+    name: "Start Vite Preview Server"
+    working_directory: "frontend"
+    background: true
+    background_port: 5173
+    command: |
+      npx vite preview --port 5173 --strictPort
+    timeout: 60
+    exit_code_check: true
+    description: |
+      Start the Vite preview server on port 5173.
+      The agent will wait for http://localhost:5173 to be ready before proceeding.
+    on_error: "fail"
+
+  - step_id: "wait_for_server"
+    name: "Wait for Preview Server to be Ready"
+    working_directory: "frontend"
+    command: "npx wait-on http://localhost:5173 --timeout 60000"
+    timeout: 75
+    exit_code_check: true
+    description: |
+      Wait for the preview server to be fully ready.
+      This ensures all network connections are established before E2E tests start.
+    on_error: "fail"
+
+  - step_id: "health_check_server"
+    name: "Perform Health Check on Preview Server"
+    working_directory: "frontend"
+    command: |
+      echo "Checking if index.html is served..."
+      response=$(curl -s -w "\n%{http_code}" http://localhost:5173/index.html)
+      http_code=$(echo "$response" | tail -n 1)
+      content_type=$(curl -s -I http://localhost:5173/index.html | grep -i "content-type" || true)
+      
+      if [ "$http_code" != "200" ]; then
+        echo "ERROR: HTTP $http_code returned for /index.html"
+        exit 1
+      fi
+      
+      if ! echo "$content_type" | grep -qi "text/html"; then
+        echo "WARNING: Content-Type may not be text/html: $content_type"
+      fi
+      
+      echo "✓ Server health check passed (HTTP $http_code)"
+      echo "  Content-Type: $content_type"
+    timeout: 30
+    exit_code_check: true
+    description: "Verify that the preview server is responding with index.html and correct Content-Type"
+    on_error: "warn"  # Continue even if API endpoints are not available (they may not exist in this build)
+
+# ==============================================================================
+# E2E TEST EXECUTION
+# ==============================================================================
+test_steps:
+  - step_id: "run_cypress_e2e"
+    name: "Run Cypress E2E Tests (Headless)"
+    working_directory: "frontend"
+    command: "npm run e2e:headless"
+    timeout: 600  # 10 minutes (Cypress can take a while)
+    exit_code_check: true
+    description: |
+      Run all Cypress E2E tests in headless mode.
+      Tests should be in cypress/e2e/**/*.cy.ts
+    on_error: "fail"
+
+  - step_id: "upload_artifacts"
+    name: "Collect Test Artifacts"
+    working_directory: "frontend"
+    command: |
+      echo "Test artifacts collection:"
+      if [ -d "cypress/videos" ]; then
+        echo "  ✓ Videos: $(find cypress/videos -type f | wc -l) files"
+      fi
+      if [ -d "cypress/screenshots" ]; then
+        echo "  ✓ Screenshots: $(find cypress/screenshots -type f | wc -l) files"
+      fi
+    timeout: 30
+    exit_code_check: false  # This is informational only
+    description: "Report on collected test artifacts (videos and screenshots)"
+    on_error: "warn"
+
+# ==============================================================================
+# CACHING CONFIGURATION
+# ==============================================================================
+cache:
+  - path: "frontend/node_modules"
+    description: "NPM dependencies cache"
+    ttl: 3600  # 1 hour
+
+  - path: "frontend/dist"
+    description: "Built frontend artifacts cache"
+    ttl: 1800  # 30 minutes (can be invalidated by source changes)
+
+# ==============================================================================
+# ENVIRONMENT VARIABLES
+# ==============================================================================
+environment:
+  NODE_ENV: "production"
+  VITE_API_BASE: "http://localhost:5173"  # Frontend preview server base URL
+  CYPRESS_BASE_URL: "http://localhost:5173"  # Cypress target URL
+  CI: "true"  # Signal that we're in a CI environment
+  CYPRESS_HEADLESS: "true"  # Force headless mode
+
+# ==============================================================================
+# PORTS & NETWORK CONFIGURATION
+# ==============================================================================
+ports:
+  - port: 5173
+    service: "vite-preview"
+    protocol: "http"
+    description: "Vite preview server (frontend)"
+
+# ==============================================================================
+# ARTIFACTS TO PRESERVE
+# ==============================================================================
+artifacts:
+  - path: "frontend/cypress/videos"
+    description: "Cypress test execution videos"
+    retention: 7  # days
+
+  - path: "frontend/cypress/screenshots"
+    description: "Cypress test failure screenshots"
+    retention: 7  # days
+
+  - path: "frontend/dist"
+    description: "Built frontend artifacts"
+    retention: 1  # day
+
+# ==============================================================================
+# FAILURE HANDLING & RETRY POLICY
+# ==============================================================================
+retry_policy:
+  max_retries: 2
+  backoff_seconds: 5
+  retry_on_steps:
+    - "wait_for_server"
+    - "run_cypress_e2e"
+
+# ==============================================================================
+# SUCCESS CRITERIA
+# ==============================================================================
+success_criteria:
+  - step: "build_frontend"
+    condition: "exit_code == 0"
+  - step: "run_cypress_e2e"
+    condition: "exit_code == 0"

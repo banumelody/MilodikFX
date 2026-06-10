@@ -84,6 +84,7 @@ target_sources(MilodikFX
     src/ui/WebServer.cpp
     src/api/HttpHandler.h
     src/api/RestApiDispatcher.h
+    src/api/HealthHandler.h
     src/api/DevicesHandler.h
     src/api/DevicesHandler.cpp
     src/api/ParametersHandler.h
