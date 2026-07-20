@@ -105,7 +105,9 @@ Large parts of the tree are abandoned or half-built experiments from earlier spr
 - `electron/`, `binding.gyp`, `src/native/*`, and the root `package.json` scripts (`npm run dev`, `dist:win`) — an Electron shell for a planned v0.9. `electron/main.js` hardcodes `isDev = false`, the native addon is a `HelloWorld` stub that is never `require`d, and its meter data is `Math.random()`. Not the shipping path.
 - Most of `frontend/src/components/` (Dashboard, DashboardV2, PerformView, MainLayout, EffectCard, …), `frontend/src/hooks/`, and `frontend/src/services/{audioEngine,messageBridge,effectManager,eventDispatcher}.ts` — orphaned; nothing imports them from `App.tsx`. The socket.io dependency and `types/ipc.ts` belong to this dead path.
 
-Known gap: `LevelsHandler` is created as a local `shared_ptr` in `MainComponent` and no reference is kept, so `updateLevels()` is never called from the audio callback — `GET /api/levels` always returns the `-60 dB` defaults and the UI meters are inert.
+Known gap: `DevicesHandler` reads `deviceManager.getAudioDeviceSetup()`, which comes back empty even when a device is open — `GET /api/devices` reports `sampleRate: 0`, `bufferSize: 0` and `"Default"` for both device names while the log shows the device actually running at 48 kHz with a 480-sample block. Read the live device via `getCurrentAudioDevice()` instead.
+
+When debugging meters or device state, `milodikfx.log` now records the device name, sample rate, block size and channel counts at `audioDeviceAboutToStart`. Note that a silent input legitimately reads near the `kMeterFloorDb` floor (-100 dBFS); a real interface idles around -78 dBFS, so anything pinned at exactly the floor means no blocks are arriving.
 
 ## Docs
 
