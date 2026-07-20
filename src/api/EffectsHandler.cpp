@@ -1,5 +1,12 @@
 #include "EffectsHandler.h"
 
+#include "../dsp/OverdriveProcessor.h"
+#include "../dsp/GainProcessor.h"
+#include "../dsp/EQProcessor.h"
+#include "../dsp/CompressorProcessor.h"
+#include "../dsp/ReverbProcessor.h"
+#include "../dsp/ToneStackProcessor.h"
+
 /**
  * Build JSON response for effect state
  */
@@ -19,17 +26,50 @@ static std::string buildEffectStateJson(
     return json;
 }
 
+static std::string toLower(std::string s)
+{
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c){ return std::tolower(c); });
+    return s;
+}
+
 HttpHandler::Response EffectsHandler::handleGet(
     const std::string& path,
     const std::string& query) const
 {
-    // GET /api/effects/{effect} - return effect state
-    // For now, return stub response
-    return {
-        200,
-        "application/json",
-        R"({"message":"Effect GET not yet implemented"})"
-    };
+    // GET /api/effects/{effect} - return effect state (best-effort)
+    try
+    {
+        auto& chain = chain_;
+        size_t base = std::string("/api/effects/").length();
+        if (path.size() <= base) return { 400, "application/json", R"({"error":"Invalid effect path"})" };
+        size_t slash = path.find('/', base);
+        std::string effect = (slash == std::string::npos) ? path.substr(base) : path.substr(base, slash - base);
+        std::string eff = toLower(effect);
+
+        if (eff == "overdrive")
+        {
+            if (auto* od = chain_.findProcessor<milodikfx::dsp::OverdriveProcessor>())
+            {
+                std::string params = "{\"drivePct\":" + std::to_string(od->getDrivePercent()) + ",\"levelPct\":" + std::to_string(od->getLevelPercent()) + "}";
+                return {200, "application/json", buildEffectStateJson(effect, od->isEnabled(), params)};
+            }
+        }
+
+        if (eff == "gain")
+        {
+            if (auto* gp = chain_.findProcessor<milodikfx::dsp::GainProcessor>())
+            {
+                std::string params = "{\"gainDb\":" + std::to_string(gp->getGainDb()) + "}";
+                return {200, "application/json", buildEffectStateJson(effect, gp->isEnabled(), params)};
+            }
+        }
+
+        return {200, "application/json", R"({"message":"Effect GET not yet implemented for this type"})" };
+    }
+    catch (const std::exception& e)
+    {
+        return {500, "application/json", std::string(R"({"error":"Exception: )") + e.what() + R"("})" };
+    }
 }
 
 HttpHandler::Response EffectsHandler::handlePost(
@@ -40,44 +80,77 @@ HttpHandler::Response EffectsHandler::handlePost(
     {
         // POST /api/effects/{effect}/enabled - Toggle effect
         // Body: {"enabled": true/false}
-        
-        // Extract effect name from path: /api/effects/overdrive/enabled
+
         size_t effectStart = path.find("/api/effects/");
         if (effectStart == std::string::npos)
-        {
-            return {
-                400,
-                "application/json",
-                R"({"error":"Invalid path"})"
-            };
-        }
-        
+            return {400, "application/json", R"({"error":"Invalid path"})"};
+
         size_t effectNameStart = effectStart + 13; // length of "/api/effects/"
         size_t effectNameEnd = path.find("/", effectNameStart);
         if (effectNameEnd == std::string::npos)
             effectNameEnd = path.length();
-        
+
         std::string effectName = path.substr(effectNameStart, effectNameEnd - effectNameStart);
-        
-        // Extract enabled value from body
+        std::string eff = toLower(effectName);
+
         bool enabled = body.find("\"enabled\":true") != std::string::npos;
-        
-        // TODO: Actually toggle effect in chain
-        // For now, just return success
-        
-        return {
-            200,
-            "application/json",
-            buildEffectStateJson(effectName, enabled)
-        };
+
+        // Apply to chain
+        if (eff == "overdrive")
+        {
+            if (auto* od = chain_.findProcessor<milodikfx::dsp::OverdriveProcessor>())
+            {
+                od->setEnabled(enabled);
+                return {200, "application/json", buildEffectStateJson(effectName, enabled)};
+            }
+            return {404, "application/json", R"({"error":"Overdrive not present"})"};
+        }
+
+        if (eff == "gain" || eff == "cleanboost")
+        {
+            if (auto* gp = chain_.findProcessor<milodikfx::dsp::GainProcessor>())
+            {
+                gp->setEnabled(enabled);
+                return {200, "application/json", buildEffectStateJson(effectName, enabled)};
+            }
+            return {404, "application/json", R"({"error":"Gain not present"})"};
+        }
+
+        if (eff == "eq")
+        {
+            if (auto* eq = chain_.findProcessor<milodikfx::dsp::EQProcessor>())
+            {
+                eq->setEnabled(enabled);
+                return {200, "application/json", buildEffectStateJson(effectName, enabled)};
+            }
+            return {404, "application/json", R"({"error":"EQ not present"})"};
+        }
+
+        if (eff == "compressor" || eff == "comp")
+        {
+            if (auto* cp = chain_.findProcessor<milodikfx::dsp::CompressorProcessor>())
+            {
+                cp->setEnabled(enabled);
+                return {200, "application/json", buildEffectStateJson(effectName, enabled)};
+            }
+            return {404, "application/json", R"({"error":"Compressor not present"})"};
+        }
+
+        if (eff == "reverb")
+        {
+            if (auto* rp = chain_.findProcessor<milodikfx::dsp::ReverbProcessor>())
+            {
+                rp->setEnabled(enabled);
+                return {200, "application/json", buildEffectStateJson(effectName, enabled)};
+            }
+            return {404, "application/json", R"({"error":"Reverb not present"})"};
+        }
+
+        return {400, "application/json", R"({"error":"Unknown effect"})"};
     }
     catch (const std::exception& e)
     {
-        return {
-            500,
-            "application/json",
-            std::string(R"({"error":"Exception: )") + e.what() + R"("})"
-        };
+        return {500, "application/json", std::string(R"({"error":"Exception: )") + e.what() + R"("})" };
     }
 }
 

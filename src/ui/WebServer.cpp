@@ -183,14 +183,7 @@ void WebServer::stop()
         stopThread(5000);
     }
     
-    // Wait for all connection threads to complete
-    for (auto& thread : connectionThreads_)
-    {
-        if (thread.joinable())
-        {
-            thread.join();
-        }
-    }
+    // Detached connection threads are not tracked; allow them to finish.
     connectionThreads_.clear();
     
     juce::Logger::getCurrentLogger()->writeToLog("WebServer: Shutdown complete");
@@ -298,31 +291,25 @@ std::string WebServer::parseHttpRequest(const std::string& request, std::string&
 
 void WebServer::handleConnectionAsync(SOCKET clientSocket)
 {
-    // Run connection handling in a separate thread to prevent blocking accept()
-    std::thread connThread([this, clientSocket]()
+    // Run connection handling in a detached thread to keep accept() responsive.
+    std::thread([this, clientSocket]()
     {
         handleConnection(clientSocket);
-    });
-    
-    // Add thread to vector for cleanup
-    connectionThreads_.push_back(std::move(connThread));
-    
-    // Clean up finished threads periodically (remove joinable threads)
-    std::vector<std::thread> activeThreads;
-    for (auto& t : connectionThreads_)
-    {
-        if (t.joinable())
-        {
-            activeThreads.push_back(std::move(t));
-        }
-    }
-    connectionThreads_ = std::move(activeThreads);
+    }).detach();
+
+    // Detached connection threads are not tracked here; they will finish on their own.
 }
 
 void WebServer::handleConnection(SOCKET clientSocket)
 {
     if (clientSocket == INVALID_SOCKET)
         return;
+
+    // Ensure client socket is in blocking mode so recv() honors SO_RCVTIMEO
+    if (!setSocketNonBlocking(clientSocket, false))
+    {
+        juce::Logger::getCurrentLogger()->writeToLog("WARN: Failed to set client socket to blocking mode");
+    }
 
     const int bufferSize = 8192;
     char buffer[bufferSize] = {};
@@ -332,6 +319,7 @@ void WebServer::handleConnection(SOCKET clientSocket)
     setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO, 
                (const char*)&timeoutMs, sizeof(timeoutMs));
     
+    // Read initial data
     int bytesReceived = recv(clientSocket, buffer, bufferSize - 1, 0);
     
     if (bytesReceived <= 0)
@@ -346,23 +334,72 @@ void WebServer::handleConnection(SOCKET clientSocket)
         return;
     }
     
-    buffer[bytesReceived] = '\0';
-    std::string requestStr(buffer);
+    std::string requestStr(buffer, bytesReceived);
     
-    // Parse HTTP request
+    // Parse initial request line (may contain partial headers)
     std::string filePath, method;
     std::string query = parseHttpRequest(requestStr, filePath, method);
     
     juce::Logger::getCurrentLogger()->writeToLog(
         "WebServer: HTTP " + juce::String(method) + " " + juce::String(filePath));
     
-    // Extract request body for POST/PUT (simple parsing: skip headers, everything after \r\n\r\n)
-    std::string requestBody;
-    size_t bodyStart = requestStr.find("\r\n\r\n");
-    if (bodyStart != std::string::npos)
+    // Ensure headers are fully read (look for CRLFCRLF). If not present, read until found or until a reasonable header limit.
+    size_t headerEnd = requestStr.find("\r\n\r\n");
+    if (headerEnd == std::string::npos)
     {
-        requestBody = requestStr.substr(bodyStart + 4);
+        const size_t headerLimit = 64 * 1024; // 64KB max headers
+        while (requestStr.find("\r\n\r\n") == std::string::npos && requestStr.size() < headerLimit)
+        {
+            int b = recv(clientSocket, buffer, bufferSize - 1, 0);
+            if (b <= 0) break;
+            requestStr.append(buffer, b);
+        }
+        headerEnd = requestStr.find("\r\n\r\n");
     }
+    
+    std::string requestBody;
+    if (headerEnd != std::string::npos)
+    {
+        requestBody = requestStr.substr(headerEnd + 4);
+    }
+    
+    // Parse Content-Length (case-insensitive)
+    int contentLength = 0;
+    std::string lowerHeaders = (headerEnd == std::string::npos) ? std::string() : requestStr.substr(0, headerEnd);
+    std::transform(lowerHeaders.begin(), lowerHeaders.end(), lowerHeaders.begin(), [](unsigned char c){ return std::tolower(c); });
+    std::string clKey = "content-length:";
+    size_t clPos = lowerHeaders.find(clKey);
+    if (clPos != std::string::npos)
+    {
+        size_t lineEnd = lowerHeaders.find("\r\n", clPos);
+        std::string clVal;
+        if (lineEnd != std::string::npos)
+            clVal = lowerHeaders.substr(clPos + clKey.size(), lineEnd - (clPos + clKey.size()));
+        else
+            clVal = lowerHeaders.substr(clPos + clKey.size());
+        try { contentLength = std::stoi(clVal); } catch (...) { contentLength = 0; }
+    }
+    
+    // If more body is expected, read until contentLength bytes are accumulated or a timeout/error occurs
+    while (contentLength > 0 && (int)requestBody.size() < contentLength)
+    {
+        int need = std::min<int>(bufferSize - 1, contentLength - (int)requestBody.size());
+        int b = recv(clientSocket, buffer, need, 0);
+        if (b <= 0)
+        {
+            int err = WSAGetLastError();
+            if (err != WSAETIMEDOUT && err != 0)
+            {
+                juce::Logger::getCurrentLogger()->writeToLog(
+                    "WARN: recv() while reading body failed, error: " + juce::String(err));
+            }
+            break;
+        }
+        requestBody.append(buffer, b);
+    }
+    
+    juce::Logger::getCurrentLogger()->writeToLog(
+        "WebServer: Received request body length=" + juce::String((int)requestBody.size()));
     
     // Build HTTP response
     std::ostringstream response;

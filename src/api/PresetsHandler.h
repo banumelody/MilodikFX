@@ -2,6 +2,8 @@
 
 #include "HttpHandler.h"
 #include <JuceHeader.h>
+#include "../preset/PresetManager.h"
+#include "../audio/AudioEngine.h"
 
 /**
  * Handles /api/presets/* endpoints for preset management.
@@ -12,16 +14,15 @@
 class PresetsHandler final : public HttpHandler
 {
 public:
-    explicit PresetsHandler(juce::File presetsDirectory)
-        : presetsDir_(presetsDirectory)
+    explicit PresetsHandler(milodikfx::preset::PresetManager& presetManager, milodikfx::audio::AudioEngine& engine)
+        : presetManager_(presetManager), engine_(engine)
     {
-        if (!presetsDir_.exists())
-            presetsDir_.createDirectory();
     }
 
     Response handleGet(const std::string& path, const std::string& query) const override;
     Response handlePost(const std::string& path, const std::string& body) override;
 
 private:
-    juce::File presetsDir_;
+    milodikfx::preset::PresetManager& presetManager_;
+    milodikfx::audio::AudioEngine& engine_;
 };

@@ -25,6 +25,18 @@ public:
 
     int getNumProcessors() const noexcept;
 
+    // Find the first processor of type T in the chain (uses RTTI/dynamic_cast)
+    template<typename T>
+    T* findProcessor() noexcept
+    {
+        for (auto& p : processors)
+        {
+            if (auto* t = dynamic_cast<T*>(p.get()))
+                return t;
+        }
+        return nullptr;
+    }
+
 private:
     std::vector<std::unique_ptr<AudioProcessorBase>> processors;
     std::atomic<bool> bypassed { false };
