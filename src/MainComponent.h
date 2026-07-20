@@ -63,6 +63,9 @@ private:
     static constexpr const char* kKeyAudioDeviceStateXml = "audio.deviceStateXml";
     static constexpr const char* kKeyPresetSelectedName = "ui.preset.selectedName";
 
+    // Silence floor reported to /api/levels.
+    static constexpr float kMeterFloorDb = -100.0f;
+
     bool initialiseAudioWithFallback(const juce::XmlElement* savedState);
 
     void markSettingsDirty();
@@ -90,6 +93,10 @@ private:
     juce::PropertiesFile& settingsFile;
     milodikfx::preset::PresetManager presetManager;
     std::unique_ptr<WebServer> webServer;
+
+    // Held so the audio callback can push meter values into it. Assigned in the
+    // constructor before the thread that installs the audio callback is spawned.
+    std::shared_ptr<LevelsHandler> levelsHandler;
 
     bool settingsDirty = false;
     uint32_t lastSettingsSaveMs = 0;

@@ -23,6 +23,8 @@ public:
     }
 
 private:
-    mutable std::atomic<float> inputLevel_{ -60.0f };
-    mutable std::atomic<float> outputLevel_{ -60.0f };
+    // Silence floor, reported until the audio callback delivers the first block.
+    // Keep in sync with MainComponent::kMeterFloorDb.
+    mutable std::atomic<float> inputLevel_{ -100.0f };
+    mutable std::atomic<float> outputLevel_{ -100.0f };
 };

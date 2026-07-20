@@ -60,7 +60,7 @@ MainComponent::MainComponent(juce::PropertiesFile& settingsFile)
     auto devicesHandler = std::make_shared<DevicesHandler>(deviceManager);
     auto parametersHandler = std::make_shared<ParametersHandler>(audioEngine, settingsFile);
     auto effectsHandler = std::make_shared<EffectsHandler>(audioEngine.getChain());
-    auto levelsHandler = std::make_shared<LevelsHandler>();
+    levelsHandler = std::make_shared<LevelsHandler>();
     auto presetsHandler = std::make_shared<PresetsHandler>(presetManager, audioEngine);
     auto healthHandler = std::make_shared<HealthHandler>();
     
@@ -272,21 +272,49 @@ void MainComponent::audioDeviceIOCallbackWithContext(
     int numSamples, const juce::AudioIODeviceCallbackContext&)
 {
     juce::AudioBuffer<float> buffer(const_cast<float**>(inputChannelData), numInputChannels, numSamples);
+
+    const bool haveAudio = numInputChannels > 0 && numSamples > 0;
+
+    // processBlock mutates the buffer in place, so the dry level has to be taken first.
+    const float inputPeak = haveAudio ? buffer.getMagnitude(0, numSamples) : 0.0f;
+
     audioEngine.processBlock(buffer);
+
+    const float outputPeak = haveAudio ? buffer.getMagnitude(0, numSamples) : 0.0f;
 
     for (int channel = 0; channel < numOutputChannels && channel < numInputChannels; ++channel)
     {
         juce::FloatVectorOperations::copy(outputChannelData[channel], buffer.getReadPointer(channel), numSamples);
     }
+
+    if (auto* levels = levelsHandler.get())
+    {
+        levels->updateLevels(juce::Decibels::gainToDecibels(inputPeak, kMeterFloorDb),
+                             juce::Decibels::gainToDecibels(outputPeak, kMeterFloorDb));
+    }
 }
 
 void MainComponent::audioDeviceAboutToStart(juce::AudioIODevice* device)
 {
-    if (device) audioEngine.prepareToPlay(device->getCurrentSampleRate(), 512, 2);
+    if (device == nullptr)
+    {
+        juce::Logger::getCurrentLogger()->writeToLog("audioDeviceAboutToStart called with null device");
+        return;
+    }
+
+    juce::Logger::getCurrentLogger()->writeToLog(
+        "Audio device starting: " + device->getName()
+        + " @ " + juce::String(device->getCurrentSampleRate()) + " Hz"
+        + ", block " + juce::String(device->getCurrentBufferSizeSamples())
+        + ", inputs " + juce::String(device->getActiveInputChannels().countNumberOfSetBits())
+        + ", outputs " + juce::String(device->getActiveOutputChannels().countNumberOfSetBits()));
+
+    audioEngine.prepareToPlay(device->getCurrentSampleRate(), 512, 2);
 }
 
 void MainComponent::audioDeviceStopped()
 {
+    juce::Logger::getCurrentLogger()->writeToLog("Audio device stopped");
     audioEngine.reset();
 }
 
