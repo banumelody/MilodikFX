@@ -4,7 +4,7 @@
   "type": "module",
   "description": "MilodikFX UI - rendered by the engine's own window via WebView2",
   "author": "MilodikFX Contributors",
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

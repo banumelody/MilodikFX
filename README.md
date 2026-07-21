@@ -58,3 +58,25 @@ cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DMILODIKFX_ASIO_SDK_PATH=
 # manual override (if needed)
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DMILODIKFX_ENABLE_ASIO=ON
 ```
+
+## Licence
+
+MilodikFX is licensed under the **GNU Affero General Public License v3.0** — see [LICENSE](LICENSE).
+
+That choice is not arbitrary. The binaries link the JUCE framework, whose modules are dual-licensed
+under AGPLv3 or a commercial JUCE licence; distributing a build without the commercial licence means
+the combined work is AGPLv3. Builds that also enable ASIO include Steinberg's ASIO SDK, offered under
+either a signed Steinberg agreement or GPLv3 — GPLv3 section 13 explicitly permits combining with
+AGPLv3 code, so the AGPLv3 release covers that too.
+
+Practically: you may use, modify and redistribute this, including commercially, provided you pass on
+the same freedoms and make the corresponding source available. The full source is in this repository.
+
+Third-party components:
+
+- [JUCE](https://juce.com) — AGPLv3 / commercial, © Raw Material Software Limited
+- [Steinberg ASIO SDK](https://www.steinberg.net/developers/) — ASIO is a trademark and software of
+  Steinberg Media Technologies GmbH. Only present in builds made with `MILODIKFX_ENABLE_ASIO=ON`;
+  the SDK itself is not redistributed in this repository.
+- [Microsoft Edge WebView2](https://developer.microsoft.com/microsoft-edge/webview2/) — used at
+  runtime to render the interface.
