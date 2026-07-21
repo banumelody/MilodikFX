@@ -39,7 +39,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - P3-8 Metronome — `MetronomeProcessor` sebagai post-processor, di luar jalur bypass
 - P3-9 CPU sparkline
 
-**Belum:** P2-1 (NAM), P2-5 (multi-view).
+**Belum:** P2-1 (NAM), P2-5 (multi-view), dan seluruh backlog baru **P4** (tipe overdrive + adaptasi Fractal, ditambahkan 22 Jul 2026 — lihat bagian P4 di bawah).
 
 **Kenapa dua itu belum:** NAM adalah dependensi eksternal dengan submodule, tanpa target CMake sendiri, dan belum pernah diuji di MSVC oleh upstream — riset teknisnya sudah lengkap di P2-1 di bawah, tapi integrasinya cukup besar untuk jadi satu sesi sendiri dan tidak pantas dikerjakan setengah jalan lalu ditandai selesai. Multi-view (P2-5) menunggu sampai jumlah panel di sidebar benar-benar terasa sesak; sekarang masih terbaca dalam satu layar.
 
@@ -445,6 +445,72 @@ Algoritma yang cocok untuk gitar (fundamental 80 Hz–1200 Hz):
 **Solusi:** Pasang Inno Setup (`winget install JRSoftware.InnoSetup` atau unduh manual dari jrsoftware.org), jalankan `scripts/build-release.ps1` tanpa `-SkipInstaller`, verifikasi installer benar-benar memasang, membuat shortcut, dan uninstaller bekerja bersih.
 
 **Effort:** ±1 jam (murni verifikasi, skripnya sudah ada).
+
+---
+
+## P4 — Backlog baru (22 Jul 2026): tipe overdrive & adaptasi Fractal
+
+Latar: pertanyaan "butuh amp simulator tidak?" dan "fitur Fractal mana yang bisa diadaptasi?".
+
+**Jawaban amp/head simulator, supaya keputusannya tercatat:** cabinet simulator **sudah ada** (analitik + IR loader). Yang belum ada adalah bagian *head*-nya — voicing preamp dan kompresi/sag power amp. Keputusan: **tidak membangun head sim analitik tersendiri.** Alasannya berlapis: (1) tipe drive "amp-in-a-box" di P4-1 menutup kebutuhan ringannya dengan usaha jauh lebih kecil; (2) NAM (P2-1, riset sudah lengkap) adalah jawaban sebenarnya untuk amp modeling — satu file profil menangkap preamp + power amp + interaksinya sekaligus, dengan kualitas yang tidak akan terkejar oleh model analitik buatan tangan; (3) jalur lengkapnya sudah tersusun: OD types → EQ/Contour → Cabinet IR untuk "pedal ke amp bersih", NAM → IR untuk "amp sungguhan". Kalau setelah AIAB terasa masih kurang "hidup", parameter sag/presence bisa ditambahkan ke tipe AIAB — bukan blok baru.
+
+**Fitur Fractal yang TIDAK diadaptasi, dan alasannya:** X/Y channel per blok (scene sudah menutup kebutuhannya; kombinasi scene × channel per blok membingungkan untuk pemakaian satu orang), chain dinamis (alasan arsitektur di Revisi 2), dan global blocks (hanya berguna kalau preset berjumlah ratusan). Yang sudah ada duluan di sini: scene, tuner, metronome, tap tempo + sync, tempo global, bypass per blok via MIDI.
+
+### P4-1. Tipe Overdrive (adaptasi Drive block Fractal)
+
+**Konsep:** parameter `overdrive.type` (enum) memilih voicing; setiap tipe menentukan pre-EQ → kurva clipping → post-EQ/tone → kompensasi level, meniru sirkuit aslinya. Knob yang tampil **menyesuaikan tipe** — bukan satu set knob generik.
+
+**Arsitektur (mengikuti pola yang sudah ada):**
+- Engine mendaftarkan **gabungan** semua parameter (`drivePct`, `tonePct`, `levelPct`, `bassDb`, `trebleDb`, `voice`, `boostDb`, dst.) sekali di `ChainFactory.cpp` — registry statis, preset/settings otomatis ikut. Tabel voicing per tipe adalah data (`struct DriveVoicing`: freq HPF pre-clip, boost mid pre-clip, kurva klip + asimetri, rentang tone post, blend bersih, kompensasi output), bukan cabang kode per tipe.
+- Frontend menampilkan subset knob per tipe lewat peta seperti `ENUM_OPTIONS`/`OVERRIDDEN_BY` yang sudah ada di `EffectRack.tsx`, termasuk label per tipe (Gain vs Drive vs Boost).
+- **Kompatibilitas mundur:** tipe pertama = `Custom` — persis perilaku sekarang (drive/level/asymmetry/oversampling). Preset lama memuat tanpa berubah bunyi; ada null-test untuk itu.
+- Aturan realtime tetap: koefisien dihitung ulang hanya saat parameter bergerak, semua atomics, oversampling berlaku per tipe.
+
+**Tipe dan kontrolnya (harus setia ke aslinya):**
+
+| Tipe | Knob | Voicing kunci |
+|---|---|---|
+| Custom | Drive, Level, Asymmetry, Oversampling | Perilaku 0.10.0, untuk preset lama |
+| Tube Screamer (TS808/TS9) | Drive, Tone, Level | HPF ~720 Hz **sebelum** klip (mid-hump, bass tidak terdistorsi), soft clip simetris di feedback, Tone = LPF variabel ~1–5 kHz |
+| Bluesbreaker (KoT) | Gain, Tone, Volume | Soft clip headroom tinggi (klip mulai lambat), gain rendah–menengah, EQ nyaris flat + sedikit treble; paling dinamis terhadap picking |
+| Blues Driver (BD-2) | Gain, Tone, Level | Dua tahap gain diskrit, klip asimetris ringan, terang/glassy (lift > ~1.5 kHz), bass hampir penuh; cleanup mengikuti volume gitar |
+| Transparent (Timmy/Klon) | Gain, Bass, Treble, Level | Bass = pemangkas **pre**-clip (CCW), Treble = pemangkas **post**-clip; blend sinyal bersih yang ikut naik dengan Gain (rahasia Klon); klip keras threshold rendah ala germanium |
+| OCD / MOSFET | Drive, Tone, Level + saklar HP/LP | Klip MOSFET ke ground (lebih keras, tepi kasar), HPF lebih rendah dari TS (low lebih terbuka), gain sampai nyerempet distorsi; HP = low lebih banyak + lebih agresif |
+| Dumble (Zendrive) | Gain, Voice, Tone, Level | Voice = pre-EQ fokus mid (geser corner HPF + boost mid sebelum klip), klip asimetris lembut bertingkat (sustain vokal), post-LPF gelap |
+| Marshall-in-a-box | Gain, Bass, Mid, Treble, Level | Dua klip kaskade (preamp), tone stack pasif interaktif gaya Marshall **setelah** klip (scoop mid saat semua jam 12), lift presence ~4 kHz |
+| Clean Boost (EP) | Boost (dB), saklar Bright | Saturasi sangat halus + lift treble & low-mid "EP magic". Tumpang tindih dengan blok CleanBoost yang ada — nilai tambahnya warna EP dan posisinya di slot OD |
+
+**Urutan pengerjaan (prioritas):**
+1. **Kerangka per-tipe + Custom + Tube Screamer + Clean Boost** — TS adalah sirkuit paling terdokumentasi (patokan kalibrasi), Clean Boost trivial tapi memvalidasi mekanisme knob-berubah-per-tipe ujung ke ujung.
+2. **Bluesbreaker + Blues Driver** — pasangan blues (favoritmu), keduanya kurva klip baru tanpa mesin tambahan.
+3. **Transparent** — butuh mesin clean blend, dipakai ulang tipe lain kelak.
+4. **OCD** — kurva MOSFET + saklar mode (saklar per-tipe = mekanisme UI baru yang kecil).
+5. **Dumble** — kontrol Voice (pre-EQ variabel).
+6. **Marshall-in-a-box** — tone stack interaktif, paling berat; terakhir.
+
+**Test:** null-test `Custom` terhadap keluaran 0.10.0; per tipe: verifikasi spektral karakter kuncinya (TS: umpan 100 Hz + 1 kHz → harmonik 100 Hz jauh lebih kecil daripada tipe OCD, karena bass dipangkas sebelum klip; BD: rasio harmonik genap/ganjil menunjukkan asimetri; Klon: pada gain rendah keluaran ≈ input); level default antar tipe selaras ±1 dB (ganti tipe tidak boleh melompat keras); semua `isfinite`; oversampling bekerja di setiap tipe. E2E: ganti tipe dari UI → knob yang tampil berubah, nilai tersimpan per parameter, preset round-trip.
+
+**Effort:** ±2 weekend, dipecah tiga batch sesuai urutan di atas.
+
+### P4-2. Spillover ekor Delay/Reverb (adaptasi paling bernilai dari Fractal)
+
+**Masalah:** mematikan Delay/Reverb (langsung, via scene, atau footswitch) memotong ekornya seketika — `processBlock` early-return saat disabled. Di Fractal, ekor dibiarkan berbunyi (spillover); justru fitur inilah yang membuat pindah scene terdengar mulus di tengah lagu.
+
+**Solusi:** disabled = berhenti **mengumpankan input**, tapi jalur basah tetap diproses sampai ekor meluruh (feedback tetap jalan, lalu berhenti total begitu ekor < −80 dB supaya CPU tidak terbuang untuk keheningan). Enable kembali harus instan. Berlaku ke Delay dan Reverb; toggle `spillover` per efek, default menyala.
+
+**Test:** impuls → disable → ekor meluruh alami, bukan terpotong; setelah ekor habis, blok benar-benar idle; pindah scene saat delay berbunyi → tidak ada klik. **Effort:** ±0.5 weekend. Prioritas tinggi karena memperbaiki scene yang sudah ada.
+
+### P4-3. Dual IR + blend di Cabinet (adaptasi Cab block)
+
+Dua `IrEngine` di cabinet, knob Mix A/B. Dua IR yang diblend adalah trik produksi standar (mic dekat + jauh, dua speaker). Infrastruktur IR sudah ada semua. **Effort:** ±0.5–1 weekend.
+
+### P4-4. Modifier: envelope follower / LFO → parameter (adaptasi Modifiers)
+
+Sumber modulasi (envelope dari input, LFO sinkron tempo) yang bisa dirutekan ke parameter registry mana pun — auto-wah, tremolo via volume, filter sweep sinkron tempo. Kekuatan khas Fractal, tapi butuh jalur modulasi di thread audio yang menulis parameter per blok — desain dulu sebelum koding. **Effort:** ±1.5–2 weekend. Kerjakan setelah P4-1/P4-2 terbukti.
+
+### P4-5. Looper sederhana
+
+Satu slot rekam/overdub/undo di akhir chain (post-master, seperti metronome). Mandiri dan tidak menyentuh arsitektur lain, tapi bukan kebutuhan inti — paling akhir. **Effort:** ±1–1.5 weekend.
 
 ---
 
