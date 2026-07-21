@@ -692,6 +692,58 @@ describe('MilodikFX UI against a live engine', () => {
     cy.request('PUT', '/api/effects/delay/spillover', { value: 1 });
   });
 
+  it('changes the overdrive controls with the voicing', () => {
+    cy.request('POST', '/api/effects/overdrive/enabled', { enabled: true });
+    cy.request('PUT', '/api/effects/overdrive/type', { value: 0 });
+    cy.reload();
+
+    // Custom keeps the pre-voicing controls.
+    cy.get('section[aria-label="Overdrive"]').within(() => {
+      cy.get('[role="slider"][aria-label="Asymmetry"]').should('exist');
+      cy.get('[role="slider"][aria-label="Tone"]').should('not.exist');
+
+      cy.contains('label', 'Tipe').find('select').select('Tube Screamer');
+    });
+
+    // A Tube Screamer has a Tone knob and no Asymmetry.
+    cy.get('section[aria-label="Overdrive"] [role="slider"][aria-label="Tone"]').should('exist');
+    cy.get('section[aria-label="Overdrive"] [role="slider"][aria-label="Asymmetry"]')
+      .should('not.exist');
+
+    cy.wait(300);
+    cy.request('/api/effects/overdrive/type').then(({ body }) => {
+      expect(Number(body.value)).to.eq(1);
+    });
+
+    // A Bluesbreaker names its gain control Gain, not Drive.
+    cy.get('section[aria-label="Overdrive"]').within(() => {
+      cy.contains('label', 'Tipe').find('select').select('Bluesbreaker');
+    });
+
+    cy.get('section[aria-label="Overdrive"] [role="slider"][aria-label="Gain"]').should('exist');
+    cy.get('section[aria-label="Overdrive"] [role="slider"][aria-label="Volume"]').should('exist');
+
+    cy.request('PUT', '/api/effects/overdrive/type', { value: 0 });
+  });
+
+  it('registers every voicing control once, whichever type is selected', () => {
+    // The registry is a flat, stable set: hiding a control is a presentation
+    // decision, so a preset saved under one voicing still round-trips the rest.
+    cy.request('/api/effects/overdrive').then(({ body }) => {
+      const ids = body.parameters.map((p: { id: string }) => p.id);
+
+      for (const id of ['type', 'drivePct', 'levelPct', 'tonePct', 'voicePct',
+                        'bassDb', 'midDb', 'trebleDb', 'hpMode', 'bright',
+                        'asymmetry', 'oversampling']) {
+        expect(ids, `overdrive exposes ${id}`).to.include(id);
+      }
+
+      const type = body.parameters.find((p: { id: string }) => p.id === 'type');
+      expect(type.min).to.eq(0);
+      expect(type.max).to.eq(8);
+    });
+  });
+
   it('reports MIDI state even with no controller attached', () => {
     // A build machine has no MIDI hardware, so the contract that has to hold is
     // that the endpoint answers with an empty device list rather than failing.

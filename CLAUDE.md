@@ -177,6 +177,27 @@ These are not stylistic; each corresponds to a bug that shipped:
   permanently.
 - `ScopedNoDenormals` in the audio callback; parameter smoothing on every gain.
 
+### Drive voicings
+
+`src/dsp/DriveVoicing.h` holds the eight pedal voicings as a table, not a branch per pedal. Type 0 is
+`custom` and takes the original untouched code path, so presets written before voicings existed sound
+exactly as they did.
+
+The field that carries most of the character is `splitHz`: the signal below it bypasses the clipper and
+is added back clean. A Tube Screamer's mid-hump is not an EQ curve, it is the bass being routed around
+the clipping stage. Two real filters do the split — a low-pass for the clean path and a high-pass for
+the clipped one. Subtracting the low-passed copy *looks* equivalent and is not: at a corner well above
+the note the copy is nearly the whole signal but phase-shifted, so the remainder is a sizeable
+phase-difference term that then gets the clipper's full gain, and a Tube Screamer measured as
+distorting bass harder than a full-range drive.
+
+Cascaded voicings split the gain between stages (`sqrt`), because two full-gain stages drive everything
+into a square wave and the DC blocker then centres it — which removes the even harmonics that are the
+whole reason to pick an asymmetric voicing.
+
+The engine registers the union of every voicing's parameters once; `DRIVE_CONTROLS` in
+`EffectRack.tsx` decides which are shown and what the original pedal called them.
+
 ### Spillover
 
 Switching the delay or reverb off stops *feeding* it but keeps the tail decaying, so a scene change

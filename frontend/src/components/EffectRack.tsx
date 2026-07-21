@@ -27,6 +27,19 @@ export const EFFECT_ACCENTS: Record<string, string> = {
 const ENUM_OPTIONS: Record<string, string[]> = {
   'input.mode': ['Mono - Input 1', 'Mono - Input 2', 'Mono - Sum both', 'Stereo'],
   'overdrive.oversampling': ['Mati', '2x', '4x', '8x'],
+  // Order fixed by drive::Type in DriveVoicing.h; the index is what presets
+  // store, so these may be appended to but never reordered.
+  'overdrive.type': [
+    'Custom',
+    'Tube Screamer',
+    'Bluesbreaker',
+    'Blues Driver',
+    'Transparent',
+    'OCD',
+    'Dumble',
+    'Marshall-in-a-Box',
+    'Clean Boost',
+  ],
   // Order fixed by DelayProcessor::SyncDivision; the index is what the engine
   // stores, so these labels must stay lined up with it.
   'delay.syncMode': ['Mati', '1/4', '1/8.', '1/8', '1/8T', '1/16'],
@@ -39,6 +52,50 @@ const ENUM_OPTIONS: Record<string, string[]> = {
  */
 const OVERRIDDEN_BY: Record<string, { parameter: string; whenNot: number }> = {
   'delay.timeMs': { parameter: 'syncMode', whenNot: 0 },
+};
+
+/**
+ * Which controls each drive voicing has, and what the original pedal called
+ * them.
+ *
+ * The engine registers the union of every voicing's parameters once, so the
+ * registry stays a flat stable set that presets and settings can rely on.
+ * Which of them a given voicing actually uses is a presentation question, and
+ * this is where it is answered. A Tube Screamer has no Bass knob and a
+ * Bluesbreaker's gain control says Gain, not Drive -- showing every parameter
+ * for every type would be showing controls that do nothing.
+ */
+const DRIVE_CONTROLS: Record<
+  number,
+  { show: string[]; labels?: Record<string, string> }
+> = {
+  0: { show: ['drivePct', 'levelPct', 'asymmetry', 'oversampling'] },
+  1: { show: ['drivePct', 'tonePct', 'levelPct', 'oversampling'] },
+  2: {
+    show: ['drivePct', 'tonePct', 'levelPct', 'oversampling'],
+    labels: { drivePct: 'Gain', levelPct: 'Volume' },
+  },
+  3: {
+    show: ['drivePct', 'tonePct', 'levelPct', 'oversampling'],
+    labels: { drivePct: 'Gain' },
+  },
+  4: {
+    show: ['drivePct', 'bassDb', 'trebleDb', 'levelPct', 'oversampling'],
+    labels: { drivePct: 'Gain' },
+  },
+  5: { show: ['drivePct', 'tonePct', 'levelPct', 'hpMode', 'oversampling'] },
+  6: {
+    show: ['drivePct', 'voicePct', 'tonePct', 'levelPct', 'oversampling'],
+    labels: { drivePct: 'Gain' },
+  },
+  7: {
+    show: ['drivePct', 'bassDb', 'midDb', 'trebleDb', 'levelPct', 'oversampling'],
+    labels: { drivePct: 'Gain' },
+  },
+  8: {
+    show: ['bright', 'drivePct', 'levelPct', 'oversampling'],
+    labels: { drivePct: 'Boost' },
+  },
 };
 
 export interface EffectRackProps {
@@ -70,6 +127,32 @@ export function EffectRack({
 }: EffectRackProps) {
   const accent = EFFECT_ACCENTS[effect.id] ?? '#4da3ff';
   const inactive = disabled || !effect.enabled;
+
+  // The overdrive registers every voicing's controls; only the selected
+  // voicing's are worth showing, under the names its original used.
+  const visibleParameters = (() => {
+    if (effect.id !== 'overdrive') return effect.parameters;
+
+    const type = Math.round(
+      Number(effect.parameters.find((p) => p.id === 'type')?.value ?? 0),
+    );
+    const layout = DRIVE_CONTROLS[type] ?? DRIVE_CONTROLS[0];
+
+    const ordered: ParameterDescriptor[] = [];
+
+    const typeParameter = effect.parameters.find((p) => p.id === 'type');
+    if (typeParameter) ordered.push(typeParameter);
+
+    for (const id of layout.show) {
+      const found = effect.parameters.find((p) => p.id === id);
+      if (!found) continue;
+
+      const label = layout.labels?.[id];
+      ordered.push(label ? { ...found, label } : found);
+    }
+
+    return ordered;
+  })();
 
   return (
     <section
@@ -106,7 +189,7 @@ export function EffectRack({
       <ToneCurve effect={effect} sampleRate={sampleRate} accent={accent} />
 
       <div className="rack__body">
-        {effect.parameters.map((parameter) => {
+        {visibleParameters.map((parameter) => {
           const enumKey = `${effect.id}.${parameter.id}`;
           const options = ENUM_OPTIONS[enumKey];
 

@@ -34,6 +34,51 @@ const overdrive: EffectDescriptor = {
       value: 0,
     },
     {
+      // Voicing selector. Which controls appear below it depends on this.
+      id: 'type',
+      label: 'Tipe',
+      unit: '',
+      min: 0,
+      max: 8,
+      step: 1,
+      default: 0,
+      type: 'float',
+      value: 0,
+    },
+    {
+      id: 'tonePct',
+      label: 'Tone',
+      unit: '%',
+      min: 0,
+      max: 100,
+      step: 1,
+      default: 50,
+      type: 'float',
+      value: 50,
+    },
+    {
+      id: 'bassDb',
+      label: 'Bass',
+      unit: 'dB',
+      min: -12,
+      max: 12,
+      step: 0.1,
+      default: 0,
+      type: 'float',
+      value: 0,
+    },
+    {
+      id: 'levelPct',
+      label: 'Level',
+      unit: '%',
+      min: 0,
+      max: 100,
+      step: 0.5,
+      default: 100,
+      type: 'float',
+      value: 100,
+    },
+    {
       // Enum: rendered as a labelled choice rather than a knob.
       id: 'oversampling',
       label: 'Oversampling',
@@ -47,6 +92,16 @@ const overdrive: EffectDescriptor = {
     },
   ],
 };
+
+/** The same overdrive with a different voicing selected. */
+function overdriveAs(type: number): EffectDescriptor {
+  return {
+    ...overdrive,
+    parameters: overdrive.parameters.map((p) =>
+      p.id === 'type' ? { ...p, value: type } : p,
+    ),
+  };
+}
 
 const cabinet: EffectDescriptor = {
   id: 'cabinet',
@@ -117,13 +172,85 @@ function renderRack(effect: EffectDescriptor) {
   return { onParameterChange, onEnabledChange };
 }
 
+describe('EffectRack drive voicings', () => {
+  it('offers the voicings by name rather than by number', () => {
+    renderRack(overdrive);
+
+    const select = screen.getByRole('combobox', { name: 'Tipe' });
+    expect(select).toHaveValue('0');
+    expect(screen.getByRole('option', { name: 'Tube Screamer' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Marshall-in-a-Box' })).toBeInTheDocument();
+  });
+
+  it('shows the Custom voicing its own controls', () => {
+    // Custom is the pre-voicing behaviour, so it keeps Asymmetry and has no
+    // Tone knob at all.
+    renderRack(overdrive);
+
+    expect(screen.getByRole('slider', { name: 'Asymmetry' })).toBeInTheDocument();
+    expect(screen.queryByRole('slider', { name: 'Tone' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('slider', { name: 'Bass' })).not.toBeInTheDocument();
+  });
+
+  it('gives a Tube Screamer a Tone knob and takes away Asymmetry', () => {
+    renderRack(overdriveAs(1));
+
+    expect(screen.getByRole('slider', { name: 'Tone' })).toBeInTheDocument();
+    expect(screen.queryByRole('slider', { name: 'Asymmetry' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('slider', { name: 'Bass' })).not.toBeInTheDocument();
+  });
+
+  it('calls the gain control what the original pedal called it', () => {
+    // A Bluesbreaker has a Gain knob and a Volume knob, not Drive and Level.
+    renderRack(overdriveAs(2));
+
+    expect(screen.getByRole('slider', { name: 'Gain' })).toBeInTheDocument();
+    expect(screen.getByRole('slider', { name: 'Volume' })).toBeInTheDocument();
+    expect(screen.queryByRole('slider', { name: 'Drive' })).not.toBeInTheDocument();
+  });
+
+  it('gives a transparent drive Bass and Treble instead of Tone', () => {
+    renderRack(overdriveAs(4));
+
+    expect(screen.getByRole('slider', { name: 'Bass' })).toBeInTheDocument();
+    expect(screen.queryByRole('slider', { name: 'Tone' })).not.toBeInTheDocument();
+  });
+
+  it('shows a clean boost almost nothing', () => {
+    renderRack(overdriveAs(8));
+
+    expect(screen.getByRole('slider', { name: 'Boost' })).toBeInTheDocument();
+    expect(screen.queryByRole('slider', { name: 'Tone' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('slider', { name: 'Asymmetry' })).not.toBeInTheDocument();
+  });
+
+  it('writes the voicing choice as its index', () => {
+    const { onParameterChange } = renderRack(overdrive);
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Tipe' }), {
+      target: { value: '5' },
+    });
+
+    expect(onParameterChange).toHaveBeenCalledWith('overdrive', 'type', 5);
+  });
+
+  it('falls back to the Custom layout for a voicing it does not know', () => {
+    // A preset saved by a newer build must still render something usable
+    // rather than an empty card.
+    renderRack(overdriveAs(99));
+
+    expect(screen.getByRole('slider', { name: 'Drive' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Tipe' })).toBeInTheDocument();
+  });
+});
+
 describe('EffectRack', () => {
   it('renders every parameter the engine advertises', () => {
     renderRack(overdrive);
 
     expect(screen.getByRole('slider', { name: 'Drive' })).toBeInTheDocument();
     expect(screen.getByRole('slider', { name: 'Asymmetry' })).toBeInTheDocument();
-    expect(screen.getByRole('combobox')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Oversampling' })).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Overdrive on/off' })).toBeInTheDocument();
   });
 
@@ -138,7 +265,7 @@ describe('EffectRack', () => {
   it('renders an enum parameter as named choices, not a raw number', () => {
     const { onParameterChange } = renderRack(overdrive);
 
-    const select = screen.getByRole('combobox');
+    const select = screen.getByRole('combobox', { name: 'Oversampling' });
     expect(screen.getByRole('option', { name: 'Mati' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: '8x' })).toBeInTheDocument();
 

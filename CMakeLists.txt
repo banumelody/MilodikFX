@@ -93,6 +93,7 @@ set(MILODIKFX_ENGINE_SOURCES
   src/dsp/GainProcessor.cpp
   src/dsp/InputTrimProcessor.h
   src/dsp/InputTrimProcessor.cpp
+  src/dsp/DriveVoicing.h
   src/dsp/OverdriveProcessor.h
   src/dsp/OverdriveProcessor.cpp
   src/dsp/EQProcessor.h
@@ -366,6 +367,7 @@ target_sources(MilodikFX_tests
     tests/SceneTests.cpp
     tests/UndoTests.cpp
     tests/InputTrimTests.cpp
+    tests/DriveVoicingTests.cpp
     ${MILODIKFX_ENGINE_SOURCES}
 )
 

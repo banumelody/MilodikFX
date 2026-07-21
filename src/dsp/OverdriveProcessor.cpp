@@ -13,6 +13,16 @@ void OverdriveProcessor::prepareToPlay (double sampleRate, int samplesPerBlock, 
 
     preparedChannels = juce::jmax (1, numChannels);
     preparedBlockSize = juce::jmax (1, samplesPerBlock);
+    preparedRate = rate;
+
+    // Force a rebuild: the voicing filters are rate-dependent.
+    builtForRate = 0.0;
+
+    for (auto& state : voiceStates)
+    {
+        state.reset();
+        state.dc.prepare (rate * 8.0);
+    }
 
     // Build every factor now. Selecting one later is then just an index read,
     // with no chance of allocating while audio is running.
@@ -88,6 +98,199 @@ void OverdriveProcessor::applyDrive (float* const* channels,
             const auto clipped = 1.5f * (softClip (x * driveGain + bias) - biasOutput);
 
             channels[ch][i] = ((1.0f - amount) * x) + (amount * clipped);
+        }
+    }
+}
+
+void OverdriveProcessor::updateVoicingIfNeeded (double rate) noexcept
+{
+    const auto t = type.load (std::memory_order_relaxed);
+    const auto tone = tonePercent.load (std::memory_order_relaxed);
+    const auto voice = voicePercent.load (std::memory_order_relaxed);
+    const auto bass = bassDb.load (std::memory_order_relaxed);
+    const auto mid = midDb.load (std::memory_order_relaxed);
+    const auto treble = trebleDb.load (std::memory_order_relaxed);
+    const auto hp = highPeakMode.load (std::memory_order_relaxed);
+    const auto isBright = bright.load (std::memory_order_relaxed);
+
+    if (t == builtForType && tone == builtForTone && voice == builtForVoice
+        && bass == builtForBass && mid == builtForMid && treble == builtForTreble
+        && hp == builtForHp && isBright == builtForBright && rate == builtForRate)
+        return;
+
+    builtForType = t;
+    builtForTone = tone;
+    builtForVoice = voice;
+    builtForBass = bass;
+    builtForMid = mid;
+    builtForTreble = treble;
+    builtForHp = hp;
+    builtForBright = isBright;
+    builtForRate = rate;
+
+    const auto& v = drive::voicingFor (t);
+
+    // Where the low end leaves the clipper's path. Dumble's Voice control moves
+    // this corner, which is what makes it go from thick to nasal; OCD's HP mode
+    // drops it so far more low end is driven.
+    auto splitHz = v.splitHz;
+
+    if (t == drive::dumble)
+        splitHz = 200.0f + (voice / 100.0f) * 700.0f;
+    else if (t == drive::ocd && hp)
+        splitHz = 90.0f;
+    else if (t == drive::transparent)
+        // The Klon's Bass control is a pre-clip low cut rather than a shelf.
+        splitHz = juce::jlimit (20.0f, 400.0f, 40.0f - bass * 12.0f);
+
+    // Two real filters rather than "subtract the low-passed copy". The
+    // subtraction looked equivalent and was not: at a corner well above the
+    // note, the low-passed copy is nearly the whole signal but phase-shifted, so
+    // the remainder was a sizeable phase-difference term that then got the
+    // clipper's full 40x. A Tube Screamer measured as distorting bass *harder*
+    // than a full-range drive, which is precisely backwards. The circuit uses
+    // separate networks for the two paths, and so does this.
+    splitCoeffs = splitHz > 0.0f ? biquad::makeLowPass (rate, splitHz, 0.707) : BiquadCoeffs {};
+    splitHighCoeffs = splitHz > 0.0f ? biquad::makeHighPass (rate, splitHz, 0.707) : BiquadCoeffs {};
+
+    const auto hasTone = v.toneMaxHz > v.toneMinHz;
+    const auto toneHz = hasTone
+                            ? v.toneMinHz + (tone / 100.0f) * (v.toneMaxHz - v.toneMinHz)
+                            : 0.0f;
+
+    toneCoeffs = hasTone ? biquad::makeLowPass (rate, toneHz, 0.707) : BiquadCoeffs {};
+
+    auto presenceHz = v.presenceHz;
+    auto presenceDb = v.presenceDb;
+
+    if (t == drive::cleanBoost && isBright)
+    {
+        // The EP booster's lift is the reason people buy them.
+        presenceHz = 3000.0f;
+        presenceDb = 2.5f;
+    }
+
+    presenceCoeffs = presenceDb != 0.0f && presenceHz > 0.0f
+                         ? biquad::makeHighShelf (rate, presenceHz, presenceDb)
+                         : BiquadCoeffs {};
+
+    // Marshall-in-a-box gets a real three-band stack after the clipper; the
+    // transparent voicing only uses the treble cut.
+    if (t == drive::marshallInABox)
+    {
+        bassCoeffs = biquad::makeLowShelf (rate, 100.0f, bass);
+        midCoeffs = biquad::makePeak (rate, 650.0f, 0.8, mid);
+        trebleCoeffs = biquad::makeHighShelf (rate, 3000.0f, treble);
+    }
+    else if (t == drive::transparent)
+    {
+        bassCoeffs = BiquadCoeffs {};
+        midCoeffs = BiquadCoeffs {};
+        trebleCoeffs = biquad::makeHighShelf (rate, 2500.0f, treble);
+    }
+    else
+    {
+        bassCoeffs = BiquadCoeffs {};
+        midCoeffs = BiquadCoeffs {};
+        trebleCoeffs = BiquadCoeffs {};
+    }
+}
+
+void OverdriveProcessor::applyVoicedDrive (float* const* channels,
+                                           int numChannels,
+                                           int numSamples,
+                                           double rate,
+                                           float driveTarget) noexcept
+{
+    updateVoicingIfNeeded (rate);
+
+    const auto t = type.load (std::memory_order_relaxed);
+    const auto& v = drive::voicingFor (t);
+
+    const auto usable = juce::jmin (numChannels, kMaxVoiceChannels);
+
+    auto driveMax = v.driveMax;
+
+    if (t == drive::ocd && highPeakMode.load (std::memory_order_relaxed))
+        driveMax *= 1.4f;
+
+    const auto splitting = v.splitHz > 0.0f || t == drive::transparent;
+    const auto hasTone = v.toneMaxHz > v.toneMinHz;
+    const auto hasPresence = presenceCoeffs.b0 != 1.0f || presenceCoeffs.b1 != 0.0f;
+    const auto stack = t == drive::marshallInABox;
+    const auto hasTreble = stack || t == drive::transparent;
+
+    const auto outputGain = juce::Decibels::decibelsToGain (v.outputDb);
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        const auto amount = smoothedDrive.next (driveTarget);
+        const auto asym = smoothedAsymmetry.next (asymmetry.load (std::memory_order_relaxed));
+
+        // Quadratic so the bottom of the knob stays usable across a range that
+        // runs from a clean boost's 3x to an OCD's 60x.
+        const auto driveGain = 1.0f + amount * amount * (driveMax - 1.0f);
+
+        const auto stageGain = v.stages > 1 ? std::sqrt (driveGain) : driveGain;
+
+        const auto bias = juce::jlimit (0.0f, 1.0f, v.bias + asym * kMaxBias);
+        const auto biasOutput = applyCurve (v.curve, bias);
+
+        // The clean blend rises with gain, which is what keeps a transparent
+        // drive sounding like the guitar rather than like the pedal.
+        const auto blend = v.cleanBlend * amount;
+
+        for (int ch = 0; ch < usable; ++ch)
+        {
+            auto& state = voiceStates[(size_t) ch];
+
+            const auto dryIn = channels[ch][i];
+
+            // Split: the low end goes around the clipper and is added back
+            // clean. This, not an EQ curve, is where a Tube Screamer's mid-hump
+            // actually comes from.
+            const auto low = splitting ? state.split.process (splitCoeffs, dryIn) : 0.0f;
+            auto x = splitting ? state.splitHigh.process (splitHighCoeffs, dryIn) : dryIn;
+
+            // Cascaded stages split the gain between them rather than each
+            // taking the lot. Two full-gain stages drove everything into a
+            // square wave, and once the DC blocker centred that the asymmetry
+            // stopped producing any even harmonics at all -- the very thing a
+            // two-stage voicing is chosen for. A real cascade is gentler per
+            // stage and compounds; this matches that.
+            x = applyCurve (v.curve, x * stageGain + bias) - biasOutput;
+
+            if (v.stages > 1)
+                x = applyCurve (v.curve, x * stageGain + bias) - biasOutput;
+
+            x = state.dc.process (x);
+
+            if (hasTone)
+                x = state.tone.process (toneCoeffs, x);
+
+            if (hasPresence)
+                x = state.presence.process (presenceCoeffs, x);
+
+            if (stack)
+            {
+                x = state.bass.process (bassCoeffs, x);
+                x = state.mid.process (midCoeffs, x);
+            }
+
+            if (hasTreble)
+                x = state.treble.process (trebleCoeffs, x);
+
+            auto wet = (x + low) * outputGain;
+
+            if (blend > 0.0f)
+                wet = wet * (1.0f - blend) + dryIn * blend;
+
+            if (! std::isfinite (wet))
+                wet = 0.0f;
+
+            // The Drive knob still crossfades to clean at the bottom, so a
+            // voicing at zero drive is the signal it was given.
+            channels[ch][i] = ((1.0f - amount) * dryIn) + (amount * wet);
         }
     }
 }
@@ -170,9 +373,20 @@ void OverdriveProcessor::processBlock (juce::AudioBuffer<float>& buffer)
         for (int ch = 0; ch < usableChannels; ++ch)
             upPointers[ch] = upBlock.getChannelPointer ((size_t) ch);
 
-        applyDrive (upPointers, usableChannels, upSamples, driveTarget, asymmetryTarget);
+        // The voicing filters run inside the drive path, so their coefficients
+        // have to be built for the oversampled rate, not the device rate.
+        const auto upRate = preparedRate * (double) (upSamples / juce::jmax (1, numSamples));
+
+        if (drive::isVoiced (type.load (std::memory_order_relaxed)))
+            applyVoicedDrive (upPointers, usableChannels, upSamples, upRate, driveTarget);
+        else
+            applyDrive (upPointers, usableChannels, upSamples, driveTarget, asymmetryTarget);
 
         oversampler->processSamplesDown (block);
+    }
+    else if (drive::isVoiced (type.load (std::memory_order_relaxed)))
+    {
+        applyVoicedDrive (channels, numChannels, numSamples, preparedRate, driveTarget);
     }
     else
     {
@@ -191,6 +405,89 @@ void OverdriveProcessor::reset()
     smoothedDrive.snapTo (driveAmount.load (std::memory_order_relaxed));
     smoothedAsymmetry.snapTo (asymmetry.load (std::memory_order_relaxed));
     smoothedLevel.snapTo (levelLinear.load (std::memory_order_relaxed));
+
+    for (auto& state : voiceStates)
+        state.reset();
+}
+
+void OverdriveProcessor::setType (int newType) noexcept
+{
+    type.store (juce::jlimit (0, drive::numTypes - 1, newType), std::memory_order_relaxed);
+}
+
+int OverdriveProcessor::getType() const noexcept
+{
+    return type.load (std::memory_order_relaxed);
+}
+
+void OverdriveProcessor::setTonePercent (float percent) noexcept
+{
+    tonePercent.store (juce::jlimit (0.0f, 100.0f, percent), std::memory_order_relaxed);
+}
+
+float OverdriveProcessor::getTonePercent() const noexcept
+{
+    return tonePercent.load (std::memory_order_relaxed);
+}
+
+void OverdriveProcessor::setVoicePercent (float percent) noexcept
+{
+    voicePercent.store (juce::jlimit (0.0f, 100.0f, percent), std::memory_order_relaxed);
+}
+
+float OverdriveProcessor::getVoicePercent() const noexcept
+{
+    return voicePercent.load (std::memory_order_relaxed);
+}
+
+void OverdriveProcessor::setBassDb (float db) noexcept
+{
+    bassDb.store (juce::jlimit (-12.0f, 12.0f, db), std::memory_order_relaxed);
+}
+
+float OverdriveProcessor::getBassDb() const noexcept
+{
+    return bassDb.load (std::memory_order_relaxed);
+}
+
+void OverdriveProcessor::setMidDb (float db) noexcept
+{
+    midDb.store (juce::jlimit (-12.0f, 12.0f, db), std::memory_order_relaxed);
+}
+
+float OverdriveProcessor::getMidDb() const noexcept
+{
+    return midDb.load (std::memory_order_relaxed);
+}
+
+void OverdriveProcessor::setTrebleDb (float db) noexcept
+{
+    trebleDb.store (juce::jlimit (-12.0f, 12.0f, db), std::memory_order_relaxed);
+}
+
+float OverdriveProcessor::getTrebleDb() const noexcept
+{
+    return trebleDb.load (std::memory_order_relaxed);
+}
+
+void OverdriveProcessor::setHighPeakMode (bool shouldUseHp) noexcept
+{
+    highPeakMode.store (shouldUseHp, std::memory_order_relaxed);
+}
+
+bool OverdriveProcessor::isHighPeakMode() const noexcept
+{
+    return highPeakMode.load (std::memory_order_relaxed);
+}
+
+void OverdriveProcessor::setBright (bool shouldBrighten) noexcept
+{
+    bright.store (shouldBrighten, std::memory_order_relaxed);
+}
+
+bool OverdriveProcessor::isBright() const noexcept
+{
+    return bright.load (std::memory_order_relaxed);
 }
 
 void OverdriveProcessor::setDrivePercent (float percent) noexcept

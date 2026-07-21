@@ -280,9 +280,18 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         EffectDescriptor e;
         e.id = "overdrive";
         e.label = "Overdrive";
-        e.description = "Soft clipper kubik, dengan oversampling";
+        e.description = "Pilih voicing pedalnya - kontrol menyesuaikan tipe";
         e.isEnabled = [p] { return p->isEnabled(); };
         e.setEnabled = [p] (bool v) { p->setEnabled (v); };
+
+        // Every voicing's controls are registered here, once. Which of them a
+        // given type actually uses is a presentation question, so the UI hides
+        // the rest -- the registry stays a flat, stable set of ids that presets
+        // and settings can rely on.
+        e.parameters.push_back (makeParam ("type", "Tipe", "", 0.0f,
+                                           (float) (drive::numTypes - 1), 1.0f, 0.0f,
+                                           [p] { return (float) p->getType(); },
+                                           [p] (float v) { p->setType ((int) std::lround (v)); }));
         e.parameters.push_back (makeParam ("drivePct", "Drive", "%", 0.0f, 100.0f, 0.5f, 0.0f,
                                            [p] { return p->getDrivePercent(); },
                                            [p] (float v) { p->setDrivePercent (v); }));
@@ -297,6 +306,27 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         e.parameters.push_back (makeParam ("oversampling", "Oversampling", "x", 0.0f, 3.0f, 1.0f, 1.0f,
                                            [p] { return (float) p->getOversamplingIndex(); },
                                            [p] (float v) { p->setOversamplingIndex ((int) std::lround (v)); }));
+        e.parameters.push_back (makeParam ("tonePct", "Tone", "%", 0.0f, 100.0f, 1.0f, 50.0f,
+                                           [p] { return p->getTonePercent(); },
+                                           [p] (float v) { p->setTonePercent (v); }));
+        e.parameters.push_back (makeParam ("voicePct", "Voice", "%", 0.0f, 100.0f, 1.0f, 50.0f,
+                                           [p] { return p->getVoicePercent(); },
+                                           [p] (float v) { p->setVoicePercent (v); }));
+        e.parameters.push_back (makeParam ("bassDb", "Bass", "dB", -12.0f, 12.0f, 0.1f, 0.0f,
+                                           [p] { return p->getBassDb(); },
+                                           [p] (float v) { p->setBassDb (v); }));
+        e.parameters.push_back (makeParam ("midDb", "Mid", "dB", -12.0f, 12.0f, 0.1f, 0.0f,
+                                           [p] { return p->getMidDb(); },
+                                           [p] (float v) { p->setMidDb (v); }));
+        e.parameters.push_back (makeParam ("trebleDb", "Treble", "dB", -12.0f, 12.0f, 0.1f, 0.0f,
+                                           [p] { return p->getTrebleDb(); },
+                                           [p] (float v) { p->setTrebleDb (v); }));
+        e.parameters.push_back (makeToggle ("hpMode", "HP Mode", false,
+                                            [p] { return p->isHighPeakMode(); },
+                                            [p] (bool v) { p->setHighPeakMode (v); }));
+        e.parameters.push_back (makeToggle ("bright", "Bright", false,
+                                            [p] { return p->isBright(); },
+                                            [p] (bool v) { p->setBright (v); }));
         registry.addEffect (std::move (e));
     }
 

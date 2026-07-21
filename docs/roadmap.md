@@ -27,6 +27,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - P3-6 Installer — Inno Setup terpasang, `MilodikFX-0.10.0-setup.exe` diverifikasi pasang → jalan → copot bersih
 - P4-0 Input gain / trim — `InputTrimProcessor` di depan noise gate, `input.gainDb`, meter pasca-trim
 - P4-2 Spillover ekor delay/reverb — fade hanya saat dimatikan, blok berhenti setelah ekor < −80 dB
+- P4-1 Tipe overdrive — 8 voicing sebagai tabel data (`DriveVoicing.h`), kontrol UI menyesuaikan tipe
 - P1-2 Overdrive asimetri + oversampling adjustable
 - P1-3 Delay damping + ping-pong
 - P1-4 Compressor parallel mix
