@@ -10,6 +10,14 @@ export interface LevelMeterProps {
   floorDb?: number;
   /** Top of the scale in dB; headroom above 0 makes clipping visible. */
   ceilingDb?: number;
+  /**
+   * The level before any trim was applied, when that differs.
+   *
+   * Only used to warn. Trimming a hot input down makes the bar look healthy
+   * while the converter is still clipping, and no digital trim can undo that --
+   * so the warning has to come from the untrimmed figure.
+   */
+  sourceDb?: number;
 }
 
 /** How long a peak marker stays before it starts falling, in ms. */
@@ -31,13 +39,15 @@ export function LevelMeter({
   silenceDb = -65,
   floorDb = -60,
   ceilingDb = 6,
+  sourceDb,
 }: LevelMeterProps) {
   const span = ceilingDb - floorDb;
   const clamped = Math.min(ceilingDb, Math.max(floorDb, db));
   const ratio = (clamped - floorDb) / span;
 
   const zeroRatio = (0 - floorDb) / span;
-  const isHot = db > -1;
+  const sourceClipping = sourceDb !== undefined && sourceDb > -0.5;
+  const isHot = db > -1 || sourceClipping;
   const isLoud = db > -12;
 
   const [peakDb, setPeakDb] = useState(floorDb);
@@ -64,7 +74,9 @@ export function LevelMeter({
     setPeakDb(fallen);
   }, [db]);
 
-  const readout = db <= silenceDb ? '--' : `${db.toFixed(1)} dB`;
+  // "CLIP" wins over the number: a trimmed-down reading looks perfectly healthy
+  // and would hide the one problem the trim cannot solve.
+  const readout = sourceClipping ? 'CLIP' : db <= silenceDb ? '--' : `${db.toFixed(1)} dB`;
   const peakRatio = (Math.min(ceilingDb, Math.max(floorDb, peakDb)) - floorDb) / span;
   const showPeak = peakDb > silenceDb;
 

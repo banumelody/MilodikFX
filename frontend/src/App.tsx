@@ -51,6 +51,7 @@ const CPU_HISTORY_LENGTH = 600;
 
 const IDLE_LEVELS: Levels = {
   inputLevel: -100,
+  chainInputLevel: -100,
   outputLevel: -100,
   gateGain: 1,
   compressorReductionDb: 0,
@@ -472,7 +473,15 @@ export function App() {
         </div>
 
         <div className="topbar__meters">
-          <LevelMeter label="Input" db={levels.inputLevel} />
+          {/* Post-trim, because that is what the Input knob is dialled against
+              and what the chain actually receives. The pre-trim figure is still
+              passed in so a clipping interface is reported rather than hidden
+              behind a trim that pulled the reading back down. */}
+          <LevelMeter
+            label="Input"
+            db={levels.chainInputLevel}
+            sourceDb={levels.inputLevel}
+          />
           <LevelMeter label="Output" db={levels.outputLevel} />
           <ReductionMeter label="Comp" db={levels.compressorReductionDb} />
           <ReductionMeter label="Limiter" db={levels.limiterReductionDb} />

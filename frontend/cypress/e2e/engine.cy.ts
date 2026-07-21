@@ -627,6 +627,71 @@ describe('MilodikFX UI against a live engine', () => {
     });
   });
 
+  it('offers an input trim ahead of the whole chain', () => {
+    cy.request('/api/effects/input').then(({ body }) => {
+      const gain = body.parameters.find((p: { id: string }) => p.id === 'gainDb');
+
+      expect(gain, 'input exposes a gain').to.not.be.undefined;
+      expect(gain.min).to.eq(-24);
+      expect(gain.max).to.eq(24);
+      // Always in the path: there is nothing to bypass on an input trim.
+      expect(body.toggleable).to.eq(false);
+    });
+
+    cy.request('PUT', '/api/effects/input/gainDb', { value: -6 });
+    cy.reload();
+
+    cy.get('section[aria-label="Input"] [role="slider"][aria-label="Gain"]')
+      .should('have.attr', 'aria-valuenow', '-6');
+
+    cy.request('PUT', '/api/effects/input/gainDb', { value: 0 });
+  });
+
+  it('reports what the chain receives, not just what the interface sent', () => {
+    // Without this the Input knob has no feedback at all: the meter is measured
+    // before the chain runs, so a chain-stage trim would be invisible on it.
+    cy.request('PUT', '/api/effects/input/gainDb', { value: 0 });
+    cy.wait(300);
+
+    cy.request('/api/levels').then(({ body }) => {
+      expect(body).to.have.property('chainInputLevel');
+      expect(body.chainInputLevel).to.be.closeTo(body.inputLevel, 0.01);
+
+      cy.request('PUT', '/api/effects/input/gainDb', { value: 12 });
+      cy.wait(300);
+
+      cy.request('/api/levels').then((next) => {
+        // Trim is a pure gain, so the trimmed figure is the raw one plus 12 dB
+        // -- unless the raw signal is at the meter floor, where it stays.
+        const expected = Math.max(next.body.floorDb, next.body.inputLevel + 12);
+        expect(next.body.chainInputLevel).to.be.closeTo(expected, 0.01);
+      });
+    });
+
+    cy.request('PUT', '/api/effects/input/gainDb', { value: 0 });
+  });
+
+  it('lets the delay and reverb tails ring on by default', () => {
+    // Spillover is what makes a scene change mid-song sound smooth instead of
+    // chopping the repeats dead.
+    for (const effect of ['delay', 'reverb']) {
+      cy.request(`/api/effects/${effect}`).then(({ body }) => {
+        const spill = body.parameters.find((p: { id: string }) => p.id === 'spillover');
+
+        expect(spill, `${effect} exposes spillover`).to.not.be.undefined;
+        expect(spill.type).to.eq('bool');
+        expect(spill.default).to.eq(1);
+      });
+    }
+
+    cy.request('PUT', '/api/effects/delay/spillover', { value: 0 });
+    cy.request('/api/effects/delay/spillover').then(({ body }) => {
+      expect(Number(body.value)).to.eq(0);
+    });
+
+    cy.request('PUT', '/api/effects/delay/spillover', { value: 1 });
+  });
+
   it('reports MIDI state even with no controller attached', () => {
     // A build machine has no MIDI hardware, so the contract that has to hold is
     // that the endpoint answers with an empty device list rather than failing.

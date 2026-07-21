@@ -138,6 +138,8 @@ void ReverbProcessor::prepareToPlay (double sampleRateIn, int samplesPerBlock, i
         allpassR[(size_t) i].setFeedback (0.5f);
     }
 
+    activeStep = (float) (1.0 / juce::jmax (1.0, sampleRate * (double) kSpilloverFadeSeconds));
+
     reset();
 
     // Delay lengths just changed, so the RT60-derived feedbacks must be redone.
@@ -183,8 +185,33 @@ void ReverbProcessor::updateParametersIfNeeded() noexcept
 
 void ReverbProcessor::processBlock (juce::AudioBuffer<float>& buffer)
 {
-    if (! enabled.load (std::memory_order_relaxed))
+    const auto wantActive = enabled.load (std::memory_order_relaxed);
+
+    if (! spillover.load (std::memory_order_relaxed))
+    {
+        // Hard switch, exactly as it behaved before spillover existed.
+        if (! wantActive)
+        {
+            activeAmount = 0.0f;
+            tailIdle = true;
+            return;
+        }
+
+        activeAmount = 1.0f;
+    }
+    else if (! wantActive && tailIdle)
+    {
+        // Switched off and the room has already decayed to nothing.
         return;
+    }
+
+    if (wantActive)
+    {
+        // Instant on, exactly as before spillover existed, so an enabled reverb
+        // is bit-identical to the old code. Only the fade out is new.
+        activeAmount = 1.0f;
+        tailIdle = false;
+    }
 
     updateParametersIfNeeded();
 
@@ -205,17 +232,55 @@ void ReverbProcessor::processBlock (juce::AudioBuffer<float>& buffer)
             for (int ch = 0; ch < irChannels; ++ch)
                 irDryCopy.copyFrom (ch, 0, buffer, ch, 0, numSamples);
 
+            // Where the fade will have reached by the end of this block. The
+            // convolution takes a ramp rather than a per-sample factor because
+            // it consumes the whole buffer in one call.
+            const auto startActive = activeAmount;
+            const auto endActive = wantActive
+                                       ? 1.0f
+                                       : juce::jmax (0.0f, activeAmount - activeStep * (float) numSamples);
+
+            if (startActive < 1.0f || endActive < 1.0f)
+                for (int ch = 0; ch < irChannels; ++ch)
+                    buffer.applyGainRamp (ch, 0, numSamples, startActive, endActive);
+
             if (irEngine.process (buffer))
             {
                 const auto mix = dryWetMix.load (std::memory_order_relaxed);
                 auto* const* wet = buffer.getArrayOfWritePointers();
 
+                const auto activeStepPerSample = numSamples > 0
+                                                     ? (endActive - startActive) / (float) numSamples
+                                                     : 0.0f;
+
+                auto tailPeak = 0.0f;
+
                 for (int ch = 0; ch < irChannels; ++ch)
+                {
                     for (int i = 0; i < numSamples; ++i)
-                        wet[ch][i] = irDryCopy.getSample (ch, i) * (1.0f - mix) + wet[ch][i] * mix;
+                    {
+                        const auto active = startActive + activeStepPerSample * (float) i;
+
+                        tailPeak = juce::jmax (tailPeak, std::abs (wet[ch][i]));
+
+                        wet[ch][i] = irDryCopy.getSample (ch, i) * (1.0f - mix * active)
+                                     + wet[ch][i] * mix;
+                    }
+                }
+
+                activeAmount = endActive;
+
+                if (activeAmount <= 0.0f && tailPeak < kTailSilence)
+                    tailIdle = true;
 
                 return;
             }
+
+            // Undo the fade before handing over: the algorithmic path applies
+            // its own, and a doubly-faded input would decay twice as fast.
+            if (startActive < 1.0f || endActive < 1.0f)
+                for (int ch = 0; ch < irChannels; ++ch)
+                    buffer.copyFrom (ch, 0, irDryCopy, ch, 0, numSamples);
 
             // Convolution declined the block, so put the dry signal back before
             // handing over to the algorithmic path.
@@ -227,12 +292,21 @@ void ReverbProcessor::processBlock (juce::AudioBuffer<float>& buffer)
     auto* const* channels = buffer.getArrayOfWritePointers();
     const auto hasRight = numChannels > 1;
 
+    auto tailPeak = 0.0f;
+
     for (int i = 0; i < numSamples; ++i)
     {
+        // Faded rather than switched: the dry gain moving back to full would
+        // otherwise step.
+        if (! wantActive)
+            activeAmount = juce::jmax (0.0f, activeAmount - activeStep);
+
         const auto inputL = channels[0][i];
         const auto inputR = hasRight ? channels[1][i] : inputL;
 
-        const auto input = (inputL + inputR) * kFixedGain;
+        // Only the feed is faded; the comb and allpass network keeps running,
+        // which is what lets the room ring on instead of stopping dead.
+        const auto input = (inputL + inputR) * kFixedGain * activeAmount;
 
         float outL = 0.0f;
         float outR = 0.0f;
@@ -249,11 +323,20 @@ void ReverbProcessor::processBlock (juce::AudioBuffer<float>& buffer)
             outR = allpassR[(size_t) j].process (outR);
         }
 
-        channels[0][i] = outL * wet1 + outR * wet2 + inputL * dry;
+        tailPeak = juce::jmax (tailPeak, std::abs (outL), std::abs (outR));
+
+        // Dry returns to full as the reverb fades out, so switching off
+        // restores the unaffected signal rather than leaving it attenuated.
+        const auto dryGain = 1.0f - (1.0f - dry) * activeAmount;
+
+        channels[0][i] = outL * wet1 + outR * wet2 + inputL * dryGain;
 
         if (hasRight)
-            channels[1][i] = outR * wet1 + outL * wet2 + inputR * dry;
+            channels[1][i] = outR * wet1 + outL * wet2 + inputR * dryGain;
     }
+
+    if (activeAmount <= 0.0f && tailPeak < kTailSilence)
+        tailIdle = true;
 }
 
 void ReverbProcessor::reset()
@@ -264,6 +347,20 @@ void ReverbProcessor::reset()
     for (auto& a : allpassR) a.reset();
 
     irEngine.reset();
+
+    const auto on = enabled.load (std::memory_order_relaxed);
+    activeAmount = on ? 1.0f : 0.0f;
+    tailIdle = ! on;
+}
+
+void ReverbProcessor::setSpillover (bool shouldSpill) noexcept
+{
+    spillover.store (shouldSpill, std::memory_order_relaxed);
+}
+
+bool ReverbProcessor::isSpillover() const noexcept
+{
+    return spillover.load (std::memory_order_relaxed);
 }
 
 void ReverbProcessor::setUseImpulseResponse (bool shouldUseIr) noexcept

@@ -33,6 +33,8 @@ void DelayProcessor::prepareToPlay (double sampleRateIn, int, int)
     smoothedFeedback.reset (sampleRate, kLevelSmoothingSeconds, feedbackPercent.load (std::memory_order_relaxed) / 100.0f);
     smoothedMix.reset (sampleRate, kLevelSmoothingSeconds, mixPercent.load (std::memory_order_relaxed) / 100.0f);
 
+    activeStep = (float) (1.0 / juce::jmax (1.0, sampleRate * (double) kSpilloverFadeSeconds));
+
     reset();
 
     prepared = true;
@@ -40,8 +42,39 @@ void DelayProcessor::prepareToPlay (double sampleRateIn, int, int)
 
 void DelayProcessor::processBlock (juce::AudioBuffer<float>& buffer)
 {
-    if (! prepared || ! enabled.load (std::memory_order_relaxed))
+    if (! prepared)
         return;
+
+    const auto wantActive = enabled.load (std::memory_order_relaxed);
+
+    if (! spillover.load (std::memory_order_relaxed))
+    {
+        // Hard switch, exactly as it behaved before spillover existed.
+        if (! wantActive)
+        {
+            activeAmount = 0.0f;
+            tailIdle = true;
+            return;
+        }
+
+        activeAmount = 1.0f;
+    }
+    else if (! wantActive && tailIdle)
+    {
+        // Switched off and the tail has already decayed, so there is nothing
+        // left to ring. Costs one atomic read per block.
+        return;
+    }
+
+    if (wantActive)
+    {
+        // Instant on. Only the fade *out* is new; switching on stays exactly as
+        // it was, so an enabled delay is bit-identical to the pre-spillover
+        // code, and the first note after stomping the switch is delayed in full
+        // rather than fading in over 20 ms.
+        activeAmount = 1.0f;
+        tailIdle = false;
+    }
 
     const auto numSamples = buffer.getNumSamples();
     const auto numCh = juce::jmin (buffer.getNumChannels(), kMaxChannels);
@@ -75,8 +108,17 @@ void DelayProcessor::processBlock (juce::AudioBuffer<float>& buffer)
     // so ping-pong can cross the feedback without reading a half-updated line.
     float delayed[kMaxChannels] {};
 
+    // Loudest tail sample this block, so a decayed delay can stop processing.
+    auto tailPeak = 0.0f;
+
     for (int i = 0; i < numSamples; ++i)
     {
+        // Faded rather than switched: the dry signal returning from (1 - mix)
+        // to full would otherwise step, and the newest samples entering the line
+        // would jump, which shows up as a click one delay-time later.
+        if (! wantActive)
+            activeAmount = juce::jmax (0.0f, activeAmount - activeStep);
+
         const auto delaySamples = juce::jlimit (1.0f, (float) (kLineLength - 2),
                                                 smoothedDelaySamples.next (delayTarget));
         const auto feedback = smoothedFeedback.next (feedbackTarget);
@@ -114,19 +156,28 @@ void DelayProcessor::processBlock (juce::AudioBuffer<float>& buffer)
 
             const auto input = channels[ch][i];
 
-            auto written = input + toFeedBack;
+            // Only the input is faded out; the feedback path keeps running, and
+            // that is what makes the tail ring on rather than stop dead.
+            auto written = input * activeAmount + toFeedBack;
 
             if (! std::isfinite (written))
                 written = 0.0f;
 
             line[(size_t) writeIndex] = juce::jlimit (-4.0f, 4.0f, written);
 
-            channels[ch][i] = input * (1.0f - mix) + delayed[ch] * mix;
+            // Dry returns to full as the delay fades out, so switching off
+            // restores the unaffected signal rather than leaving it attenuated.
+            channels[ch][i] = input * (1.0f - mix * activeAmount) + delayed[ch] * mix;
+
+            tailPeak = juce::jmax (tailPeak, std::abs (delayed[ch]));
         }
 
         if (++writeIndex >= kLineLength)
             writeIndex = 0;
     }
+
+    if (activeAmount <= 0.0f && tailPeak < kTailSilence)
+        tailIdle = true;
 }
 
 void DelayProcessor::reset()
@@ -138,6 +189,20 @@ void DelayProcessor::reset()
         state.reset();
 
     writeIndex = 0;
+
+    const auto on = enabled.load (std::memory_order_relaxed);
+    activeAmount = on ? 1.0f : 0.0f;
+    tailIdle = ! on;
+}
+
+void DelayProcessor::setSpillover (bool shouldSpill) noexcept
+{
+    spillover.store (shouldSpill, std::memory_order_relaxed);
+}
+
+bool DelayProcessor::isSpillover() const noexcept
+{
+    return spillover.load (std::memory_order_relaxed);
 }
 
 void DelayProcessor::setDampingHz (float hz) noexcept

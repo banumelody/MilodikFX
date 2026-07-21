@@ -38,7 +38,10 @@ export interface EffectsResponse {
 }
 
 export interface Levels {
+  /** What the interface delivered, before the input trim. */
   inputLevel: number;
+  /** What the chain actually receives, after the input trim. */
+  chainInputLevel: number;
   outputLevel: number;
   gateGain: number;
   compressorReductionDb: number;

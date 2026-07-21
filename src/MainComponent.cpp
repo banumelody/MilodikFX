@@ -165,6 +165,7 @@ void MainComponent::buildChain()
 
     chainProcessors = milodikfx::dsp::buildGuitarChain (audioEngine.getChain());
 
+    inputTrimProcessor = chainProcessors.inputTrim;
     noiseGateProcessor = chainProcessors.noiseGate;
     cleanBoostProcessor = chainProcessors.cleanBoost;
     compressorProcessor = chainProcessors.compressor;
@@ -595,7 +596,7 @@ void MainComponent::audioDeviceStopped()
     if (levelsHandler != nullptr)
     {
         levelsHandler->setAudioRunning (false);
-        levelsHandler->updateLevels (kMeterFloorDb, kMeterFloorDb);
+        levelsHandler->updateLevels (kMeterFloorDb, kMeterFloorDb, kMeterFloorDb);
     }
 }
 
@@ -704,7 +705,15 @@ void MainComponent::audioDeviceIOCallbackWithContext (const float* const* inputC
 
     if (auto* levels = levelsHandler.get())
     {
-        levels->updateLevels (juce::Decibels::gainToDecibels (inputPeak, kMeterFloorDb),
+        // The trim is a pure gain applied first in the chain, so what the chain
+        // receives is exactly the measured input plus the trim in dB. No second
+        // measurement needed -- and without this the Input knob would be dialled
+        // blind, since inputPeak is taken before the chain runs.
+        const auto inputDb = juce::Decibels::gainToDecibels (inputPeak, kMeterFloorDb);
+        const auto trimDb = inputTrimProcessor != nullptr ? inputTrimProcessor->getGainDb() : 0.0f;
+
+        levels->updateLevels (inputDb,
+                              juce::jmax (kMeterFloorDb, inputDb + trimDb),
                               juce::Decibels::gainToDecibels (outputPeak, kMeterFloorDb));
 
         levels->updateGainReduction (noiseGateProcessor != nullptr ? noiseGateProcessor->getCurrentGain() : 1.0f,

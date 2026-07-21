@@ -152,6 +152,7 @@ private:
 
     milodikfx::dsp::GuitarChain chainProcessors;
 
+    milodikfx::dsp::InputTrimProcessor* inputTrimProcessor = nullptr;
     milodikfx::dsp::NoiseGateProcessor* noiseGateProcessor = nullptr;
     milodikfx::dsp::GainProcessor* cleanBoostProcessor = nullptr;
     milodikfx::dsp::CompressorProcessor* compressorProcessor = nullptr;

@@ -101,9 +101,12 @@ GuitarChain buildGuitarChain (DSPChainManager& chain)
 {
     GuitarChain result;
 
-    // Signal order matters: gate the raw pickup before anything boosts its
-    // noise, compress before the clipper so the drive sees a steady level, and
-    // put the cabinet after all the distortion it is meant to be filtering.
+    // Signal order matters: trim the guitar to the chain before the gate sees
+    // it, so the gate threshold stays correct relative to the signal; gate the
+    // raw pickup before anything boosts its noise; compress before the clipper
+    // so the drive sees a steady level; and put the cabinet after all the
+    // distortion it is meant to be filtering.
+    result.inputTrim = add<InputTrimProcessor> (chain);
     result.noiseGate = add<NoiseGateProcessor> (chain);
     result.cleanBoost = add<GainProcessor> (chain);
     result.compressor = add<CompressorProcessor> (chain);
@@ -169,16 +172,32 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
 
     // Effect and parameter ids double as settings keys (dsp.<effect>.<param>)
     // and as REST path segments, so they stay stable even when labels change.
-    if (getInputMode && setInputMode)
+    //
+    // The card exists whenever the trim processor does, so a plugin gets the
+    // trim too. Channel routing is host-specific -- the app maps device
+    // channels itself, a plugin gets whatever the host sends -- so Mode is
+    // added only when the host supplies the accessors.
+    if (chain.inputTrim != nullptr || (getInputMode && setInputMode))
     {
         EffectDescriptor e;
         e.id = "input";
         e.label = "Input";
-        e.description = "Bagaimana kanal input interface masuk ke rantai";
+        e.description = "Samakan level gitar ini dengan rantai - setel sekali per gitar";
         e.isEnabled = [] { return true; };
         e.setEnabled = nullptr; // always in the path; nothing to bypass
-        e.parameters.push_back (makeParam ("mode", "Mode", "", 0.0f, 3.0f, 1.0f, 0.0f,
-                                           std::move (getInputMode), std::move (setInputMode)));
+
+        if (auto* p = chain.inputTrim)
+            e.parameters.push_back (makeParam ("gainDb", "Gain", "dB",
+                                               InputTrimProcessor::kMinDb,
+                                               InputTrimProcessor::kMaxDb,
+                                               0.1f, 0.0f,
+                                               [p] { return p->getGainDb(); },
+                                               [p] (float v) { p->setGainDb (v); }));
+
+        if (getInputMode && setInputMode)
+            e.parameters.push_back (makeParam ("mode", "Mode", "", 0.0f, 3.0f, 1.0f, 0.0f,
+                                               std::move (getInputMode), std::move (setInputMode)));
+
         registry.addEffect (std::move (e));
     }
 
@@ -210,7 +229,9 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         EffectDescriptor e;
         e.id = "cleanBoost";
         e.label = "Clean Boost";
-        e.description = "Mengangkat pickup lemah sebelum rantai lainnya";
+        // Distinct from Input Gain on purpose: that one matches the guitar to
+        // the chain and is set once, this one is pushed in for a solo.
+        e.description = "Dorong front-end untuk solo - hanya menambah, setelah noise gate";
         e.isEnabled = [p] { return p->isEnabled(); };
         e.setEnabled = [p] (bool v) { p->setEnabled (v); };
         e.parameters.push_back (makeParam ("gainDb", "Gain", "dB", 0.0f, 24.0f, 0.1f, 0.0f,
@@ -227,7 +248,10 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         e.description = "Meratakan dinamika petikan";
         e.isEnabled = [p] { return p->isEnabled(); };
         e.setEnabled = [p] (bool v) { p->setEnabled (v); };
-        e.parameters.push_back (makeParam ("inputGainDb", "Input", "dB", -24.0f, 24.0f, 0.1f, 0.0f,
+        // "Drive" rather than "Input": this sets how hard the signal hits this
+        // compressor's threshold, which is a different job from the chain-wide
+        // Input Gain, and two controls both labelled "Input" would not say so.
+        e.parameters.push_back (makeParam ("inputGainDb", "Drive", "dB", -24.0f, 24.0f, 0.1f, 0.0f,
                                            [p] { return p->getInputGainDb(); },
                                            [p] (float v) { p->setInputGainDb (v); }));
         e.parameters.push_back (makeParam ("thresholdDb", "Threshold", "dB", -60.0f, 0.0f, 0.5f, -24.0f,
@@ -366,6 +390,9 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         e.parameters.push_back (makeToggle ("pingPong", "Ping-Pong", false,
                                             [p] { return p->isPingPong(); },
                                             [p] (bool v) { p->setPingPong (v); }));
+        e.parameters.push_back (makeToggle ("spillover", "Spillover", true,
+                                            [p] { return p->isSpillover(); },
+                                            [p] (bool v) { p->setSpillover (v); }));
         // Enum 0..5 = Off / 1/4 / 1/8. / 1/8 / 1/8T / 1/16. Anything but Off
         // overrides the Time knob, which the UI shows by disabling it.
         e.parameters.push_back (makeParam ("syncMode", "Sync", "", 0.0f,
@@ -396,6 +423,9 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         e.parameters.push_back (makeParam ("dryWetMix", "Mix", "", 0.0f, 1.0f, 0.01f, 0.25f,
                                            [p] { return p->getDryWetMix(); },
                                            [p] (float v) { p->setDryWetMix (v); }));
+        e.parameters.push_back (makeToggle ("spillover", "Spillover", true,
+                                            [p] { return p->isSpillover(); },
+                                            [p] (bool v) { p->setSpillover (v); }));
 
         if (extras.irLibrary != nullptr)
         {

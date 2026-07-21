@@ -25,6 +25,8 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - P3-7 Impor/ekspor preset — `/api/presets/export` + `/import`, unduhan Blob di browser
 - P3-5 Undo/redo — `UndoHistory`, `/api/history`, tombol di top bar + Ctrl+Z / Ctrl+Shift+Z
 - P3-6 Installer — Inno Setup terpasang, `MilodikFX-0.10.0-setup.exe` diverifikasi pasang → jalan → copot bersih
+- P4-0 Input gain / trim — `InputTrimProcessor` di depan noise gate, `input.gainDb`, meter pasca-trim
+- P4-2 Spillover ekor delay/reverb — fade hanya saat dimatikan, blok berhenti setelah ekor < −80 dB
 - P1-2 Overdrive asimetri + oversampling adjustable
 - P1-3 Delay damping + ping-pong
 - P1-4 Compressor parallel mix

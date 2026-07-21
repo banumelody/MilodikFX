@@ -91,6 +91,8 @@ set(MILODIKFX_ENGINE_SOURCES
   src/dsp/Biquad.h
   src/dsp/GainProcessor.h
   src/dsp/GainProcessor.cpp
+  src/dsp/InputTrimProcessor.h
+  src/dsp/InputTrimProcessor.cpp
   src/dsp/OverdriveProcessor.h
   src/dsp/OverdriveProcessor.cpp
   src/dsp/EQProcessor.h
@@ -363,6 +365,7 @@ target_sources(MilodikFX_tests
     tests/MidiTests.cpp
     tests/SceneTests.cpp
     tests/UndoTests.cpp
+    tests/InputTrimTests.cpp
     ${MILODIKFX_ENGINE_SOURCES}
 )
 

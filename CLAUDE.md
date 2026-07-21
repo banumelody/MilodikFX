@@ -116,8 +116,13 @@ Built by `milodikfx::dsp::buildGuitarChain` (`src/dsp/ChainFactory.*`), shared b
 plugin, in this fixed order:
 
 ```
-NoiseGate -> CleanBoost -> Compressor -> Overdrive -> EQ -> Contour -> Cabinet -> Delay -> Reverb -> MasterOut
+InputTrim -> NoiseGate -> CleanBoost -> Compressor -> Overdrive -> EQ -> Contour -> Cabinet -> Delay -> Reverb -> MasterOut
 ```
+
+`InputTrim` is ahead of the gate on purpose: with it in front, the gate threshold stays correct
+relative to the signal, so swapping guitars means re-dialling one knob rather than two. That ordering
+is also why `CleanBoost` cannot double as a trim — it can only add gain, and it sits behind the gate.
+The trim registers as `input.gainDb`, on the same card as the app-only `input.mode`.
 
 Each processor derives from `AudioProcessorBase` (`prepareToPlay`/`processBlock`/`reset`) and holds its
 parameters as `std::atomic`. `MasterOut` is the only stage that can attenuate, and it carries the
@@ -171,6 +176,14 @@ These are not stylistic; each corresponds to a bug that shipped:
   delay. A divide-by-zero in the compressor's gain computer used to latch NaN into the signal
   permanently.
 - `ScopedNoDenormals` in the audio callback; parameter smoothing on every gain.
+
+### Spillover
+
+Switching the delay or reverb off stops *feeding* it but keeps the tail decaying, so a scene change
+mid-song does not chop the repeats dead. Only the fade **out** is ramped: switching on is instant, so
+an enabled effect is bit-identical to the pre-spillover code and the first note after a footswitch is
+delayed in full rather than fading in. Once the tail drops below -80 dB the block returns immediately,
+so a silent effect costs one atomic read. `spillover` is a per-effect toggle, default on.
 
 ### Audio device
 

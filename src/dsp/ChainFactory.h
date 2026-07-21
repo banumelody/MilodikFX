@@ -9,6 +9,7 @@
 #include "dsp/DelayProcessor.h"
 #include "dsp/EQProcessor.h"
 #include "dsp/GainProcessor.h"
+#include "dsp/InputTrimProcessor.h"
 #include "dsp/MasterOutProcessor.h"
 #include "dsp/MetronomeProcessor.h"
 #include "dsp/NoiseGateProcessor.h"
@@ -22,6 +23,9 @@ namespace milodikfx::dsp
 /** Non-owning pointers to the processors a built chain contains. */
 struct GuitarChain
 {
+    /** Ahead of the gate, so the gate threshold tracks the trim. */
+    InputTrimProcessor* inputTrim = nullptr;
+
     NoiseGateProcessor* noiseGate = nullptr;
     GainProcessor* cleanBoost = nullptr;
     CompressorProcessor* compressor = nullptr;

@@ -274,11 +274,14 @@ public:
         milodikfx::dsp::DSPChainManager manager;
         const auto chain = milodikfx::dsp::buildGuitarChain (manager);
 
-        // Ten stages the guitar passes through. The metronome is deliberately
+        // Eleven stages the guitar passes through. The metronome is deliberately
         // not one of them -- it is mixed in afterwards, outside bypass.
-        expectEquals (manager.getNumProcessors(), 10);
+        expectEquals (manager.getNumProcessors(), 11);
         expect (chain.metronome != nullptr);
 
+        // Ahead of the gate, so the gate threshold tracks the trim rather than
+        // being tied to raw interface level.
+        expect (chain.inputTrim != nullptr);
         expect (chain.noiseGate != nullptr);
         expect (chain.cleanBoost != nullptr);
         expect (chain.compressor != nullptr);
@@ -292,8 +295,11 @@ public:
 
         beginTest ("The plugin and the app share one parameter set");
 
-        // The app adds an input-routing stage because it owns the device; a
-        // plugin gets whatever the host sends. Everything else must match.
+        // Both builds get the Input card, because the trim is a chain stage and
+        // a plugin needs to match the guitar to the chain just as much. Only
+        // channel routing is host-specific -- the app maps device channels
+        // itself, a plugin gets whatever the host sends -- so Mode is the one
+        // parameter that differs. Everything else must match exactly.
         milodikfx::api::ParameterRegistry pluginRegistry;
         milodikfx::dsp::registerChainParameters (pluginRegistry, chain, manager);
 
@@ -304,17 +310,35 @@ public:
 
         milodikfx::dsp::registerChainParameters (appRegistry, chain, manager, std::move (appExtras));
 
-        expectEquals ((int) pluginRegistry.getEffects().size(), 12);
+        expectEquals ((int) pluginRegistry.getEffects().size(), 13);
         expectEquals ((int) appRegistry.getEffects().size(), 13);
-        expect (appRegistry.findEffect ("input") != nullptr);
-        expect (pluginRegistry.findEffect ("input") == nullptr);
+
+        // The plugin has the Input card too, with the trim but without Mode.
+        const auto* pluginInput = pluginRegistry.findEffect ("input");
+        const auto* appInput = appRegistry.findEffect ("input");
+
+        expect (pluginInput != nullptr && appInput != nullptr);
+
+        if (pluginInput != nullptr && appInput != nullptr)
+        {
+            expect (pluginRegistry.findParameter ("input", "gainDb") != nullptr);
+            expect (appRegistry.findParameter ("input", "gainDb") != nullptr);
+
+            expect (pluginRegistry.findParameter ("input", "mode") == nullptr,
+                    "a plugin has no device channels to route");
+            expect (appRegistry.findParameter ("input", "mode") != nullptr);
+
+            expectEquals ((int) appInput->parameters.size(),
+                          (int) pluginInput->parameters.size() + 1);
+        }
 
         for (const auto& effect : pluginRegistry.getEffects())
         {
             const auto* twin = appRegistry.findEffect (effect.id);
             expect (twin != nullptr, "app registry is missing " + juce::String (effect.id));
 
-            if (twin != nullptr)
+            // Input is the one card allowed to differ, and only by Mode.
+            if (twin != nullptr && effect.id != "input")
                 expectEquals ((int) twin->parameters.size(), (int) effect.parameters.size(),
                               juce::String (effect.id) + " has a different parameter count");
         }

@@ -33,6 +33,19 @@ public:
     void setWidth (float width) noexcept;        // 0.0-1.0
     void setEnabled (bool enabled) noexcept;
 
+    /**
+     * Lets the room ring on after the reverb is switched off.
+     *
+     * Same reason as the delay: a scene change mid-song must not chop the tail
+     * dead. Feeding stops, the network keeps decaying, and once it falls below
+     * -80 dB the block stops processing entirely.
+     */
+    void setSpillover (bool shouldSpill) noexcept;
+    bool isSpillover() const noexcept;
+
+    /** Exposed for testing: false once the tail has decayed and the block idles. */
+    bool isTailRinging() const noexcept { return ! tailIdle; }
+
     /** false = the algorithmic room, true = convolution with a loaded IR. */
     void setUseImpulseResponse (bool shouldUseIr) noexcept;
     bool isUsingImpulseResponse() const noexcept;
@@ -113,7 +126,19 @@ private:
     std::atomic<float> decayTime { 2.0f };
     std::atomic<float> width { 1.0f };
     std::atomic<bool> enabled { true };
+    std::atomic<bool> spillover { true };
     std::atomic<bool> parametersDirty { true };
+
+    /** How long the input takes to fade out of the network when switching off. */
+    static constexpr float kSpilloverFadeSeconds = 0.02f;
+
+    /** -80 dB: below this the tail is inaudible and the block can stop. */
+    static constexpr float kTailSilence = 1.0e-4f;
+
+    // Audio-thread owned. 1 = feeding the network, 0 = tail only.
+    float activeAmount = 1.0f;
+    float activeStep = 1.0f;
+    bool tailIdle = false;
     std::atomic<bool> useImpulseResponse { false };
 
     IrEngine irEngine;

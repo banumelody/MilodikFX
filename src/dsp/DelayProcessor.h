@@ -69,8 +69,22 @@ public:
         a division is selected. This is what the UI should display. */
     float getEffectiveTimeMs() const noexcept;
 
+    /**
+     * Lets the repeats ring on after the delay is switched off.
+     *
+     * Switching off stops feeding the line but keeps the tail decaying, so a
+     * scene change mid-song does not chop the repeats dead. Once the tail has
+     * fallen below -80 dB the block stops processing entirely, so a silent
+     * delay costs nothing.
+     */
+    void setSpillover (bool shouldSpill) noexcept;
+    bool isSpillover() const noexcept;
+
     void setEnabled (bool shouldEnable) noexcept;
     bool isEnabled() const noexcept;
+
+    /** Exposed for testing: false once the tail has decayed and the block idles. */
+    bool isTailRinging() const noexcept { return ! tailIdle; }
 
 private:
     static constexpr float kMaxDelayMs = 1000.0f;
@@ -94,7 +108,19 @@ private:
     std::atomic<bool> pingPong { false };
     std::atomic<int> syncDivision { 0 };
     std::atomic<float> bpm { 120.0f };
+    std::atomic<bool> spillover { true };
     std::atomic<bool> enabled { false };
+
+    /** How long the input takes to fade out of the line when switching off. */
+    static constexpr float kSpilloverFadeSeconds = 0.02f;
+
+    /** -80 dB: below this the tail is inaudible and the block can stop. */
+    static constexpr float kTailSilence = 1.0e-4f;
+
+    // Audio-thread owned. 1 = feeding the line, 0 = tail only.
+    float activeAmount = 0.0f;
+    float activeStep = 1.0f;
+    bool tailIdle = true;
 
     // Fixed size, allocated in the constructor. Never resized.
     std::vector<std::vector<float>> lines;

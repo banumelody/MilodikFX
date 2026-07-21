@@ -9,6 +9,7 @@ HttpHandler::Response LevelsHandler::handleGet (const std::string&, const std::s
     auto* object = new juce::DynamicObject();
 
     object->setProperty ("inputLevel", inputLevel.load (std::memory_order_relaxed));
+    object->setProperty ("chainInputLevel", chainInputLevel.load (std::memory_order_relaxed));
     object->setProperty ("outputLevel", outputLevel.load (std::memory_order_relaxed));
     object->setProperty ("gateGain", gateGain.load (std::memory_order_relaxed));
     object->setProperty ("compressorReductionDb", compressorReductionDb.load (std::memory_order_relaxed));

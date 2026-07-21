@@ -19,9 +19,20 @@ public:
 
     Response handleGet (const std::string& path, const std::string& query) const override;
 
-    void updateLevels (float inputDb, float outputDb) noexcept
+    /**
+     * @param inputDb       what the interface delivered, before the trim
+     * @param chainInputDb  what the chain actually receives, after the trim
+     *
+     * Both, because they answer different questions. The trimmed figure is what
+     * the Input knob is dialled against -- without it the knob would have no
+     * feedback at all, since the meter is measured before the chain runs. The
+     * untrimmed one still shows a signal arriving too hot from the interface,
+     * which no amount of digital trim can fix.
+     */
+    void updateLevels (float inputDb, float chainInputDb, float outputDb) noexcept
     {
         inputLevel.store (inputDb, std::memory_order_relaxed);
+        chainInputLevel.store (chainInputDb, std::memory_order_relaxed);
         outputLevel.store (outputDb, std::memory_order_relaxed);
     }
 
@@ -50,6 +61,7 @@ private:
     static constexpr float kFloorDb = -100.0f;
 
     std::atomic<float> inputLevel { kFloorDb };
+    std::atomic<float> chainInputLevel { kFloorDb };
     std::atomic<float> outputLevel { kFloorDb };
     std::atomic<float> gateGain { 1.0f };
     std::atomic<float> compressorReductionDb { 0.0f };
