@@ -316,6 +316,11 @@ std::string WebServer::parseHttpRequest (const std::string& request, std::string
 
 void WebServer::sendAll (SOCKET sock, const std::string& payload)
 {
+    sendAllChecked (sock, payload);
+}
+
+bool WebServer::sendAllChecked (SOCKET sock, const std::string& payload)
+{
     int sent = 0;
     const auto total = (int) payload.size();
 
@@ -324,9 +329,115 @@ void WebServer::sendAll (SOCKET sock, const std::string& payload)
         const auto n = send (sock, payload.data() + sent, total - sent, 0);
 
         if (n == SOCKET_ERROR || n <= 0)
-            return;
+            return false;
 
         sent += n;
+    }
+
+    return true;
+}
+
+void WebServer::registerEventStream (std::string path, std::function<std::string()> source, int intervalMs)
+{
+    if (path.empty() || source == nullptr)
+        return;
+
+    EventStream stream;
+    stream.path = std::move (path);
+    stream.source = std::move (source);
+    stream.intervalMs = juce::jlimit (10, 1000, intervalMs);
+
+    eventStreams_.push_back (std::move (stream));
+}
+
+const WebServer::EventStream* WebServer::findEventStream (const std::string& path) const
+{
+    for (const auto& stream : eventStreams_)
+        if (stream.path == path)
+            return &stream;
+
+    return nullptr;
+}
+
+void WebServer::runEventStream (SOCKET clientSocket, const EventStream& stream)
+{
+    // A send that blocks forever on a peer that stopped reading would pin this
+    // thread past shutdown, which is exactly what stop() waits on.
+    int timeoutMs = 2000;
+    setsockopt (clientSocket, SOL_SOCKET, SO_SNDTIMEO, (const char*) &timeoutMs, sizeof (timeoutMs));
+
+    std::ostringstream headers;
+    headers << "HTTP/1.1 200 OK\r\n"
+            << "Content-Type: text/event-stream; charset=utf-8\r\n"
+            << "Cache-Control: no-store\r\n"
+            << "Connection: keep-alive\r\n"
+            // Chrome's proxy-buffering heuristics can otherwise sit on events
+            // until enough have accumulated to fill a chunk.
+            << "X-Accel-Buffering: no\r\n"
+            << "Access-Control-Allow-Origin: *\r\n"
+            << "\r\n"
+            // Tells the browser to reconnect quickly rather than after its
+            // three-second default, so a restarted engine is picked up fast.
+            << "retry: 500\r\n\r\n";
+
+    if (! sendAllChecked (clientSocket, headers.str()))
+        return;
+
+    while (running_.load())
+    {
+        std::string payload;
+
+        try
+        {
+            payload = stream.source();
+        }
+        catch (...)
+        {
+            return;
+        }
+
+        if (! payload.empty())
+        {
+            // Every line gets its own "data:" prefix. The JSON these handlers
+            // produce is pretty-printed, and an SSE event stops at the first
+            // line that is not a recognised field -- so a naive single prefix
+            // delivered a payload of exactly "{" to the browser, which then
+            // failed to parse and left the meters dead with the stream itself
+            // looking perfectly healthy.
+            std::string event;
+            event.reserve (payload.size() + 32);
+
+            size_t start = 0;
+
+            while (start <= payload.size())
+            {
+                const auto end = payload.find ('\n', start);
+                const auto lineEnd = end == std::string::npos ? payload.size() : end;
+
+                event += "data: ";
+                event.append (payload, start, lineEnd - start);
+                event += '\n';
+
+                if (end == std::string::npos)
+                    break;
+
+                start = end + 1;
+            }
+
+            event += '\n';
+
+            if (! sendAllChecked (clientSocket, event))
+                return;
+        }
+
+        // Deadline rather than a fixed number of naps: Windows rounds a sleep up
+        // to the current timer granularity (~15 ms unless something has raised
+        // it), so counting naps overshot the interval by nearly half again.
+        const auto deadline = std::chrono::steady_clock::now()
+                              + std::chrono::milliseconds (stream.intervalMs);
+
+        while (running_.load() && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for (std::chrono::milliseconds (1));
     }
 }
 
@@ -369,6 +480,41 @@ void WebServer::handleConnection (SOCKET clientSocket)
 
     std::string path, method;
     const auto query = parseHttpRequest (request, path, method);
+
+    if (method == "GET")
+    {
+        if (const auto* stream = findEventStream (path))
+        {
+            // Bounded: each stream owns its thread until the page closes it, so
+            // a page stuck in a reload loop must not be able to spawn them
+            // without limit.
+            if (activeStreams_.fetch_add (1) >= kMaxEventStreams)
+            {
+                activeStreams_.fetch_sub (1);
+
+                const std::string body = R"({"error":"Too many event streams"})";
+                std::ostringstream busy;
+                busy << "HTTP/1.1 503 Service Unavailable\r\n"
+                     << "Content-Type: application/json\r\n"
+                     << "Content-Length: " << body.size() << "\r\n"
+                     << "Connection: close\r\n\r\n"
+                     << body;
+
+                sendAll (clientSocket, busy.str());
+                shutdown (clientSocket, SD_SEND);
+                closesocket (clientSocket);
+                return;
+            }
+
+            runEventStream (clientSocket, *stream);
+
+            activeStreams_.fetch_sub (1);
+
+            shutdown (clientSocket, SD_SEND);
+            closesocket (clientSocket);
+            return;
+        }
+    }
 
     const auto headers = toLower (request.substr (0, headerEnd));
 

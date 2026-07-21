@@ -1,5 +1,6 @@
 import { Knob } from './Knob';
 import { Toggle } from './Toggle';
+import { ToneCurve } from './ToneCurve';
 import type { EffectDescriptor, ParameterDescriptor } from '../services/api';
 
 /** Accent per effect, so the rack reads as a signal chain rather than a list. */
@@ -47,6 +48,8 @@ export interface EffectRackProps {
   onParameterChange: (effectId: string, parameterId: string, value: number | string) => void;
   onEnabledChange: (effectId: string, enabled: boolean) => void;
   disabled?: boolean;
+  /** Only affects where the tone curve puts Nyquist; harmless when unknown. */
+  sampleRate?: number;
 }
 
 function formatValue(parameter: ParameterDescriptor, value: number) {
@@ -63,6 +66,7 @@ export function EffectRack({
   onParameterChange,
   onEnabledChange,
   disabled = false,
+  sampleRate,
 }: EffectRackProps) {
   const accent = EFFECT_ACCENTS[effect.id] ?? '#4da3ff';
   const inactive = disabled || !effect.enabled;
@@ -98,6 +102,8 @@ export function EffectRack({
           />
         )}
       </header>
+
+      <ToneCurve effect={effect} sampleRate={sampleRate} accent={accent} />
 
       <div className="rack__body">
         {effect.parameters.map((parameter) => {

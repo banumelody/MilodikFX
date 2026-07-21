@@ -201,6 +201,20 @@ owner destroys immediately afterwards.
 subclass. Responses are built with `juce::var` + `juce::JSON` (see `src/api/ApiJson.h`) — never by
 string concatenation.
 
+`registerEventStream` adds a Server-Sent Events path — a different connection model, since a stream
+owns its thread for as long as the page is open. `/api/levels/stream` carries the meters. Two things
+that bit here and would again:
+
+- **`ApiJson` pretty-prints.** An SSE event ends at the first line that is not a recognised field, so
+  a single `data:` prefix delivered a payload of exactly `{` — an event that arrives, parses to
+  nothing, and leaves the stream looking healthy. Every line gets its own prefix.
+- **Streams are capped** (`kMaxEventStreams`), because a page in a reload loop would otherwise spawn
+  threads without limit. Over the cap the server answers 503.
+
+`subscribeLevels` in `services/api.ts` falls back to polling if the stream never delivers anything.
+Measured delivery is ~22 Hz against a 33 ms target: Windows rounds a sleep up to the system timer
+granularity.
+
 Endpoints: `/api/effects`, `/api/parameters`, `/api/devices`, `/api/levels`, `/api/tuner`, `/api/ir`,
 `/api/midi`, `/api/presets`, `/api/health`.
 

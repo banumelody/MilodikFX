@@ -430,6 +430,27 @@ void MainComponent::startServer()
     webServer->registerApiHandler ("/api/presets", presetsHandler);
     webServer->registerApiHandler ("/api/health", std::make_shared<HealthHandler>());
 
+    // Meters over one held-open connection instead of a fresh HTTP request every
+    // 100 ms, which on a thread-per-connection server meant a thread per poll.
+    //
+    // The 33 ms asks for 30 Hz; measured delivery is about 22 Hz, because
+    // Windows rounds a sleep up to the system timer granularity. Still twice
+    // what the old polling managed, and chasing the last 8 Hz would mean raising
+    // the global timer resolution for the sake of a meter.
+    //
+    // The handler is captured by shared_ptr so the stream thread cannot outlive
+    // it. The server is stopped before the handler is released, but the
+    // ownership should not depend on that ordering staying true.
+    webServer->registerEventStream ("/api/levels/stream",
+                                    [handler = levelsHandler]() -> std::string
+                                    {
+                                        if (handler == nullptr)
+                                            return {};
+
+                                        return handler->handleGet ("/api/levels", {}).body;
+                                    },
+                                    33);
+
     log ("REST API handlers registered");
 }
 

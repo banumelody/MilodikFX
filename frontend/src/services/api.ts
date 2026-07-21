@@ -307,10 +307,10 @@ export const deletePreset = (name: string) =>
  * flight so a slow response cannot pile requests up on the thread-per-connection
  * server. Returns an unsubscribe function.
  */
-export function subscribeLevels(
+function pollLevels(
   onLevels: (levels: Levels) => void,
   onError: (error: unknown) => void,
-  intervalMs = 100,
+  intervalMs: number,
 ): () => void {
   let stopped = false;
   let inFlight = false;
@@ -333,5 +333,62 @@ export function subscribeLevels(
   return () => {
     stopped = true;
     window.clearInterval(timer);
+  };
+}
+
+/**
+ * Subscribes to the meters, preferring the engine's event stream.
+ *
+ * One held-open connection at 30 Hz instead of a fresh HTTP request every
+ * 100 ms, which on a thread-per-connection server meant a thread per poll.
+ *
+ * Falls back to polling if the stream never delivers anything -- an environment
+ * without EventSource, or a proxy that will not pass text/event-stream, must
+ * still get meters rather than a dead display. Once the stream has worked, a
+ * later error is a disconnection: EventSource reconnects by itself, so the only
+ * thing to do is report it.
+ */
+export function subscribeLevels(
+  onLevels: (levels: Levels) => void,
+  onError: (error: unknown) => void,
+  intervalMs = 100,
+): () => void {
+  if (typeof EventSource !== 'function') return pollLevels(onLevels, onError, intervalMs);
+
+  let stopped = false;
+  let delivered = false;
+  let stopPolling: (() => void) | null = null;
+  let source: EventSource | null = new EventSource(`${API_BASE}/levels/stream`);
+
+  source.onmessage = (event) => {
+    if (stopped) return;
+
+    try {
+      onLevels(JSON.parse(event.data) as Levels);
+      delivered = true;
+    } catch {
+      /* a truncated frame; the next one is 33 ms away */
+    }
+  };
+
+  source.onerror = () => {
+    if (stopped) return;
+
+    onError(new Error('Aliran meter terputus'));
+
+    if (delivered) return;
+
+    // It never worked at all, so retrying it forever would leave the meters
+    // dead. Close it and go back to polling.
+    source?.close();
+    source = null;
+
+    if (!stopPolling) stopPolling = pollLevels(onLevels, onError, intervalMs);
+  };
+
+  return () => {
+    stopped = true;
+    source?.close();
+    stopPolling?.();
   };
 }

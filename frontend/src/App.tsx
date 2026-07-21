@@ -461,6 +461,7 @@ export function App() {
               index={index + 1}
               total={rackEffects.length}
               disabled={offline}
+              sampleRate={levels.sampleRate || undefined}
               onParameterChange={handleParameterChange}
               onEnabledChange={(id, enabled) => void handleEnabledChange(id, enabled)}
             />

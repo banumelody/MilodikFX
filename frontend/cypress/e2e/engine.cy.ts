@@ -388,6 +388,81 @@ describe('MilodikFX UI against a live engine', () => {
     cy.request('PUT', '/api/effects/global/bpm', { value: 120 });
   });
 
+  it('pushes meter updates over a held-open event stream', () => {
+    cy.window().then(
+      (win) =>
+        new Cypress.Promise<void>((resolve, reject) => {
+          const source = new win.EventSource('/api/levels/stream');
+          const seen: unknown[] = [];
+
+          const timer = win.setTimeout(() => {
+            source.close();
+            reject(new Error(`only ${seen.length} event(s) in 1.5 s`));
+          }, 1500);
+
+          source.onmessage = (event: MessageEvent) => {
+            // Parsed, not just counted: pretty-printed JSON split across lines
+            // once arrived as a payload of exactly "{", which counts as an
+            // event but is useless.
+            const parsed = JSON.parse(event.data);
+            expect(parsed).to.have.property('inputLevel');
+            expect(parsed).to.have.property('audioRunning');
+
+            seen.push(parsed);
+
+            // Several, so this proves a stream rather than one response.
+            if (seen.length >= 5) {
+              win.clearTimeout(timer);
+              source.close();
+              resolve();
+            }
+          };
+
+          source.onerror = () => {
+            win.clearTimeout(timer);
+            source.close();
+            reject(new Error('the level stream errored'));
+          };
+        }),
+    );
+  });
+
+  it('draws a response curve for each tone stage', () => {
+    // All three bands, not just the one under test: "flat" means the whole
+    // stage is doing nothing, and the persisted settings carry whatever the
+    // last session left behind.
+    cy.request('POST', '/api/effects/eq/enabled', { enabled: true });
+    cy.request('PUT', '/api/effects/eq/bassDb', { value: 0 });
+    cy.request('PUT', '/api/effects/eq/midDb', { value: 0 });
+    cy.request('PUT', '/api/effects/eq/trebleDb', { value: 0 });
+    cy.reload();
+
+    cy.get('section[aria-label="EQ"] svg[aria-label*="Kurva respons"]')
+      .should('exist')
+      .and('have.attr', 'aria-label')
+      .and('match', /rata/);
+
+    cy.get('section[aria-label="EQ"] path.tone-curve__line')
+      .invoke('attr', 'd')
+      .then((flat) => {
+        cy.request('PUT', '/api/effects/eq/midDb', { value: 12 });
+        cy.reload();
+
+        cy.get('section[aria-label="EQ"] path.tone-curve__line')
+          .invoke('attr', 'd')
+          .should((boosted) => {
+            expect(boosted).to.not.equal(flat);
+          });
+      });
+
+    cy.get('section[aria-label="Contour"] path.tone-curve__line').should('exist');
+
+    // Not every stage has a frequency response to draw.
+    cy.get('section[aria-label="Overdrive"] path.tone-curve__line').should('not.exist');
+
+    cy.request('PUT', '/api/effects/eq/midDb', { value: 0 });
+  });
+
   it('reports MIDI state even with no controller attached', () => {
     // A build machine has no MIDI hardware, so the contract that has to hold is
     // that the endpoint answers with an empty device list rather than failing.

@@ -19,6 +19,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - P0-1 IR Loader — `IrEngine`, `IrLibrary`, `IrHandler`, parameter teks di registry
 - P0-2 Tuner — `TunerAnalyzer` (YIN di thread latar), `/api/tuner`, `TunerDisplay.tsx`
 - P0-3 MIDI / Footswitch — `MidiController`, `/api/midi`, `MidiMapping.tsx` dengan MIDI Learn
+- P1-1 Kurva EQ + metering SSE — `services/biquad.ts`, `ToneCurve.tsx`, `/api/levels/stream`
 - P1-2 Overdrive asimetri + oversampling adjustable
 - P1-3 Delay damping + ping-pong
 - P1-4 Compressor parallel mix
@@ -33,7 +34,9 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - P3-8 Metronome — `MetronomeProcessor` sebagai post-processor, di luar jalur bypass
 - P3-9 CPU sparkline
 
-**Belum:** P1-1 (SSE + kurva EQ), P2-1 (NAM), P2-3 (scene), P2-5 (multi-view), P3-1 (metadata preset), P3-5 (undo/redo), P3-6 (installer), P3-7 (import/export preset).
+**Belum:** P2-1 (NAM), P2-3 (scene), P2-5 (multi-view), P3-1 (metadata preset), P3-5 (undo/redo), P3-6 (installer), P3-7 (import/export preset).
+
+**Catatan P1-1:** target 30 Hz, yang benar-benar terkirim ±22 Hz — Windows membulatkan sleep ke granularitas timer sistem (~15 ms). Tetap dua kali lipat polling 10 Hz yang lama dan cuma satu koneksi. Mengejar 8 Hz sisanya berarti menaikkan resolusi timer global demi sebuah meter, tidak sepadan.
 
 **Catatan P0-3:** dispatch pesan MIDI diuji lewat `handleIncomingMidiMessage` langsung, bukan port fisik — mesin build tidak bisa diasumsikan punya controller. Yang belum pernah diuji dengan hardware sungguhan: apakah footswitch tertentu benar-benar mengirim 127/0 seperti dugaan. Kalau ada controller yang berperilaku lain, itu ketahuannya cuma saat dicoba.
 
