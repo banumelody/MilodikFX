@@ -24,6 +24,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - P3-1 Metadata preset — deskripsi/tag/favorit/catatan, di luar `state`
 - P3-7 Impor/ekspor preset — `/api/presets/export` + `/import`, unduhan Blob di browser
 - P3-5 Undo/redo — `UndoHistory`, `/api/history`, tombol di top bar + Ctrl+Z / Ctrl+Shift+Z
+- P3-6 Installer — Inno Setup terpasang, `MilodikFX-0.10.0-setup.exe` diverifikasi pasang → jalan → copot bersih
 - P1-2 Overdrive asimetri + oversampling adjustable
 - P1-3 Delay damping + ping-pong
 - P1-4 Compressor parallel mix
@@ -38,7 +39,11 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - P3-8 Metronome — `MetronomeProcessor` sebagai post-processor, di luar jalur bypass
 - P3-9 CPU sparkline
 
-**Belum:** P2-1 (NAM), P2-5 (multi-view), P3-6 (installer).
+**Belum:** P2-1 (NAM), P2-5 (multi-view).
+
+**Kenapa dua itu belum:** NAM adalah dependensi eksternal dengan submodule, tanpa target CMake sendiri, dan belum pernah diuji di MSVC oleh upstream — riset teknisnya sudah lengkap di P2-1 di bawah, tapi integrasinya cukup besar untuk jadi satu sesi sendiri dan tidak pantas dikerjakan setengah jalan lalu ditandai selesai. Multi-view (P2-5) menunggu sampai jumlah panel di sidebar benar-benar terasa sesak; sekarang masih terbaca dalam satu layar.
+
+**Rilis:** v0.10.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.10.0
 
 **Catatan P3-5:** langkah undo dicatat setelah rantai diam ~700 ms, bukan setiap tulis. Memutar knob menghasilkan satu tulis per frame; kalau tiap tulis jadi satu langkah, Ctrl+Z lima puluh kali baru kembali ke awal. Ada unit test khusus untuk itu. Baseline dibaca ulang dari rantai setelah apply, karena parameter bisa membatasi nilai yang diberikan — baseline yang tidak cocok dengan rantai akan membuat commit berikutnya mencatat langkah yang tidak pernah dilakukan siapa pun.
 

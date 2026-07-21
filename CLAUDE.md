@@ -290,7 +290,9 @@ resources copy both depend on that.
   (Focusrite's package registers a Thunderbolt driver on machines that have none). The device search
   therefore tries several devices per type rather than giving up on the type after the first failure.
 - Inno Setup (`iscc.exe`) is only needed for the installer; `scripts\build-release.ps1` skips that step
-  and still produces the standalone exe without it.
+  and still produces the standalone exe without it. `winget install JRSoftware.InnoSetup` puts it under
+  `%LOCALAPPDATA%\Programs\Inno Setup 6`, not Program Files — the script looks in all three, because
+  leaving the per-user path out meant a machine that *had* Inno Setup still silently skipped the step.
 
 ## Docs
 

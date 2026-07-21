@@ -126,9 +126,13 @@ if ($SkipInstaller) {
 
 $iscc = Get-Command iscc.exe -ErrorAction SilentlyContinue
 if (-not $iscc) {
+    # The per-user path is where winget puts it by default, and leaving it out
+    # meant a machine with Inno Setup installed still silently skipped the
+    # installer step.
     foreach ($candidate in @(
         "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-        "$env:ProgramFiles\Inno Setup 6\ISCC.exe")) {
+        "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
+        "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe")) {
         if (Test-Path $candidate) { $iscc = Get-Item $candidate; break }
     }
 }
