@@ -1,6 +1,8 @@
 #pragma once
 
 #include "AudioProcessorBase.h"
+#include "Biquad.h"
+
 #include <atomic>
 
 namespace milodikfx::dsp {
@@ -30,6 +32,10 @@ public:
     void setAutoMakeupGain (bool enabled) noexcept;
     void setEnabled (bool enabled) noexcept;
 
+    /** Blend of compressed against untouched signal. 100 = fully compressed. */
+    void setMixPercent (float percent) noexcept;
+    float getMixPercent() const noexcept;
+
     // Parameter getters
     float getInputGainDb() const noexcept;
     float getThresholdDb() const noexcept;
@@ -47,6 +53,9 @@ private:
     // log10 away from zero without needing an epsilon fudge in the signal.
     static constexpr float kDetectorFloorDb = -120.0f;
 
+    // Upper bound for the per-sample dry copy held on the stack.
+    static constexpr int kMaxChannels = 8;
+
     double sampleRate = 44100.0;
     std::atomic<float> inputGainDb { 0.0f };
     std::atomic<float> thresholdDb { -24.0f };
@@ -57,6 +66,9 @@ private:
     std::atomic<bool> enabled { true };
     std::atomic<bool> timingDirty { true };
     std::atomic<float> gainReductionDb { 0.0f };
+    std::atomic<float> mixPercent { 100.0f };
+
+    SmoothedParam smoothedMix;
 
     // Audio-thread-owned state.
     float envelopeDb = 0.0f;

@@ -14,22 +14,42 @@ void OverdriveProcessor::prepareToPlay (double sampleRate, int samplesPerBlock, 
     preparedChannels = juce::jmax (1, numChannels);
     preparedBlockSize = juce::jmax (1, samplesPerBlock);
 
-    oversampler = std::make_unique<juce::dsp::Oversampling<float>> (
-        (size_t) preparedChannels,
-        (size_t) kOversampleFactorLog2,
-        juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR,
-        true,
-        false);
+    // Build every factor now. Selecting one later is then just an index read,
+    // with no chance of allocating while audio is running.
+    for (int i = 0; i < kNumOversamplers; ++i)
+    {
+        oversamplers[(size_t) i] = std::make_unique<juce::dsp::Oversampling<float>> (
+            (size_t) preparedChannels,
+            (size_t) (i + 1), // factor exponent: 1 -> 2x, 2 -> 4x, 3 -> 8x
+            juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR,
+            true,
+            false);
 
-    oversampler->initProcessing ((size_t) preparedBlockSize);
-    oversampler->reset();
+        oversamplers[(size_t) i]->initProcessing ((size_t) preparedBlockSize);
+        oversamplers[(size_t) i]->reset();
+    }
 
-    // The drive smoother is stepped in the oversampled domain, the level
-    // smoother in the base domain, so they get different rates.
-    smoothedDrive.reset (rate * kOversampleRatio, 0.02, driveAmount.load (std::memory_order_relaxed));
+    // The drive smoother is stepped in the oversampled domain. Use the highest
+    // factor as the reference so the glide never becomes audibly slower when a
+    // lower factor is selected; the difference is imperceptible either way.
+    smoothedDrive.reset (rate * 8.0, 0.02, driveAmount.load (std::memory_order_relaxed));
+    smoothedAsymmetry.reset (rate * 8.0, 0.02, asymmetry.load (std::memory_order_relaxed));
     smoothedLevel.reset (rate, 0.02, levelLinear.load (std::memory_order_relaxed));
 
     prepared = true;
+}
+
+juce::dsp::Oversampling<float>* OverdriveProcessor::activeOversampler() const noexcept
+{
+    if (! oversamplingEnabled.load (std::memory_order_relaxed))
+        return nullptr;
+
+    const auto index = oversamplingIndex.load (std::memory_order_relaxed);
+
+    if (index <= 0 || index > kNumOversamplers)
+        return nullptr;
+
+    return oversamplers[(size_t) (index - 1)].get();
 }
 
 float OverdriveProcessor::softClip (float x) noexcept
@@ -40,21 +60,32 @@ float OverdriveProcessor::softClip (float x) noexcept
     return x > 0.0f ? (2.0f / 3.0f) : (-2.0f / 3.0f);
 }
 
-void OverdriveProcessor::applyDrive (float* const* channels, int numChannels, int numSamples, float driveTarget) noexcept
+void OverdriveProcessor::applyDrive (float* const* channels,
+                                     int numChannels,
+                                     int numSamples,
+                                     float driveTarget,
+                                     float asymmetryTarget) noexcept
 {
     for (int i = 0; i < numSamples; ++i)
     {
         const auto amount = smoothedDrive.next (driveTarget);
+        const auto asym = smoothedAsymmetry.next (asymmetryTarget);
 
         // Pre-gain curve: 1x..20x, quadratic so the low end of the knob is usable.
         const auto driveGain = 1.0f + (amount * amount * 19.0f);
+
+        // Bias the signal into the curve, then subtract what that bias alone
+        // would have produced. Without the second term the offset would leak
+        // through as DC.
+        const auto bias = asym * kMaxBias;
+        const auto biasOutput = softClip (bias);
 
         for (int ch = 0; ch < numChannels; ++ch)
         {
             const auto x = channels[ch][i];
 
             // Cubic soft clip, scaled so saturation lands at +/-1.0.
-            const auto clipped = 1.5f * softClip (x * driveGain);
+            const auto clipped = 1.5f * (softClip (x * driveGain + bias) - biasOutput);
 
             channels[ch][i] = ((1.0f - amount) * x) + (amount * clipped);
         }
@@ -91,6 +122,7 @@ void OverdriveProcessor::processBlock (juce::AudioBuffer<float>& buffer)
     if (! enabled.load (std::memory_order_relaxed))
     {
         smoothedDrive.snapTo (driveAmount.load (std::memory_order_relaxed));
+        smoothedAsymmetry.snapTo (asymmetry.load (std::memory_order_relaxed));
         smoothedLevel.snapTo (levelLinear.load (std::memory_order_relaxed));
         return;
     }
@@ -102,6 +134,7 @@ void OverdriveProcessor::processBlock (juce::AudioBuffer<float>& buffer)
         return;
 
     const auto driveTarget = driveAmount.load (std::memory_order_relaxed);
+    const auto asymmetryTarget = asymmetry.load (std::memory_order_relaxed);
     const auto levelTarget = levelLinear.load (std::memory_order_relaxed);
 
     auto* const* channels = buffer.getArrayOfWritePointers();
@@ -109,8 +142,9 @@ void OverdriveProcessor::processBlock (juce::AudioBuffer<float>& buffer)
     // No drive means no nonlinearity, so skip the oversampler entirely.
     const auto driveIsIdle = driveTarget <= 0.0f && smoothedDrive.getCurrent() <= 1.0e-6f;
 
+    auto* oversampler = activeOversampler();
+
     const auto canOversample = ! driveIsIdle
-                               && oversamplingEnabled.load (std::memory_order_relaxed)
                                && oversampler != nullptr
                                && numChannels == preparedChannels
                                && numSamples <= preparedBlockSize;
@@ -118,6 +152,7 @@ void OverdriveProcessor::processBlock (juce::AudioBuffer<float>& buffer)
     if (driveIsIdle)
     {
         smoothedDrive.snapTo (driveTarget);
+        smoothedAsymmetry.snapTo (asymmetryTarget);
     }
     else if (canOversample)
     {
@@ -129,19 +164,19 @@ void OverdriveProcessor::processBlock (juce::AudioBuffer<float>& buffer)
 
         // AudioBlock does not expose an array-of-pointers, so drive each channel
         // through a small stack array of the channel pointers it does expose.
-        float* upPointers[32];
-        const auto usableChannels = juce::jmin (upChannels, (int) std::size (upPointers));
+        float* upPointers[kMaxBlockChannels];
+        const auto usableChannels = juce::jmin (upChannels, kMaxBlockChannels);
 
         for (int ch = 0; ch < usableChannels; ++ch)
             upPointers[ch] = upBlock.getChannelPointer ((size_t) ch);
 
-        applyDrive (upPointers, usableChannels, upSamples, driveTarget);
+        applyDrive (upPointers, usableChannels, upSamples, driveTarget, asymmetryTarget);
 
         oversampler->processSamplesDown (block);
     }
     else
     {
-        applyDrive (channels, numChannels, numSamples, driveTarget);
+        applyDrive (channels, numChannels, numSamples, driveTarget, asymmetryTarget);
     }
 
     applyLevel (channels, numChannels, numSamples, levelTarget);
@@ -149,10 +184,12 @@ void OverdriveProcessor::processBlock (juce::AudioBuffer<float>& buffer)
 
 void OverdriveProcessor::reset()
 {
-    if (oversampler != nullptr)
-        oversampler->reset();
+    for (auto& os : oversamplers)
+        if (os != nullptr)
+            os->reset();
 
     smoothedDrive.snapTo (driveAmount.load (std::memory_order_relaxed));
+    smoothedAsymmetry.snapTo (asymmetry.load (std::memory_order_relaxed));
     smoothedLevel.snapTo (levelLinear.load (std::memory_order_relaxed));
 }
 
@@ -200,11 +237,31 @@ bool OverdriveProcessor::isOversamplingEnabled() const noexcept
     return oversamplingEnabled.load (std::memory_order_relaxed);
 }
 
+void OverdriveProcessor::setOversamplingIndex (int index) noexcept
+{
+    oversamplingIndex.store (juce::jlimit (0, kNumOversamplers, index), std::memory_order_relaxed);
+}
+
+int OverdriveProcessor::getOversamplingIndex() const noexcept
+{
+    return oversamplingIndex.load (std::memory_order_relaxed);
+}
+
+void OverdriveProcessor::setAsymmetry (float amount) noexcept
+{
+    asymmetry.store (juce::jlimit (0.0f, 1.0f, amount), std::memory_order_relaxed);
+}
+
+float OverdriveProcessor::getAsymmetry() const noexcept
+{
+    return asymmetry.load (std::memory_order_relaxed);
+}
+
 float OverdriveProcessor::getLatencySamples() const noexcept
 {
-    if (oversampler == nullptr || ! oversamplingEnabled.load (std::memory_order_relaxed))
-        return 0.0f;
+    if (auto* os = activeOversampler())
+        return os->getLatencyInSamples();
 
-    return oversampler->getLatencyInSamples();
+    return 0.0f;
 }
 } // namespace milodikfx::dsp

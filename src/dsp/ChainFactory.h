@@ -49,6 +49,7 @@ GuitarChain buildGuitarChain (DSPChainManager& chain);
  */
 void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
                               const GuitarChain& chain,
+                              DSPChainManager& manager,
                               std::function<float()> getInputMode = {},
                               std::function<void (float)> setInputMode = {});
 } // namespace milodikfx::dsp

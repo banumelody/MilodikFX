@@ -25,7 +25,7 @@ MilodikFXAudioProcessor::MilodikFXAudioProcessor()
     chain = milodikfx::dsp::buildGuitarChain (engine.getChain());
 
     // No input-routing stage: the host decides what reaches us.
-    milodikfx::dsp::registerChainParameters (registry, chain);
+    milodikfx::dsp::registerChainParameters (registry, chain, engine.getChain());
 
     parameters = std::make_unique<juce::AudioProcessorValueTreeState> (
         *this, nullptr, juce::Identifier (kStateTypeName), buildLayout());

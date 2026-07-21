@@ -174,6 +174,7 @@ void MainComponent::buildRegistry()
     milodikfx::dsp::registerChainParameters (
         registry,
         chainProcessors,
+        audioEngine.getChain(),
         [this] { return (float) inputMode.load (std::memory_order_relaxed); },
         [this] (float v)
         {

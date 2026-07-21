@@ -9,6 +9,7 @@
 #include "dsp/EQProcessor.h"
 #include "dsp/MasterOutProcessor.h"
 #include "dsp/NoiseGateProcessor.h"
+#include "dsp/OverdriveProcessor.h"
 #include "dsp/ReverbProcessor.h"
 #include "dsp/ToneStackProcessor.h"
 
@@ -145,6 +146,43 @@ public:
         expect (std::abs (after - before) > before * 0.05f, "compressor behaved as a bypass");
         expect (c3.getGainReductionDb() < 0.0f, "no gain reduction was reported");
 
+        beginTest ("Parallel mix at 0% leaves the signal untouched");
+
+        milodikfx::dsp::CompressorProcessor mixOff;
+        mixOff.setEnabled (true);
+        mixOff.setThresholdDb (-40.0f);
+        mixOff.setRatio (20.0f);
+        mixOff.setInputGainDb (12.0f);
+        mixOff.setMixPercent (0.0f);
+        mixOff.prepareToPlay (kRate, 2048, 1);
+
+        juce::AudioBuffer<float> mixBuf (1, 2048);
+        fillSine (mixBuf, kRate, 220.0, 0.5f);
+
+        juce::AudioBuffer<float> mixOriginal (1, 2048);
+        mixOriginal.makeCopyOf (mixBuf);
+
+        mixOff.processBlock (mixBuf);
+
+        for (int i = 0; i < mixBuf.getNumSamples(); ++i)
+            expect (std::abs (mixBuf.getSample (0, i) - mixOriginal.getSample (0, i)) < 1.0e-5f,
+                    "mix 0% altered the signal at sample " + juce::String (i));
+
+        beginTest ("Parallel mix sits between dry and fully compressed");
+
+        const auto fullyWet = compressWith (100.0f);
+        const auto halfWet = compressWith (50.0f);
+        const auto fullyDry = compressWith (0.0f);
+
+        logMessage ("rms dry " + juce::String (fullyDry)
+                    + " half " + juce::String (halfWet)
+                    + " wet " + juce::String (fullyWet));
+
+        // Heavy compression with no makeup pulls the level down, so the blend
+        // has to land between the two extremes.
+        expect (fullyWet < fullyDry, "compression did not reduce the level");
+        expect (halfWet > fullyWet && halfWet < fullyDry, "mix 50% did not land between dry and wet");
+
         beginTest ("Disabled is passthrough");
 
         milodikfx::dsp::CompressorProcessor c4;
@@ -164,6 +202,27 @@ public:
     }
 
 private:
+    /** RMS of a heavily compressed sine at a given parallel-mix setting. */
+    static float compressWith (float mixPercent)
+    {
+        milodikfx::dsp::CompressorProcessor comp;
+        comp.setEnabled (true);
+        comp.setAutoMakeupGain (false);
+        comp.setThresholdDb (-40.0f);
+        comp.setRatio (20.0f);
+        comp.setAttackMs (0.5f);
+        comp.setReleaseMs (10.0f);
+        comp.setMixPercent (mixPercent);
+        comp.prepareToPlay (kRate, 8192, 1);
+
+        juce::AudioBuffer<float> buffer (1, 8192);
+        fillSine (buffer, kRate, 220.0, 0.5f);
+
+        comp.processBlock (buffer);
+
+        return rms (buffer, 4096);
+    }
+
     static float measureGainRatio (milodikfx::dsp::CompressorProcessor& comp, float amplitude)
     {
         juce::AudioBuffer<float> buffer (1, 8192);
@@ -178,6 +237,107 @@ private:
 };
 
 static CompressorProcessorTests compressorProcessorTests;
+
+//==============================================================================
+class OverdriveShapeTests final : public juce::UnitTest
+{
+public:
+    OverdriveShapeTests() : juce::UnitTest ("OverdriveProcessor shaping") {}
+
+    void runTest() override
+    {
+        beginTest ("Asymmetry 0 clips both polarities identically");
+
+        // Oversampling off so the measurement is of the curve itself rather than
+        // of the half-band filter's ringing.
+        const auto symmetric = measurePolarityDifference (0.0f);
+        logMessage ("polarity difference at asymmetry 0: " + juce::String (symmetric));
+        expect (symmetric < 0.001f, "symmetric curve was not symmetric");
+
+        beginTest ("Asymmetry biases one polarity more than the other");
+
+        const auto asymmetric = measurePolarityDifference (1.0f);
+        logMessage ("polarity difference at asymmetry 1: " + juce::String (asymmetric));
+        expect (asymmetric > 0.02f, "asymmetry had no effect on the curve");
+
+        beginTest ("Asymmetry introduces no DC on a silent input");
+
+        milodikfx::dsp::OverdriveProcessor od;
+        od.setEnabled (true);
+        od.setDrivePercent (100.0f);
+        od.setAsymmetry (1.0f);
+        od.setOversamplingIndex (0);
+        od.prepareToPlay (kRate, 1024, 1);
+
+        juce::AudioBuffer<float> silent (1, 1024);
+        silent.clear();
+        od.processBlock (silent);
+
+        for (int i = 0; i < silent.getNumSamples(); ++i)
+            expect (std::abs (silent.getSample (0, i)) < 1.0e-5f,
+                    "bias leaked through as DC: " + juce::String (silent.getSample (0, i)));
+
+        beginTest ("Every oversampling factor produces usable audio");
+
+        for (int index = 0; index <= 3; ++index)
+        {
+            milodikfx::dsp::OverdriveProcessor osTest;
+            osTest.setEnabled (true);
+            osTest.setDrivePercent (80.0f);
+            osTest.setOversamplingIndex (index);
+            osTest.prepareToPlay (kRate, 1024, 2);
+
+            juce::AudioBuffer<float> buffer (2, 1024);
+
+            for (int block = 0; block < 4; ++block)
+            {
+                fillSine (buffer, kRate, 440.0, 0.4f, block * 1024);
+                osTest.processBlock (buffer);
+
+                expect (allFinite (buffer), "factor index " + juce::String (index) + " produced a non-finite sample");
+                expect (peak (buffer) <= 2.0f, "factor index " + juce::String (index) + " ran away");
+            }
+
+            expect (rms (buffer) > 0.01f, "factor index " + juce::String (index) + " produced silence");
+
+            const auto latency = osTest.getLatencySamples();
+            logMessage ("oversampling index " + juce::String (index)
+                        + " latency " + juce::String (latency) + " samples");
+
+            if (index == 0)
+                expect (latency == 0.0f, "no oversampling should mean no added latency");
+        }
+    }
+
+private:
+    /** How differently the curve treats a positive and a negative input. */
+    static float measurePolarityDifference (float asymmetry)
+    {
+        auto measure = [asymmetry] (float level)
+        {
+            milodikfx::dsp::OverdriveProcessor od;
+            od.setEnabled (true);
+            od.setDrivePercent (100.0f);
+            od.setLevelPercent (100.0f);
+            od.setAsymmetry (asymmetry);
+            od.setOversamplingIndex (0);
+            od.prepareToPlay (kRate, 512, 1);
+
+            juce::AudioBuffer<float> buffer (1, 512);
+
+            for (int i = 0; i < buffer.getNumSamples(); ++i)
+                buffer.setSample (0, i, level);
+
+            od.processBlock (buffer);
+
+            return buffer.getSample (0, buffer.getNumSamples() - 1);
+        };
+
+        return std::abs (std::abs (measure (0.6f)) - std::abs (measure (-0.6f)));
+    }
+};
+
+static OverdriveShapeTests overdriveShapeTests;
 
 //==============================================================================
 class ReverbProcessorTests final : public juce::UnitTest
@@ -597,6 +757,32 @@ public:
         expect (std::abs (loudestIndex - delaySamples) < 64,
                 "echo arrived at the wrong time: " + juce::String (loudestIndex));
 
+        beginTest ("Damping makes later repeats darker");
+
+        // A bright impulse train through a damped feedback loop must lose high
+        // frequency with every pass. Compare total repeat energy with the filter
+        // effectively off against a hard 800 Hz roll-off.
+        const auto brightTail = measureRepeatEnergy (20000.0f);
+        const auto darkTail = measureRepeatEnergy (800.0f);
+
+        logMessage ("repeat energy bright " + juce::String (brightTail)
+                    + " damped " + juce::String (darkTail));
+
+        expect (darkTail < brightTail * 0.9f, "damping did not attenuate the repeats");
+
+        beginTest ("Ping-pong moves repeats to the other channel");
+
+        // Input on the left only. Without ping-pong the right line is fed
+        // nothing, so any energy on the right proves the feedback crossed over.
+        const auto normalRight = measureRightChannelEnergy (false);
+        const auto pingPongRight = measureRightChannelEnergy (true);
+
+        logMessage ("right-channel energy normal " + juce::String (normalRight)
+                    + " ping-pong " + juce::String (pingPongRight));
+
+        expect (normalRight < 1.0e-6f, "right channel had energy without ping-pong");
+        expect (pingPongRight > 0.001f, "ping-pong did not reach the right channel");
+
         beginTest ("Survives a device change while running");
 
         // Regression: a "vector subscript out of range" fired from
@@ -660,6 +846,78 @@ public:
             expect (allFinite (feedbackBuf));
             expect (peak (feedbackBuf) < 8.0f, "delay feedback ran away at block " + juce::String (block));
         }
+    }
+
+private:
+    /** Energy left in the repeats after the input stops, at a given damping. */
+    static float measureRepeatEnergy (float dampingHz)
+    {
+        milodikfx::dsp::DelayProcessor delay;
+        delay.setEnabled (true);
+        delay.setTimeMs (50.0f);
+        delay.setFeedbackPercent (80.0f);
+        delay.setMixPercent (100.0f);
+        delay.setDampingHz (dampingHz);
+        delay.prepareToPlay (kRate, 4096, 1);
+
+        juce::AudioBuffer<float> buffer (1, 4096);
+
+        // One block of bright content, then silence while the repeats decay.
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+            buffer.setSample (0, i, (i % 8) < 4 ? 0.5f : -0.5f); // square-ish, rich in highs
+
+        delay.processBlock (buffer);
+
+        double energy = 0.0;
+
+        for (int block = 0; block < 8; ++block)
+        {
+            buffer.clear();
+            delay.processBlock (buffer);
+
+            for (int i = 0; i < buffer.getNumSamples(); ++i)
+            {
+                const auto s = (double) buffer.getSample (0, i);
+                energy += s * s;
+            }
+        }
+
+        return (float) energy;
+    }
+
+    /** Energy that reaches the right channel when only the left is fed. */
+    static float measureRightChannelEnergy (bool pingPong)
+    {
+        milodikfx::dsp::DelayProcessor delay;
+        delay.setEnabled (true);
+        delay.setTimeMs (20.0f);
+        delay.setFeedbackPercent (70.0f);
+        delay.setMixPercent (100.0f);
+        delay.setPingPong (pingPong);
+        delay.prepareToPlay (kRate, 4096, 2);
+
+        juce::AudioBuffer<float> buffer (2, 4096);
+
+        double energy = 0.0;
+
+        for (int block = 0; block < 6; ++block)
+        {
+            buffer.clear();
+
+            if (block == 0)
+                for (int i = 0; i < 256; ++i)
+                    buffer.setSample (0, i, 0.6f); // left only
+
+            delay.processBlock (buffer);
+
+            for (int i = 0; i < buffer.getNumSamples(); ++i)
+            {
+                const auto s = (double) buffer.getSample (1, i);
+                energy += s * s;
+            }
+        }
+
+        return (float) energy;
     }
 };
 

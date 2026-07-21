@@ -140,16 +140,51 @@ public:
         for (int i = 0; i < buffer.getNumSamples(); ++i)
             expect (std::abs (buffer.getSample (0, i) - 4.0f) < 0.0001f);
 
-        beginTest ("Bypass keeps signal intact");
+        beginTest ("Bypass keeps signal intact once the crossfade has settled");
 
         chain.setBypassed (true);
-        for (int i = 0; i < buffer.getNumSamples(); ++i)
-            buffer.setSample (0, i, 0.5f);
 
-        chain.processBlock (buffer);
+        // Entering bypass crossfades over ~10 ms rather than switching hard, so
+        // let the fade finish before checking the signal is untouched.
+        juce::AudioBuffer<float> fadeBuffer (1, 1024);
 
-        for (int i = 0; i < buffer.getNumSamples(); ++i)
-            expect (std::abs (buffer.getSample (0, i) - 0.5f) < 0.0001f);
+        for (int block = 0; block < 4; ++block)
+        {
+            for (int i = 0; i < fadeBuffer.getNumSamples(); ++i)
+                fadeBuffer.setSample (0, i, 0.5f);
+
+            chain.processBlock (fadeBuffer);
+        }
+
+        for (int i = 0; i < fadeBuffer.getNumSamples(); ++i)
+            expect (std::abs (fadeBuffer.getSample (0, i) - 0.5f) < 0.0001f);
+
+        beginTest ("Leaving bypass does not step");
+
+        chain.setBypassed (false);
+
+        for (int i = 0; i < fadeBuffer.getNumSamples(); ++i)
+            fadeBuffer.setSample (0, i, 0.5f);
+
+        chain.processBlock (fadeBuffer);
+
+        // First sample must still be close to the dry level; a hard switch would
+        // jump straight to the processed value (0.5 + 1) * 2 = 3.0.
+        expect (std::abs (fadeBuffer.getSample (0, 0) - 0.5f) < 0.05f,
+                "bypass exit stepped: " + juce::String (fadeBuffer.getSample (0, 0)));
+
+        chain.setBypassed (true);
+        for (int block = 0; block < 4; ++block)
+        {
+            fadeBuffer.clear();
+            chain.processBlock (fadeBuffer);
+        }
+        chain.setBypassed (false);
+        for (int block = 0; block < 4; ++block)
+        {
+            fadeBuffer.clear();
+            chain.processBlock (fadeBuffer);
+        }
 
         beginTest ("Gain processor applies dB gain");
 

@@ -81,9 +81,25 @@ GuitarChain buildGuitarChain (DSPChainManager& chain)
 
 void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
                               const GuitarChain& chain,
+                              DSPChainManager& manager,
                               std::function<float()> getInputMode,
                               std::function<void (float)> setInputMode)
 {
+    // Global controls that belong to the chain as a whole rather than to any one
+    // effect. Always in the path, so never toggleable as a unit.
+    {
+        EffectDescriptor e;
+        e.id = "global";
+        e.label = "Global";
+        e.description = "Kontrol yang berlaku untuk seluruh rantai";
+        e.isEnabled = [] { return true; };
+        e.setEnabled = nullptr;
+        e.parameters.push_back (makeToggle ("bypass", "Bypass", false,
+                                            [&manager] { return manager.isBypassed(); },
+                                            [&manager] (bool v) { manager.setBypassed (v); }));
+        registry.addEffect (std::move (e));
+    }
+
     // Effect and parameter ids double as settings keys (dsp.<effect>.<param>)
     // and as REST path segments, so they stay stable even when labels change.
     if (getInputMode && setInputMode)
@@ -91,7 +107,7 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         EffectDescriptor e;
         e.id = "input";
         e.label = "Input";
-        e.description = "How the interface's input channels feed the chain";
+        e.description = "Bagaimana kanal input interface masuk ke rantai";
         e.isEnabled = [] { return true; };
         e.setEnabled = nullptr; // always in the path; nothing to bypass
         e.parameters.push_back (makeParam ("mode", "Mode", "", 0.0f, 3.0f, 1.0f, 0.0f,
@@ -104,7 +120,7 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         EffectDescriptor e;
         e.id = "noiseGate";
         e.label = "Noise Gate";
-        e.description = "Silences pickup hum between notes";
+        e.description = "Meredam dengung pickup di sela nada";
         e.isEnabled = [p] { return p->isEnabled(); };
         e.setEnabled = [p] (bool v) { p->setEnabled (v); };
         e.parameters.push_back (makeParam ("thresholdDb", "Threshold", "dB", -90.0f, 0.0f, 0.5f, -55.0f,
@@ -127,7 +143,7 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         EffectDescriptor e;
         e.id = "cleanBoost";
         e.label = "Clean Boost";
-        e.description = "Lifts a weak pickup before the rest of the chain";
+        e.description = "Mengangkat pickup lemah sebelum rantai lainnya";
         e.isEnabled = [p] { return p->isEnabled(); };
         e.setEnabled = [p] (bool v) { p->setEnabled (v); };
         e.parameters.push_back (makeParam ("gainDb", "Gain", "dB", 0.0f, 24.0f, 0.1f, 0.0f,
@@ -141,7 +157,7 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         EffectDescriptor e;
         e.id = "compressor";
         e.label = "Compressor";
-        e.description = "Evens out picking dynamics";
+        e.description = "Meratakan dinamika petikan";
         e.isEnabled = [p] { return p->isEnabled(); };
         e.setEnabled = [p] (bool v) { p->setEnabled (v); };
         e.parameters.push_back (makeParam ("inputGainDb", "Input", "dB", -24.0f, 24.0f, 0.1f, 0.0f,
@@ -159,6 +175,9 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         e.parameters.push_back (makeParam ("releaseMs", "Release", "ms", 5.0f, 2000.0f, 1.0f, 100.0f,
                                            [p] { return p->getReleaseMs(); },
                                            [p] (float v) { p->setReleaseMs (v); }));
+        e.parameters.push_back (makeParam ("mixPct", "Mix", "%", 0.0f, 100.0f, 1.0f, 100.0f,
+                                           [p] { return p->getMixPercent(); },
+                                           [p] (float v) { p->setMixPercent (v); }));
         e.parameters.push_back (makeToggle ("autoMakeup", "Auto Makeup", true,
                                             [p] { return p->getAutoMakeupGain(); },
                                             [p] (bool v) { p->setAutoMakeupGain (v); }));
@@ -170,7 +189,7 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         EffectDescriptor e;
         e.id = "overdrive";
         e.label = "Overdrive";
-        e.description = "Cubic soft clipper, oversampled";
+        e.description = "Soft clipper kubik, dengan oversampling";
         e.isEnabled = [p] { return p->isEnabled(); };
         e.setEnabled = [p] (bool v) { p->setEnabled (v); };
         e.parameters.push_back (makeParam ("drivePct", "Drive", "%", 0.0f, 100.0f, 0.5f, 0.0f,
@@ -179,9 +198,14 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         e.parameters.push_back (makeParam ("levelPct", "Level", "%", 0.0f, 100.0f, 0.5f, 100.0f,
                                            [p] { return p->getLevelPercent(); },
                                            [p] (float v) { p->setLevelPercent (v); }));
-        e.parameters.push_back (makeToggle ("oversampling", "Oversampling", true,
-                                            [p] { return p->isOversamplingEnabled(); },
-                                            [p] (bool v) { p->setOversamplingEnabled (v); }));
+        e.parameters.push_back (makeParam ("asymmetry", "Asymmetry", "", 0.0f, 1.0f, 0.01f, 0.0f,
+                                           [p] { return p->getAsymmetry(); },
+                                           [p] (float v) { p->setAsymmetry (v); }));
+        // Enum 0..3 = Off / 2x / 4x / 8x. The old boolean stored 1 under this
+        // same key, which now reads back as 2x -- exactly the previous behaviour.
+        e.parameters.push_back (makeParam ("oversampling", "Oversampling", "x", 0.0f, 3.0f, 1.0f, 1.0f,
+                                           [p] { return (float) p->getOversamplingIndex(); },
+                                           [p] (float v) { p->setOversamplingIndex ((int) std::lround (v)); }));
         registry.addEffect (std::move (e));
     }
 
@@ -190,7 +214,7 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         EffectDescriptor e;
         e.id = "eq";
         e.label = "EQ";
-        e.description = "120 Hz shelf / 1 kHz peak / 7 kHz shelf";
+        e.description = "Pembentuk nada SEBELUM distorsi - 120 Hz / 1 kHz / 7 kHz";
         e.isEnabled = [p] { return p->isEnabled(); };
         e.setEnabled = [p] (bool v) { p->setEnabled (v); };
         e.parameters.push_back (makeParam ("bassDb", "Bass", "dB", -12.0f, 12.0f, 0.1f, 0.0f,
@@ -210,7 +234,7 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         EffectDescriptor e;
         e.id = "toneStack";
         e.label = "Contour";
-        e.description = "50 Hz / 500 Hz / 5 kHz shaping";
+        e.description = "Pembentuk nada SETELAH distorsi, sebelum cabinet - 50 Hz / 500 Hz / 5 kHz";
         e.isEnabled = [p] { return p->isEnabled(); };
         e.setEnabled = [p] (bool v) { p->setEnabled (v); };
         e.parameters.push_back (makeParam ("bassDb", "Low", "dB", -12.0f, 12.0f, 0.1f, 0.0f,
@@ -230,7 +254,7 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         EffectDescriptor e;
         e.id = "cabinet";
         e.label = "Cabinet";
-        e.description = "Speaker emulation - leave this on for a DI'd guitar";
+        e.description = "Simulasi speaker - biarkan menyala untuk gitar DI";
         e.isEnabled = [p] { return p->isEnabled(); };
         e.setEnabled = [p] (bool v) { p->setEnabled (v); };
         e.parameters.push_back (makeParam ("presenceDb", "Presence", "dB", -12.0f, 12.0f, 0.1f, 0.0f,
@@ -247,7 +271,7 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         EffectDescriptor e;
         e.id = "delay";
         e.label = "Delay";
-        e.description = "Feedback delay with a gliding time control";
+        e.description = "Delay berumpan balik dengan waktu yang meluncur";
         e.isEnabled = [p] { return p->isEnabled(); };
         e.setEnabled = [p] (bool v) { p->setEnabled (v); };
         e.parameters.push_back (makeParam ("timeMs", "Time", "ms", 10.0f, 1000.0f, 1.0f, 350.0f,
@@ -259,6 +283,12 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         e.parameters.push_back (makeParam ("mixPct", "Mix", "%", 0.0f, 100.0f, 1.0f, 25.0f,
                                            [p] { return p->getMixPercent(); },
                                            [p] (float v) { p->setMixPercent (v); }));
+        e.parameters.push_back (makeParam ("dampingHz", "Damping", "Hz", 500.0f, 20000.0f, 100.0f, 20000.0f,
+                                           [p] { return p->getDampingHz(); },
+                                           [p] (float v) { p->setDampingHz (v); }));
+        e.parameters.push_back (makeToggle ("pingPong", "Ping-Pong", false,
+                                            [p] { return p->isPingPong(); },
+                                            [p] (bool v) { p->setPingPong (v); }));
         registry.addEffect (std::move (e));
     }
 
@@ -267,7 +297,7 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         EffectDescriptor e;
         e.id = "reverb";
         e.label = "Reverb";
-        e.description = "Freeverb-style room";
+        e.description = "Ruang gema bergaya Freeverb";
         e.isEnabled = [p] { return p->isEnabled(); };
         e.setEnabled = [p] (bool v) { p->setEnabled (v); };
         e.parameters.push_back (makeParam ("roomSize", "Size", "", 0.0f, 1.0f, 0.01f, 0.5f,
@@ -290,7 +320,7 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         EffectDescriptor e;
         e.id = "master";
         e.label = "Master";
-        e.description = "Output level and safety limiter";
+        e.description = "Level keluaran dan limiter pengaman";
 
         // Deliberately not toggleable. A header switch here looks exactly like
         // every other effect's bypass, but it would silence the whole app --

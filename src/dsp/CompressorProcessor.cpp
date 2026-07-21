@@ -8,6 +8,7 @@ void CompressorProcessor::prepareToPlay (double sampleRateIn, int samplesPerBloc
     juce::ignoreUnused (samplesPerBlock, numChannels);
     sampleRate = sampleRateIn > 0.0 ? sampleRateIn : 44100.0;
     timingDirty.store (true, std::memory_order_relaxed);
+    smoothedMix.reset (sampleRate, 0.02, mixPercent.load (std::memory_order_relaxed) / 100.0f);
     reset();
     updateCoefficientsIfNeeded();
 }
@@ -64,16 +65,27 @@ void CompressorProcessor::processBlock (juce::AudioBuffer<float>& buffer)
     if (autoMakeupGain.load (std::memory_order_relaxed))
         makeupDb = juce::jlimit (0.0f, 24.0f, -threshold * slope * 0.5f);
 
+    const auto mixTarget = juce::jlimit (0.0f, 1.0f, mixPercent.load (std::memory_order_relaxed) / 100.0f);
+
     auto* const* channels = buffer.getArrayOfWritePointers();
     auto minEnvelopeThisBlock = 0.0f;
+
+    const auto activeChannels = juce::jmin (numChannels, kMaxChannels);
+
+    // Untouched copy of the current sample, kept so the compressed result can be
+    // blended back against it for parallel ("New York") compression. Small enough
+    // to live on the stack, so nothing is allocated here.
+    float dry[kMaxChannels] {};
 
     for (int i = 0; i < numSamples; ++i)
     {
         float peak = 0.0f;
 
-        for (int ch = 0; ch < numChannels; ++ch)
+        for (int ch = 0; ch < activeChannels; ++ch)
         {
-            const auto s = channels[ch][i] * inGain;
+            dry[ch] = channels[ch][i];
+
+            const auto s = dry[ch] * inGain;
             channels[ch][i] = s;
             peak = juce::jmax (peak, std::abs (s));
         }
@@ -93,9 +105,10 @@ void CompressorProcessor::processBlock (juce::AudioBuffer<float>& buffer)
         minEnvelopeThisBlock = juce::jmin (minEnvelopeThisBlock, envelopeDb);
 
         const auto gain = juce::Decibels::decibelsToGain (envelopeDb + makeupDb);
+        const auto mix = smoothedMix.next (mixTarget);
 
-        for (int ch = 0; ch < numChannels; ++ch)
-            channels[ch][i] *= gain;
+        for (int ch = 0; ch < activeChannels; ++ch)
+            channels[ch][i] = dry[ch] * (1.0f - mix) + channels[ch][i] * gain * mix;
     }
 
     gainReductionDb.store (minEnvelopeThisBlock, std::memory_order_relaxed);
@@ -105,6 +118,17 @@ void CompressorProcessor::reset()
 {
     envelopeDb = 0.0f;
     gainReductionDb.store (0.0f, std::memory_order_relaxed);
+    smoothedMix.snapTo (mixPercent.load (std::memory_order_relaxed) / 100.0f);
+}
+
+void CompressorProcessor::setMixPercent (float percent) noexcept
+{
+    mixPercent.store (juce::jlimit (0.0f, 100.0f, percent), std::memory_order_relaxed);
+}
+
+float CompressorProcessor::getMixPercent() const noexcept
+{
+    return mixPercent.load (std::memory_order_relaxed);
 }
 
 void CompressorProcessor::setInputGainDb (float db) noexcept

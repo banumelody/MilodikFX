@@ -58,7 +58,22 @@ void DelayProcessor::processBlock (juce::AudioBuffer<float>& buffer)
     const auto feedbackTarget = juce::jlimit (0.0f, 0.95f, feedbackPercent.load (std::memory_order_relaxed) / 100.0f);
     const auto mixTarget = juce::jlimit (0.0f, 1.0f, mixPercent.load (std::memory_order_relaxed) / 100.0f);
 
+    const auto damping = juce::jlimit (500.0f, 20000.0f, dampingHz.load (std::memory_order_relaxed));
+    const auto dampingActive = damping < kDampingOffHz;
+
+    if (dampingActive && std::abs (damping - builtDampingForHz) > 1.0f)
+    {
+        builtDampingForHz = damping;
+        dampingCoeffs = biquad::makeLowPass (sampleRate, damping, 0.707);
+    }
+
+    const auto crossFeed = pingPong.load (std::memory_order_relaxed) && numCh > 1;
+
     auto* const* channels = buffer.getArrayOfWritePointers();
+
+    // Delayed value per channel for this sample, read before anything is written
+    // so ping-pong can cross the feedback without reading a half-updated line.
+    float delayed[kMaxChannels] {};
 
     for (int i = 0; i < numSamples; ++i)
     {
@@ -80,19 +95,33 @@ void DelayProcessor::processBlock (juce::AudioBuffer<float>& buffer)
 
         for (int ch = 0; ch < numCh; ++ch)
         {
+            const auto& line = lines[(size_t) ch];
+            delayed[ch] = line[(size_t) readIndex] * (1.0f - frac) + line[(size_t) nextIndex] * frac;
+        }
+
+        for (int ch = 0; ch < numCh; ++ch)
+        {
             auto& line = lines[(size_t) ch];
 
-            const auto delayed = line[(size_t) readIndex] * (1.0f - frac) + line[(size_t) nextIndex] * frac;
+            // Ping-pong takes its feedback from the other channel, so each repeat
+            // lands on the opposite side.
+            const auto feedbackSource = crossFeed ? delayed[ch == 0 ? 1 : 0] : delayed[ch];
+
+            auto toFeedBack = feedbackSource * feedback;
+
+            if (dampingActive)
+                toFeedBack = dampingStates[(size_t) ch].process (dampingCoeffs, toFeedBack);
+
             const auto input = channels[ch][i];
 
-            auto written = input + delayed * feedback;
+            auto written = input + toFeedBack;
 
             if (! std::isfinite (written))
                 written = 0.0f;
 
             line[(size_t) writeIndex] = juce::jlimit (-4.0f, 4.0f, written);
 
-            channels[ch][i] = input * (1.0f - mix) + delayed * mix;
+            channels[ch][i] = input * (1.0f - mix) + delayed[ch] * mix;
         }
 
         if (++writeIndex >= kLineLength)
@@ -105,7 +134,30 @@ void DelayProcessor::reset()
     for (auto& line : lines)
         std::fill (line.begin(), line.end(), 0.0f);
 
+    for (auto& state : dampingStates)
+        state.reset();
+
     writeIndex = 0;
+}
+
+void DelayProcessor::setDampingHz (float hz) noexcept
+{
+    dampingHz.store (juce::jlimit (500.0f, 20000.0f, hz), std::memory_order_relaxed);
+}
+
+float DelayProcessor::getDampingHz() const noexcept
+{
+    return dampingHz.load (std::memory_order_relaxed);
+}
+
+void DelayProcessor::setPingPong (bool shouldPingPong) noexcept
+{
+    pingPong.store (shouldPingPong, std::memory_order_relaxed);
+}
+
+bool DelayProcessor::isPingPong() const noexcept
+{
+    return pingPong.load (std::memory_order_relaxed);
 }
 
 void DelayProcessor::setTimeMs (float ms) noexcept

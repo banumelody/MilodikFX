@@ -292,14 +292,14 @@ public:
         // The app adds an input-routing stage because it owns the device; a
         // plugin gets whatever the host sends. Everything else must match.
         milodikfx::api::ParameterRegistry pluginRegistry;
-        milodikfx::dsp::registerChainParameters (pluginRegistry, chain);
+        milodikfx::dsp::registerChainParameters (pluginRegistry, chain, manager);
 
         milodikfx::api::ParameterRegistry appRegistry;
         milodikfx::dsp::registerChainParameters (
-            appRegistry, chain, [] { return 0.0f; }, [] (float) {});
+            appRegistry, chain, manager, [] { return 0.0f; }, [] (float) {});
 
-        expectEquals ((int) pluginRegistry.getEffects().size(), 10);
-        expectEquals ((int) appRegistry.getEffects().size(), 11);
+        expectEquals ((int) pluginRegistry.getEffects().size(), 11);
+        expectEquals ((int) appRegistry.getEffects().size(), 12);
         expect (appRegistry.findEffect ("input") != nullptr);
         expect (pluginRegistry.findEffect ("input") == nullptr);
 
@@ -348,9 +348,24 @@ public:
         appRegistry.setParameter ("master", "muted", 0.0f, ignored);
         expect (! chain.masterOut->isMuted());
 
+        const auto* global = appRegistry.findEffect ("global");
+        expect (global != nullptr);
+
+        if (global != nullptr)
+        {
+            expect (global->setEnabled == nullptr, "global stage must not be toggleable");
+
+            auto foundBypass = false;
+            for (const auto& parameter : global->parameters)
+                if (parameter.id == "bypass")
+                    foundBypass = true;
+
+            expect (foundBypass, "global stage must expose a bypass parameter");
+        }
+
         // Every other effect must still be bypassable.
         for (const auto& effect : appRegistry.getEffects())
-            if (effect.id != "master" && effect.id != "input")
+            if (effect.id != "master" && effect.id != "input" && effect.id != "global")
                 expect (effect.setEnabled != nullptr,
                         juce::String (effect.id) + " should be toggleable");
 
@@ -383,7 +398,7 @@ public:
         const auto liveChain = milodikfx::dsp::buildGuitarChain (liveManager);
 
         milodikfx::api::ParameterRegistry liveRegistry;
-        milodikfx::dsp::registerChainParameters (liveRegistry, liveChain);
+        milodikfx::dsp::registerChainParameters (liveRegistry, liveChain, liveManager);
 
         liveManager.prepareToPlay (48000.0, 512, 2);
 
@@ -456,7 +471,7 @@ public:
         const auto chain = milodikfx::dsp::buildGuitarChain (manager);
 
         milodikfx::api::ParameterRegistry registry;
-        milodikfx::dsp::registerChainParameters (registry, chain);
+        milodikfx::dsp::registerChainParameters (registry, chain, manager);
 
         // Everything on, including the blocks that ship disabled, so no stage
         // can be skipped by an early return.

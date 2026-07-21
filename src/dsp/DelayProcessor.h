@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 
+#include <array>
 #include <atomic>
 #include <vector>
 
@@ -35,6 +36,14 @@ public:
     void setMixPercent (float percent) noexcept;
     float getMixPercent() const noexcept;
 
+    /** Low-pass corner inside the feedback loop; each repeat gets darker. */
+    void setDampingHz (float hz) noexcept;
+    float getDampingHz() const noexcept;
+
+    /** Crosses the feedback between channels so repeats alternate sides. */
+    void setPingPong (bool shouldPingPong) noexcept;
+    bool isPingPong() const noexcept;
+
     void setEnabled (bool shouldEnable) noexcept;
     bool isEnabled() const noexcept;
 
@@ -50,13 +59,24 @@ private:
     int writeIndex = 0;
     bool prepared = false;
 
+    /** Above this the damping filter is treated as off, avoiding a needless stage. */
+    static constexpr float kDampingOffHz = 19000.0f;
+
     std::atomic<float> timeMs { 350.0f };
     std::atomic<float> feedbackPercent { 30.0f };
     std::atomic<float> mixPercent { 25.0f };
+    std::atomic<float> dampingHz { 20000.0f };
+    std::atomic<bool> pingPong { false };
     std::atomic<bool> enabled { false };
 
     // Fixed size, allocated in the constructor. Never resized.
     std::vector<std::vector<float>> lines;
+
+    // Damping filter state, one per channel, sized once and never reallocated --
+    // the same discipline the delay lines follow.
+    std::array<BiquadState, kMaxChannels> dampingStates {};
+    BiquadCoeffs dampingCoeffs;
+    float builtDampingForHz = 0.0f;
 
     SmoothedParam smoothedDelaySamples;
     SmoothedParam smoothedFeedback;

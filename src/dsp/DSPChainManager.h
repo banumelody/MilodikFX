@@ -13,6 +13,8 @@ namespace milodikfx::dsp
 class DSPChainManager final
 {
 public:
+    DSPChainManager();
+
     void prepareToPlay (double sampleRate, int samplesPerBlock, int numChannels);
     void processBlock (juce::AudioBuffer<float>& buffer);
     void reset();
@@ -38,11 +40,26 @@ public:
     }
 
 private:
+    // The dry copy used to crossfade in and out of bypass. Allocated once, at a
+    // size no realistic device block will exceed, so toggling bypass never
+    // allocates and prepareToPlay never moves memory the audio thread is reading.
+    static constexpr int kMaxChannels = 2;
+    static constexpr int kMaxBlockSize = 8192;
+
+    /** Crossfade length, in seconds, when entering or leaving bypass. */
+    static constexpr double kBypassFadeSeconds = 0.01;
+
     std::vector<std::unique_ptr<AudioProcessorBase>> processors;
     std::atomic<bool> bypassed { false };
     double currentSampleRate = 0.0;
     int currentSamplesPerBlock = 0;
     int currentNumChannels = 0;
     bool prepared = false;
+
+    juce::AudioBuffer<float> dryCopy;
+
+    // 1 = fully processed, 0 = fully bypassed. Audio-thread owned.
+    float wetGain = 1.0f;
+    float fadeStep = 1.0f;
 };
 } // namespace milodikfx::dsp
