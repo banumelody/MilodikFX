@@ -1,82 +1,106 @@
+<#
+.SYNOPSIS
+    Runs the Cypress suite against a real MilodikFX process.
+
+.DESCRIPTION
+    The UI has no meaning without the engine behind it -- every control is bound
+    to a live DSP parameter -- so this starts the exe, waits for it to serve the
+    bundle, points Cypress at it, and shuts it down again.
+#>
 param(
     [switch]$Build,
-    [switch]$NoServer,
-    [string]$Config = "Debug"
+    [string]$Config = "Debug",
+    [int]$StartupTimeoutSeconds = 60
 )
 
 Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $repoRoot = (Resolve-Path (Join-Path $scriptDir '..\..')).Path
-Push-Location $repoRoot
+$frontendDir = Join-Path $repoRoot 'frontend'
+$exePath = Join-Path $repoRoot "build\MilodikFX_artefacts\$Config\MilodikFX.exe"
 
-$frontendDir = Join-Path $repoRoot "frontend"
-$exePath = Join-Path $repoRoot ("build\MilodikFX_artefacts\" + $Config + "\MilodikFX.exe")
+function Log($message) { Write-Host "[e2e] $message" }
 
-function Log($m) { Write-Host "[run-local-e2e] $m" }
-
-# Build frontend + exe if requested
 if ($Build) {
-    Log "Building frontend..."
+    Log 'Building frontend...'
     Push-Location $frontendDir
-    npm ci
-    npm run build
-    Pop-Location
+    try {
+        npm ci
+        npm run build
+    } finally {
+        Pop-Location
+    }
 
-    Log "Configuring and building native project..."
-    cmake -S . -B build -G "Visual Studio 17 2022" -A x64
-    cmake --build build --config $Config --parallel
+    Log 'Configuring and building the native project...'
+    cmake -S $repoRoot -B (Join-Path $repoRoot 'build') -G "Visual Studio 17 2022" -A x64
+    cmake --build (Join-Path $repoRoot 'build') --config $Config --target MilodikFX --parallel
 }
 
-if ($NoServer) {
-    Log "Skipping server start as requested (-NoServer)"
-    exit 0
-}
-
-if (!(Test-Path $exePath)) {
-    Write-Error "Executable not found: $exePath"
+if (-not (Test-Path $exePath)) {
+    Write-Error "Executable not found: $exePath (run with -Build first)"
     exit 1
 }
 
-Log "Starting MilodikFX exe: $exePath"
-$proc = Start-Process -FilePath $exePath -PassThru -WindowStyle Hidden
-
-# Wait for readiness (index.html must be served)
-$ready = $false
-for ($i=0; $i -lt 60; $i++) {
-    try {
-        $r = Invoke-WebRequest -Uri "http://localhost:3000/index.html" -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop
-        if ($r.StatusCode -eq 200 -and $r.Headers['Content-Type'] -match "text/html") { $ready = $true; break }
-    } catch {
-        # ignore
-    }
-    Start-Sleep -Seconds 1
+# A second instance would be refused by the single-instance guard and Cypress
+# would then talk to whichever engine was already running.
+$existing = Get-Process MilodikFX -ErrorAction SilentlyContinue
+if ($existing) {
+    Log 'Stopping an already running MilodikFX...'
+    $existing | Stop-Process -Force
+    Start-Sleep -Seconds 2
 }
 
-if (-not $ready) {
-    Write-Error "Server not ready after timeout"
-    try { Stop-Process -Id $proc.Id -Force } catch {}
-    exit 2
-}
+Log "Starting $exePath"
+$proc = Start-Process -FilePath $exePath -PassThru
 
-Log "Server ready. Running smoke checks..."
+$baseUrl = $null
+$exitCode = 0
+
 try {
-    Invoke-RestMethod -Uri "http://localhost:3000/api/levels" -Method GET -TimeoutSec 10 | Out-Null
-    Log "GET /api/levels OK"
+    $deadline = (Get-Date).AddSeconds($StartupTimeoutSeconds)
 
-    $getParam = Invoke-RestMethod -Uri "http://localhost:3000/api/parameters/master-volume" -Method GET -TimeoutSec 10
-    Log "GET /api/parameters/master-volume OK"
+    while ((Get-Date) -lt $deadline -and -not $baseUrl) {
+        foreach ($port in 3000..3008) {
+            try {
+                $probe = Invoke-WebRequest -Uri "http://127.0.0.1:$port/index.html" -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
+                if ($probe.StatusCode -eq 200) { $baseUrl = "http://127.0.0.1:$port"; break }
+            } catch {
+                # not up yet
+            }
+        }
 
-    $body = @{ value = 0.5 } | ConvertTo-Json
-    Invoke-RestMethod -Uri "http://localhost:3000/api/parameters/master-volume" -Method PUT -Body $body -ContentType "application/json" -TimeoutSec 10
-    Log "PUT /api/parameters/master-volume OK"
-} catch {
-    Write-Error "Smoke check failed: $_"
-    try { Stop-Process -Id $proc.Id -Force } catch {}
-    exit 3
+        if (-not $baseUrl) { Start-Sleep -Milliseconds 500 }
+    }
+
+    if (-not $baseUrl) {
+        Write-Error "Engine did not serve the UI within $StartupTimeoutSeconds s"
+        exit 2
+    }
+
+    Log "Engine ready at $baseUrl"
+
+    Push-Location $frontendDir
+    try {
+        $env:MILODIKFX_URL = $baseUrl
+        npx cypress run --spec 'cypress/e2e/engine.cy.ts'
+        $exitCode = $LASTEXITCODE
+    } finally {
+        Remove-Item Env:\MILODIKFX_URL -ErrorAction SilentlyContinue
+        Pop-Location
+    }
+} finally {
+    if ($proc -and -not $proc.HasExited) {
+        Log 'Stopping MilodikFX...'
+        Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+    }
 }
 
-# Teardown
-try { Stop-Process -Id $proc.Id -Force } catch {}
-Log "Smoke checks passed"
+if ($exitCode -ne 0) {
+    Write-Error "Cypress reported failures (exit $exitCode)"
+    exit $exitCode
+}
+
+Log 'E2E passed'
 exit 0

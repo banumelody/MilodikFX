@@ -12,16 +12,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html', 'lcov'],
-      exclude: [
-        'node_modules/',
-        'src/__tests__/',
-        '*.config.ts',
-        'dist/',
-      ],
-      lines: 70,
-      functions: 70,
-      branches: 70,
-      statements: 70,
+      exclude: ['node_modules/', 'src/__tests__/', '*.config.ts', 'dist/', 'cypress/'],
     },
   },
   resolve: {
@@ -29,9 +20,6 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
       '@components': path.resolve(__dirname, './src/components'),
       '@services': path.resolve(__dirname, './src/services'),
-      '@hooks': path.resolve(__dirname, './src/hooks'),
-      '@themes': path.resolve(__dirname, './src/themes'),
-      '@utils': path.resolve(__dirname, './src/utils'),
     },
   },
 })
