@@ -7,6 +7,7 @@ export interface DeviceSettingsProps {
   error: string | null;
   onApply: (request: DeviceRequest) => void;
   onRefresh: () => void;
+  onOptimise: () => void;
 }
 
 function latencyClass(ms: number) {
@@ -16,7 +17,14 @@ function latencyClass(ms: number) {
   return ' pill--bad';
 }
 
-export function DeviceSettings({ devices, busy, error, onApply, onRefresh }: DeviceSettingsProps) {
+export function DeviceSettings({
+  devices,
+  busy,
+  error,
+  onApply,
+  onRefresh,
+  onOptimise,
+}: DeviceSettingsProps) {
   const [open, setOpen] = useState(false);
 
   const current = devices?.current;
@@ -28,9 +36,20 @@ export function DeviceSettings({ devices, busy, error, onApply, onRefresh }: Dev
     <section className="panel" aria-label="Audio device">
       <header className="panel__head">
         <h2 className="panel__title">Audio Device</h2>
-        <button type="button" className="btn btn--ghost" onClick={() => setOpen((v) => !v)}>
-          {open ? 'Tutup' : 'Ubah'}
-        </button>
+        <div className="panel__actions">
+          <button
+            type="button"
+            className="btn btn--ghost"
+            disabled={busy}
+            onClick={onOptimise}
+            title="Cari ulang driver dengan latensi terendah"
+          >
+            Optimalkan latensi
+          </button>
+          <button type="button" className="btn btn--ghost" onClick={() => setOpen((v) => !v)}>
+            {open ? 'Tutup' : 'Ubah'}
+          </button>
+        </div>
       </header>
 
       {current ? (

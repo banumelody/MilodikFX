@@ -597,6 +597,47 @@ public:
         expect (std::abs (loudestIndex - delaySamples) < 64,
                 "echo arrived at the wrong time: " + juce::String (loudestIndex));
 
+        beginTest ("Survives a device change while running");
+
+        // Regression: a "vector subscript out of range" fired from
+        // DelayProcessor::processBlock during a device switch with audio
+        // flowing. Every prepareToPlay resizes the delay lines, so any index
+        // derived from the old size has to be invalidated with them.
+        milodikfx::dsp::DelayProcessor d4;
+        d4.setEnabled (true);
+        d4.setTimeMs (1000.0f); // the longest line, i.e. the largest indices
+        d4.setFeedbackPercent (50.0f);
+        d4.setMixPercent (50.0f);
+
+        const double rates[] = { 96000.0, 48000.0, 44100.0, 192000.0, 48000.0 };
+
+        for (const auto rate : rates)
+        {
+            d4.prepareToPlay (rate, 512, 2);
+
+            juce::AudioBuffer<float> block (2, 512);
+
+            for (int b = 0; b < 40; ++b)
+            {
+                fillSine (block, rate, 220.0, 0.4f, b * 512);
+                d4.processBlock (block);
+                expect (allFinite (block));
+            }
+
+            // Change the time mid-stream too: that moves the read position
+            // while the smoother is still gliding.
+            d4.setTimeMs (10.0f);
+
+            for (int b = 0; b < 40; ++b)
+            {
+                fillSine (block, rate, 220.0, 0.4f, b * 512);
+                d4.processBlock (block);
+                expect (allFinite (block));
+            }
+
+            d4.setTimeMs (1000.0f);
+        }
+
         beginTest ("Feedback stays bounded");
 
         milodikfx::dsp::DelayProcessor d3;

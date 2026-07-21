@@ -9,6 +9,7 @@ const overdrive: EffectDescriptor = {
   label: 'Overdrive',
   description: 'Cubic soft clipper',
   enabled: true,
+  toggleable: true,
   parameters: [
     {
       id: 'drivePct',
@@ -40,6 +41,7 @@ const input: EffectDescriptor = {
   label: 'Input',
   description: 'Channel mapping',
   enabled: true,
+  toggleable: false,
   parameters: [
     {
       id: 'mode',
@@ -115,9 +117,45 @@ describe('EffectRack', () => {
     expect(onParameterChange).toHaveBeenLastCalledWith('input', 'mode', 3);
   });
 
-  it('has no on/off switch for the input stage, which cannot be bypassed', () => {
+  it('draws no on/off switch for a stage the engine marks as not toggleable', () => {
+    // The master output is the important case: a header switch there looks like
+    // a bypass but mutes the whole app, which is how the output once went dead
+    // with nothing on screen explaining why.
     renderRack(input);
     expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+  });
+
+  it('renders a non-toggleable effect with its parameters still reachable', () => {
+    const master: EffectDescriptor = {
+      id: 'master',
+      label: 'Master',
+      description: 'Output level and safety limiter',
+      enabled: true,
+      toggleable: false,
+      parameters: [
+        {
+          id: 'muted',
+          label: 'Mute',
+          unit: '',
+          min: 0,
+          max: 1,
+          step: 1,
+          default: 0,
+          type: 'bool',
+          value: 0,
+        },
+      ],
+    };
+
+    const { onParameterChange } = renderRack(master);
+
+    // Mute must be an explicit, labelled control rather than the header switch.
+    const mute = screen.getByRole('switch', { name: 'Mute' });
+    expect(mute).toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: 'Master on/off' })).not.toBeInTheDocument();
+
+    fireEvent.click(mute);
+    expect(onParameterChange).toHaveBeenLastCalledWith('master', 'muted', 1);
   });
 
   it('dims and disables controls when the effect is off', () => {

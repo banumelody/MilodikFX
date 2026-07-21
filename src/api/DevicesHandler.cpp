@@ -46,10 +46,25 @@ HttpHandler::Response DevicesHandler::handleGet (const std::string&, const std::
     }
 }
 
-HttpHandler::Response DevicesHandler::handlePost (const std::string&, const std::string& body)
+HttpHandler::Response DevicesHandler::handlePost (const std::string& path, const std::string& body)
 {
     try
     {
+        const auto segments = pathSegmentsAfter (path, "/api/devices");
+
+        if (! segments.empty() && toLowerAscii (segments[0]) == "optimise")
+        {
+            const auto error = controller.optimiseForLowLatency();
+
+            if (error.isNotEmpty())
+                return jsonError (400, error);
+
+            auto* root = new juce::DynamicObject();
+            root->setProperty ("current", snapshotToVar (controller.getSnapshot()));
+
+            return jsonOk (juce::var (root));
+        }
+
         const auto parsed = parseBody (body);
 
         if (! parsed.isObject())

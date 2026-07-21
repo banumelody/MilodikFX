@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 
+#include <atomic>
 #include <functional>
 #include <memory>
 
@@ -47,15 +48,27 @@ class AudioDeviceController
 public:
     explicit AudioDeviceController (juce::AudioDeviceManager& deviceManagerToUse);
 
+    /** The buffer size and sample rate to aim for whenever a device is opened. */
+    void setPreferred (double sampleRate, int bufferSize) noexcept;
+
     /**
      * Opens a device, restoring the saved state when it is usable and otherwise
      * walking the preferred device types from lowest latency downwards.
      * Safe to call from any thread; runs on the message thread.
      */
-    juce::String initialise (const juce::XmlElement* savedState, int desiredBufferSize, double desiredSampleRate);
+    juce::String initialise (const juce::XmlElement* savedState);
 
     /** Applies a partial change. Returns an empty string on success. */
     juce::String applyRequest (const AudioDeviceRequest& request);
+
+    /**
+     * Re-runs the low-latency search from scratch, ignoring whatever is open.
+     *
+     * Without this there is no way back: choosing a driver in the UI lands on
+     * that driver's default buffer, and the saved state then pins it there on
+     * every later launch.
+     */
+    juce::String optimiseForLowLatency();
 
     AudioDeviceSnapshot getSnapshot() const;
 
@@ -80,12 +93,22 @@ public:
     static juce::StringArray getPreferredTypeOrder();
 
 private:
-    juce::String initialiseOnMessageThread (const juce::XmlElement* savedState,
-                                            int desiredBufferSize,
-                                            double desiredSampleRate);
+    juce::String initialiseOnMessageThread (const juce::XmlElement* savedState);
+
+    /** Walks the preferred device types and opens the first that works. */
+    juce::String openPreferredType();
+
+    /** Steps the open device towards the preferred rate and buffer size. */
+    void negotiateTowardsPreferred();
 
     /** True when the XML actually came from AudioDeviceManager::createStateXml. */
     static bool isUsableSavedState (const juce::XmlElement* savedState) noexcept;
+
+    /** What "optimise" aims for; drivers clamp upwards from here on their own. */
+    static constexpr int kLowestUsefulBufferSize = 32;
+
+    std::atomic<double> preferredSampleRate { 48000.0 };
+    std::atomic<int> preferredBufferSize { 128 };
     juce::String applyRequestOnMessageThread (const AudioDeviceRequest& request);
     AudioDeviceSnapshot snapshotOnMessageThread() const;
     juce::var describeAvailableOnMessageThread() const;

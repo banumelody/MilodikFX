@@ -18,15 +18,6 @@ float clampDb (float db) noexcept
 }
 } // namespace
 
-void EQProcessor::resizeStates (int numChannels)
-{
-    const auto n = (size_t) juce::jmax (0, numChannels);
-
-    bass.states.assign (n, {});
-    mid.states.assign (n, {});
-    treble.states.assign (n, {});
-}
-
 void EQProcessor::snapToTargets()
 {
     bass.smoothed.snapTo (bassDb.load (std::memory_order_relaxed));
@@ -43,9 +34,7 @@ void EQProcessor::snapToTargets()
 void EQProcessor::prepareToPlay (double sampleRate, int, int numChannels)
 {
     currentSampleRate = sampleRate > 0.0 ? sampleRate : 44100.0;
-    currentNumChannels = juce::jmax (0, numChannels);
-
-    resizeStates (currentNumChannels);
+    currentNumChannels = juce::jlimit (0, kMaxChannels, numChannels);
 
     // Smoothing is stepped once per sample, so the rate is the sample rate.
     bass.smoothed.reset (currentSampleRate, kSmoothingSeconds, 0.0f);
@@ -111,7 +100,7 @@ void EQProcessor::processBlock (juce::AudioBuffer<float>& buffer)
         return;
 
     const auto numSamples = buffer.getNumSamples();
-    const auto numCh = juce::jmin (buffer.getNumChannels(), currentNumChannels, (int) bass.states.size());
+    const auto numCh = juce::jmin (buffer.getNumChannels(), currentNumChannels, kMaxChannels);
 
     if (numSamples <= 0 || numCh <= 0)
         return;

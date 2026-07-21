@@ -118,4 +118,55 @@ describe('MilodikFX UI against a live engine', () => {
     cy.contains('Audio Device').should('be.visible');
     cy.contains(/ms bolak-balik/).should('be.visible');
   });
+
+  it('gives the master stage a labelled mute instead of a bypass switch', () => {
+    // A header switch on Master looks like every other effect's bypass but
+    // silences the whole app, which is exactly how the output once went dead
+    // with nothing on screen to explain it.
+    cy.get('section[aria-label="Master"]').within(() => {
+      cy.get('[role="switch"][aria-label="Master on/off"]').should('not.exist');
+      cy.get('[role="switch"][aria-label="Mute"]').should('exist');
+    });
+
+    cy.request('/api/effects/master').then(({ body }) => {
+      expect(body.toggleable).to.eq(false);
+      expect(body.parameters.map((p: { id: string }) => p.id)).to.include('muted');
+    });
+  });
+
+  it('refuses to bypass a stage the engine marks as not toggleable', () => {
+    cy.request({
+      method: 'POST',
+      url: '/api/effects/master/enabled',
+      body: { enabled: false },
+      failOnStatusCode: false,
+    }).then((response) => {
+      expect(response.status).to.be.oneOf([404, 503]);
+    });
+
+    cy.request('/api/effects/master').then(({ body }) => {
+      expect(body.enabled).to.eq(true);
+    });
+  });
+
+  it('offers a way back to low latency after the device has been changed', () => {
+    cy.contains('button', 'Optimalkan latensi').should('be.visible');
+
+    cy.request('/api/devices').then(({ body }) => {
+      const before = body.current.roundTripLatencyMs;
+
+      // Re-opening the hardware several times is genuinely slow.
+      cy.request({
+        method: 'POST',
+        url: '/api/devices/optimise',
+        body: {},
+        timeout: 120000,
+      }).then((response) => {
+        // Never worse than what we started from, and always a real device.
+        expect(response.body.current.roundTripLatencyMs).to.be.at.most(before + 0.01);
+        expect(response.body.current.bufferSize).to.be.greaterThan(0);
+        expect(response.body.current.inputChannels).to.be.greaterThan(0);
+      });
+    });
+  });
 });

@@ -8,9 +8,10 @@
 /**
  * /api/devices
  *
- *   GET  /api/devices          current device plus everything available
- *   POST /api/devices          { type?, inputDevice?, outputDevice?, sampleRate?, bufferSize? }
- *   POST /api/devices/select   legacy alias for the above
+ *   GET  /api/devices           current device plus everything available
+ *   POST /api/devices           { type?, inputDevice?, outputDevice?, sampleRate?, bufferSize? }
+ *   POST /api/devices/select    legacy alias for the above
+ *   POST /api/devices/optimise  re-run the low-latency search from scratch
  *
  * All work is delegated to AudioDeviceController, which marshals onto the
  * message thread -- this handler runs on a Winsock connection thread and must

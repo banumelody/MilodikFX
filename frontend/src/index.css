@@ -466,6 +466,11 @@ h2 {
   margin-bottom: 12px;
 }
 
+.panel__actions {
+  display: flex;
+  gap: 6px;
+}
+
 .panel__title {
   font-size: 13px;
   text-transform: uppercase;

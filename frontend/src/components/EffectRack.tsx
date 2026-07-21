@@ -56,7 +56,9 @@ export function EffectRack({
           <h2 className="rack__title">{effect.label}</h2>
           <p className="rack__subtitle">{effect.description}</p>
         </div>
-        {effect.id === 'input' ? null : (
+        {/* The input router and the master output are always in the path. A
+            header switch there would look like a bypass but silence the app. */}
+        {effect.toggleable === false ? null : (
           <Toggle
             checked={effect.enabled}
             accent={accent}

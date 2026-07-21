@@ -18,7 +18,7 @@ namespace milodikfx::dsp {
 class ReverbProcessor final : public AudioProcessorBase
 {
 public:
-    ReverbProcessor() = default;
+    ReverbProcessor();
 
     void prepareToPlay (double sampleRate, int samplesPerBlock, int numChannels) override;
     void processBlock (juce::AudioBuffer<float>& buffer) override;
@@ -54,10 +54,26 @@ private:
     // Freeverb's wet scaling, applied after kFixedGain.
     static constexpr float kWetScale = 3.0f;
 
-    struct CombFilter
+    /** Highest rate the delay lines are sized for; see DelayLine::allocate. */
+    static constexpr double kMaxSampleRate = 192000.0;
+
+    /**
+     * Storage is allocated once for the highest sample rate and never resized;
+     * a rate change only moves activeLength. prepareToPlay used to reallocate
+     * these, which freed memory the audio thread was still reading.
+     */
+    struct DelayLine
     {
         std::vector<float> buffer;
+        int activeLength = 1;
         int bufferIndex = 0;
+
+        void allocate (int tuningAt44100);
+        void setLengthForRate (double sampleRate);
+    };
+
+    struct CombFilter : DelayLine
+    {
         float filterStore = 0.0f;
         float damp1 = 0.0f;
         float damp2 = 1.0f;
@@ -74,10 +90,8 @@ private:
         void reset() noexcept;
     };
 
-    struct AllpassFilter
+    struct AllpassFilter : DelayLine
     {
-        std::vector<float> buffer;
-        int bufferIndex = 0;
         float feedback = 0.5f;
 
         void setFeedback (float fb) noexcept { feedback = fb; }

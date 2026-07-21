@@ -13,13 +13,15 @@ namespace milodikfx::dsp
 /**
  * Feedback delay with a fractional read position.
  *
- * The delay time is smoothed and read with linear interpolation, so dragging
- * the time control glides the way a real analogue delay does instead of
- * clicking on every buffer-length change.
+ * The delay lines are allocated once, for the highest sample rate this can ever
+ * run at, and never resized again. prepareToPlay used to reallocate them, which
+ * freed memory the audio thread was still reading during a device change.
  */
 class DelayProcessor final : public AudioProcessorBase
 {
 public:
+    DelayProcessor();
+
     void prepareToPlay (double sampleRate, int samplesPerBlock, int numChannels) override;
     void processBlock (juce::AudioBuffer<float>& buffer) override;
     void reset() override;
@@ -38,10 +40,13 @@ public:
 
 private:
     static constexpr float kMaxDelayMs = 1000.0f;
+    static constexpr double kMaxSampleRate = 192000.0;
+    static constexpr int kMaxChannels = 2;
+
+    /** Enough for the longest delay at the highest rate, so it always fits. */
+    static constexpr int kLineLength = (int) (kMaxDelayMs * 0.001 * kMaxSampleRate) + 2;
 
     double sampleRate = 44100.0;
-    int currentNumChannels = 0;
-    int bufferLength = 0;
     int writeIndex = 0;
     bool prepared = false;
 
@@ -50,6 +55,7 @@ private:
     std::atomic<float> mixPercent { 25.0f };
     std::atomic<bool> enabled { false };
 
+    // Fixed size, allocated in the constructor. Never resized.
     std::vector<std::vector<float>> lines;
 
     SmoothedParam smoothedDelaySamples;

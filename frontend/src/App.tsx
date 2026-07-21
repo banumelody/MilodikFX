@@ -11,6 +11,7 @@ import {
   getEffects,
   getPresets,
   loadPreset,
+  optimiseDevice,
   savePreset,
   setDevice,
   setEffectEnabled,
@@ -196,6 +197,25 @@ export function App() {
     [refreshDevices],
   );
 
+  const handleOptimise = useCallback(async () => {
+    setDeviceBusy(true);
+    setDeviceError(null);
+
+    try {
+      const result = await optimiseDevice();
+      await refreshDevices();
+
+      const ms = result.current.roundTripLatencyMs;
+      setMessage(`Latensi sekarang ${ms.toFixed(1)} ms (${result.current.bufferSize} sampel)`);
+      window.setTimeout(() => setMessage(null), 4000);
+    } catch (error) {
+      setDeviceError(describeError(error));
+      await refreshDevices();
+    } finally {
+      setDeviceBusy(false);
+    }
+  }, [refreshDevices]);
+
   const withMessage = useCallback(
     async (action: () => Promise<void>, success: string) => {
       try {
@@ -327,6 +347,7 @@ export function App() {
             error={deviceError}
             onApply={(request) => void handleDeviceApply(request)}
             onRefresh={() => void refreshDevices()}
+            onOptimise={() => void handleOptimise()}
           />
 
           <PresetControls

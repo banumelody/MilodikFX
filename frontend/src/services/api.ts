@@ -25,6 +25,8 @@ export interface EffectDescriptor {
   label: string;
   description: string;
   enabled: boolean;
+  /** False for stages that are always in the path (input routing, master out). */
+  toggleable: boolean;
   parameters: ParameterDescriptor[];
 }
 
@@ -132,6 +134,13 @@ export const setDevice = (body: DeviceRequest) =>
   request<{ current: DeviceState }>('/devices', {
     method: 'POST',
     body: JSON.stringify(body),
+  });
+
+/** Re-runs the engine's low-latency device search from scratch. */
+export const optimiseDevice = () =>
+  request<{ current: DeviceState }>('/devices/optimise', {
+    method: 'POST',
+    body: '{}',
   });
 
 export const setParameter = (effect: string, parameter: string, value: number) =>

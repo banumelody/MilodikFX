@@ -5,10 +5,32 @@
 
 namespace milodikfx::dsp {
 
+void ReverbProcessor::DelayLine::allocate (int tuningAt44100)
+{
+    // Sized for the fastest rate we support, so a rate change never reallocates.
+    const auto maxLength = (int) std::ceil (tuningAt44100 * (kMaxSampleRate / 44100.0)) + 1;
+
+    buffer.assign ((size_t) juce::jmax (1, maxLength), 0.0f);
+    activeLength = (int) buffer.size();
+    bufferIndex = 0;
+}
+
+void ReverbProcessor::DelayLine::setLengthForRate (double sampleRate)
+{
+    juce::ignoreUnused (sampleRate);
+}
+
 float ReverbProcessor::CombFilter::process (float input) noexcept
 {
+    // activeLength can only shrink within an allocation that never moves, so a
+    // stale value is still a safe index.
+    const auto length = juce::jlimit (1, (int) buffer.size(), activeLength);
+
     if (buffer.empty())
         return input;
+
+    if (bufferIndex < 0 || bufferIndex >= length)
+        bufferIndex = 0;
 
     const auto bufOut = buffer[(size_t) bufferIndex];
     filterStore = (bufOut * damp2) + (filterStore * damp1);
@@ -20,7 +42,7 @@ float ReverbProcessor::CombFilter::process (float input) noexcept
 
     buffer[(size_t) bufferIndex] = stored;
 
-    if (++bufferIndex >= (int) buffer.size())
+    if (++bufferIndex >= length)
         bufferIndex = 0;
 
     return bufOut;
@@ -35,8 +57,13 @@ void ReverbProcessor::CombFilter::reset() noexcept
 
 float ReverbProcessor::AllpassFilter::process (float input) noexcept
 {
+    const auto length = juce::jlimit (1, (int) buffer.size(), activeLength);
+
     if (buffer.empty())
         return input;
+
+    if (bufferIndex < 0 || bufferIndex >= length)
+        bufferIndex = 0;
 
     const auto bufOut = buffer[(size_t) bufferIndex];
     const auto output = -input + bufOut;
@@ -48,7 +75,7 @@ float ReverbProcessor::AllpassFilter::process (float input) noexcept
 
     buffer[(size_t) bufferIndex] = stored;
 
-    if (++bufferIndex >= (int) buffer.size())
+    if (++bufferIndex >= length)
         bufferIndex = 0;
 
     return output;
@@ -60,6 +87,24 @@ void ReverbProcessor::AllpassFilter::reset() noexcept
     bufferIndex = 0;
 }
 
+ReverbProcessor::ReverbProcessor()
+{
+    // Allocate every line once, for the highest rate we support. After this
+    // nothing here ever reallocates, so a device change cannot free memory the
+    // audio thread is reading.
+    for (int i = 0; i < kNumCombFilters; ++i)
+    {
+        combL[(size_t) i].allocate (kCombFilterTuning[i]);
+        combR[(size_t) i].allocate (kCombFilterTuning[i] + kStereoSpread);
+    }
+
+    for (int i = 0; i < kNumAllpassFilters; ++i)
+    {
+        allpassL[(size_t) i].allocate (kAllpassFilterTuning[i]);
+        allpassR[(size_t) i].allocate (kAllpassFilterTuning[i] + kStereoSpread);
+    }
+}
+
 void ReverbProcessor::prepareToPlay (double sampleRateIn, int samplesPerBlock, int numChannels)
 {
     juce::ignoreUnused (samplesPerBlock, numChannels);
@@ -67,22 +112,22 @@ void ReverbProcessor::prepareToPlay (double sampleRateIn, int samplesPerBlock, i
 
     const auto scale = sampleRate / 44100.0;
 
+    auto setLength = [] (DelayLine& line, int tuningAt44100, double rateScale)
+    {
+        const auto wanted = juce::jmax (1, (int) (tuningAt44100 * rateScale));
+        line.activeLength = juce::jlimit (1, (int) line.buffer.size(), wanted);
+    };
+
     for (int i = 0; i < kNumCombFilters; ++i)
     {
-        const auto lengthL = juce::jmax (1, (int) (kCombFilterTuning[i] * scale));
-        const auto lengthR = juce::jmax (1, (int) ((kCombFilterTuning[i] + kStereoSpread) * scale));
-
-        combL[(size_t) i].buffer.assign ((size_t) lengthL, 0.0f);
-        combR[(size_t) i].buffer.assign ((size_t) lengthR, 0.0f);
+        setLength (combL[(size_t) i], kCombFilterTuning[i], scale);
+        setLength (combR[(size_t) i], kCombFilterTuning[i] + kStereoSpread, scale);
     }
 
     for (int i = 0; i < kNumAllpassFilters; ++i)
     {
-        const auto lengthL = juce::jmax (1, (int) (kAllpassFilterTuning[i] * scale));
-        const auto lengthR = juce::jmax (1, (int) ((kAllpassFilterTuning[i] + kStereoSpread) * scale));
-
-        allpassL[(size_t) i].buffer.assign ((size_t) lengthL, 0.0f);
-        allpassR[(size_t) i].buffer.assign ((size_t) lengthR, 0.0f);
+        setLength (allpassL[(size_t) i], kAllpassFilterTuning[i], scale);
+        setLength (allpassR[(size_t) i], kAllpassFilterTuning[i] + kStereoSpread, scale);
         allpassL[(size_t) i].setFeedback (0.5f);
         allpassR[(size_t) i].setFeedback (0.5f);
     }
@@ -119,8 +164,8 @@ void ReverbProcessor::updateParametersIfNeeded() noexcept
         auto& l = combL[(size_t) i];
         auto& r = combR[(size_t) i];
 
-        const auto delaySecondsL = (float) (l.buffer.size() / sampleRate);
-        const auto delaySecondsR = (float) (r.buffer.size() / sampleRate);
+        const auto delaySecondsL = (float) (l.activeLength / sampleRate);
+        const auto delaySecondsR = (float) (r.activeLength / sampleRate);
 
         l.setFeedback (juce::jlimit (0.0f, 0.97f, std::pow (10.0f, -3.0f * delaySecondsL / decaySeconds)));
         r.setFeedback (juce::jlimit (0.0f, 0.97f, std::pow (10.0f, -3.0f * delaySecondsR / decaySeconds)));

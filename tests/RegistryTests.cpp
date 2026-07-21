@@ -1,5 +1,10 @@
 #include <JuceHeader.h>
 
+#include <atomic>
+#include <chrono>
+#include <cmath>
+#include <thread>
+
 #include "api/ParameterRegistry.h"
 #include "dsp/ChainFactory.h"
 #include "preset/PresetManager.h"
@@ -308,6 +313,47 @@ public:
                               juce::String (effect.id) + " has a different parameter count");
         }
 
+        beginTest ("Stages that are always in the path cannot be bypassed");
+
+        // Master carried an on/off switch that mapped to mute. In the UI it was
+        // indistinguishable from an effect bypass, so switching it silenced the
+        // whole app with nothing to say why. Mute is now an explicit parameter.
+        const auto* master = appRegistry.findEffect ("master");
+        expect (master != nullptr);
+
+        if (master != nullptr)
+        {
+            expect (master->setEnabled == nullptr, "master must not be toggleable");
+            expect (master->isEnabled && master->isEnabled(), "master must always report enabled");
+
+            auto foundMute = false;
+            for (const auto& parameter : master->parameters)
+                if (parameter.id == "muted")
+                    foundMute = true;
+
+            expect (foundMute, "master must expose an explicit mute parameter");
+        }
+
+        const auto* input = appRegistry.findEffect ("input");
+        expect (input != nullptr);
+
+        if (input != nullptr)
+            expect (input->setEnabled == nullptr, "input routing must not be toggleable");
+
+        float ignored = 0.0f;
+        expect (! appRegistry.setEffectEnabled ("master", false), "master bypass must be refused");
+        expect (! appRegistry.setEffectEnabled ("input", false), "input bypass must be refused");
+        expect (appRegistry.setParameter ("master", "muted", 1.0f, ignored), "mute must be settable");
+        expect (chain.masterOut->isMuted());
+        appRegistry.setParameter ("master", "muted", 0.0f, ignored);
+        expect (! chain.masterOut->isMuted());
+
+        // Every other effect must still be bypassable.
+        for (const auto& effect : appRegistry.getEffects())
+            if (effect.id != "master" && effect.id != "input")
+                expect (effect.setEnabled != nullptr,
+                        juce::String (effect.id) + " should be toggleable");
+
         beginTest ("Every parameter is readable, writable and sanely bounded");
 
         auto parameterCount = 0;
@@ -386,3 +432,89 @@ public:
 };
 
 static ChainFactoryTests chainFactoryTests;
+
+//==============================================================================
+/**
+ * Reproduces the shape of a real crash: a device change resizes every delay
+ * line and filter-state vector from the message thread while a block is already
+ * in flight on the audio thread. The engine caught a "vector subscript out of
+ * range" from DelayProcessor::processBlock doing exactly this.
+ *
+ * The audio thread must survive a resize underneath it, so nothing on that side
+ * may derive an index from anything but the container it is about to touch.
+ */
+class ConcurrentPrepareTests final : public juce::UnitTest
+{
+public:
+    ConcurrentPrepareTests() : juce::UnitTest ("Concurrent prepare") {}
+
+    void runTest() override
+    {
+        beginTest ("Processing survives prepareToPlay running underneath it");
+
+        milodikfx::dsp::DSPChainManager manager;
+        const auto chain = milodikfx::dsp::buildGuitarChain (manager);
+
+        milodikfx::api::ParameterRegistry registry;
+        milodikfx::dsp::registerChainParameters (registry, chain);
+
+        // Everything on, including the blocks that ship disabled, so no stage
+        // can be skipped by an early return.
+        for (const auto& effect : registry.getEffects())
+            if (effect.setEnabled)
+                effect.setEnabled (true);
+
+        // The longest delay line exercises the largest indices.
+        chain.delay->setTimeMs (1000.0f);
+        chain.delay->setFeedbackPercent (60.0f);
+        chain.delay->setMixPercent (50.0f);
+
+        manager.prepareToPlay (48000.0, 1024, 2);
+
+        std::atomic<bool> stop { false };
+        std::atomic<int> blocksProcessed { 0 };
+        std::atomic<bool> sawNonFinite { false };
+
+        std::thread audioThread ([&]
+        {
+            juce::AudioBuffer<float> block (2, 256);
+
+            while (! stop.load())
+            {
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int i = 0; i < 256; ++i)
+                        block.setSample (ch, i, 0.5f * std::sin (0.01f * (float) i));
+
+                manager.processBlock (block);
+
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int i = 0; i < 256; ++i)
+                        if (! std::isfinite (block.getSample (ch, i)))
+                            sawNonFinite.store (true);
+
+                blocksProcessed.fetch_add (1);
+            }
+        });
+
+        const double rates[] = { 96000.0, 44100.0, 192000.0, 48000.0 };
+
+        for (int round = 0; round < 6; ++round)
+        {
+            for (const auto rate : rates)
+            {
+                manager.prepareToPlay (rate, 1024, 2);
+                std::this_thread::sleep_for (std::chrono::milliseconds (4));
+            }
+        }
+
+        stop.store (true);
+        audioThread.join();
+
+        logMessage ("processed " + juce::String (blocksProcessed.load()) + " blocks across 24 device changes");
+
+        expect (blocksProcessed.load() > 0, "the audio thread never ran");
+        expect (! sawNonFinite.load(), "a non-finite sample reached the output");
+    }
+};
+
+static ConcurrentPrepareTests concurrentPrepareTests;

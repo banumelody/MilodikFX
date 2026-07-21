@@ -41,6 +41,9 @@ public:
 private:
     static constexpr int kNumStages = 6;
 
+    /** Fixed so nothing here is ever reallocated while audio is running. */
+    static constexpr int kMaxChannels = 8;
+
     void rebuildCoefficients (float presenceDb, float toneHz) noexcept;
 
     double sampleRate = 44100.0;
@@ -53,7 +56,7 @@ private:
 
     // Audio-thread-owned.
     std::array<BiquadCoeffs, kNumStages> coeffs;
-    std::vector<std::array<BiquadState, kNumStages>> states;
+    std::array<std::array<BiquadState, kNumStages>, kMaxChannels> states {};
     float builtForPresenceDb = std::numeric_limits<float>::quiet_NaN();
     float builtForToneHz = std::numeric_limits<float>::quiet_NaN();
 

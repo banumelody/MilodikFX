@@ -2,9 +2,9 @@
 
 #include <JuceHeader.h>
 
+#include <array>
 #include <atomic>
 #include <limits>
-#include <vector>
 
 #include "dsp/AudioProcessorBase.h"
 #include "dsp/Biquad.h"
@@ -42,15 +42,17 @@ private:
     // from the value the current coefficients were built for.
     static constexpr float kRecomputeThresholdDb = 0.01f;
 
+    /** Fixed so nothing here is ever reallocated while audio is running. */
+    static constexpr int kMaxChannels = 8;
+
     struct Band
     {
         SmoothedParam smoothed;
         BiquadCoeffs coeffs;
-        std::vector<BiquadState> states;
+        std::array<BiquadState, kMaxChannels> states {};
         float builtForDb = std::numeric_limits<float>::quiet_NaN();
     };
 
-    void resizeStates (int numChannels);
     void snapToTargets();
 
     std::atomic<float> bassDb { 0.0f };

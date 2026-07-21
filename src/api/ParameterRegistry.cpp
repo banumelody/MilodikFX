@@ -88,6 +88,11 @@ juce::var ParameterRegistry::effectToVar (const EffectDescriptor& effect) const
     object->setProperty ("description", juce::String (effect.description));
     object->setProperty ("enabled", effect.isEnabled ? effect.isEnabled() : true);
 
+    // Some stages have no meaningful bypass: the input router and the master
+    // output are always in the path. The UI uses this to decide whether to draw
+    // an on/off switch at all.
+    object->setProperty ("toggleable", effect.setEnabled != nullptr);
+
     juce::Array<juce::var> parameters;
 
     for (const auto& parameter : effect.parameters)

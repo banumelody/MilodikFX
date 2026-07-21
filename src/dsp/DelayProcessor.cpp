@@ -1,5 +1,6 @@
 #include "dsp/DelayProcessor.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace milodikfx::dsp
@@ -12,24 +13,27 @@ constexpr float kTimeSmoothingSeconds = 0.15f;
 constexpr float kLevelSmoothingSeconds = 0.02f;
 } // namespace
 
-void DelayProcessor::prepareToPlay (double sampleRateIn, int, int numChannels)
+DelayProcessor::DelayProcessor()
+{
+    // Allocated once and never touched again, so a device change cannot pull
+    // this memory out from under a block that is already being processed.
+    lines.assign ((size_t) kMaxChannels, std::vector<float> ((size_t) kLineLength, 0.0f));
+}
+
+void DelayProcessor::prepareToPlay (double sampleRateIn, int, int)
 {
     sampleRate = sampleRateIn > 0.0 ? sampleRateIn : 44100.0;
-    currentNumChannels = juce::jmax (0, numChannels);
 
-    // One extra sample so the interpolator can always read index + 1.
-    bufferLength = (int) std::ceil (kMaxDelayMs * 0.001 * sampleRate) + 2;
-
-    lines.assign ((size_t) currentNumChannels, std::vector<float> ((size_t) bufferLength, 0.0f));
-    writeIndex = 0;
-
+    // The delay time in samples depends on the rate, but the storage does not.
     const auto delaySamples = juce::jlimit (1.0f,
-                                            (float) (bufferLength - 2),
+                                            (float) (kLineLength - 2),
                                             timeMs.load (std::memory_order_relaxed) * 0.001f * (float) sampleRate);
 
     smoothedDelaySamples.reset (sampleRate, kTimeSmoothingSeconds, delaySamples);
     smoothedFeedback.reset (sampleRate, kLevelSmoothingSeconds, feedbackPercent.load (std::memory_order_relaxed) / 100.0f);
     smoothedMix.reset (sampleRate, kLevelSmoothingSeconds, mixPercent.load (std::memory_order_relaxed) / 100.0f);
+
+    reset();
 
     prepared = true;
 }
@@ -40,13 +44,16 @@ void DelayProcessor::processBlock (juce::AudioBuffer<float>& buffer)
         return;
 
     const auto numSamples = buffer.getNumSamples();
-    const auto numCh = juce::jmin (buffer.getNumChannels(), currentNumChannels, (int) lines.size());
+    const auto numCh = juce::jmin (buffer.getNumChannels(), kMaxChannels);
 
-    if (numSamples <= 0 || numCh <= 0 || bufferLength <= 2)
+    if (numSamples <= 0 || numCh <= 0)
         return;
 
+    if (writeIndex < 0 || writeIndex >= kLineLength)
+        writeIndex = 0;
+
     const auto delayTarget = juce::jlimit (1.0f,
-                                           (float) (bufferLength - 2),
+                                           (float) (kLineLength - 2),
                                            timeMs.load (std::memory_order_relaxed) * 0.001f * (float) sampleRate);
     const auto feedbackTarget = juce::jlimit (0.0f, 0.95f, feedbackPercent.load (std::memory_order_relaxed) / 100.0f);
     const auto mixTarget = juce::jlimit (0.0f, 1.0f, mixPercent.load (std::memory_order_relaxed) / 100.0f);
@@ -55,18 +62,21 @@ void DelayProcessor::processBlock (juce::AudioBuffer<float>& buffer)
 
     for (int i = 0; i < numSamples; ++i)
     {
-        const auto delaySamples = smoothedDelaySamples.next (delayTarget);
+        const auto delaySamples = juce::jlimit (1.0f, (float) (kLineLength - 2),
+                                                smoothedDelaySamples.next (delayTarget));
         const auto feedback = smoothedFeedback.next (feedbackTarget);
         const auto mix = smoothedMix.next (mixTarget);
 
         auto readPos = (float) writeIndex - delaySamples;
 
         while (readPos < 0.0f)
-            readPos += (float) bufferLength;
+            readPos += (float) kLineLength;
 
-        const auto readIndex = (int) readPos;
+        auto readIndex = (int) readPos;
         const auto frac = readPos - (float) readIndex;
-        const auto nextIndex = (readIndex + 1) % bufferLength;
+
+        readIndex = juce::jlimit (0, kLineLength - 1, readIndex);
+        const auto nextIndex = readIndex + 1 >= kLineLength ? 0 : readIndex + 1;
 
         for (int ch = 0; ch < numCh; ++ch)
         {
@@ -85,7 +95,7 @@ void DelayProcessor::processBlock (juce::AudioBuffer<float>& buffer)
             channels[ch][i] = input * (1.0f - mix) + delayed * mix;
         }
 
-        if (++writeIndex >= bufferLength)
+        if (++writeIndex >= kLineLength)
             writeIndex = 0;
     }
 }

@@ -18,15 +18,6 @@ float clampDb (float db) noexcept
 }
 } // namespace
 
-void ToneStackProcessor::resizeStates (int numChannels)
-{
-    const auto n = (size_t) juce::jmax (0, numChannels);
-
-    bass.states.assign (n, {});
-    mid.states.assign (n, {});
-    treble.states.assign (n, {});
-}
-
 void ToneStackProcessor::snapToTargets()
 {
     bass.smoothed.snapTo (bassDb.load (std::memory_order_relaxed));
@@ -43,9 +34,7 @@ void ToneStackProcessor::prepareToPlay (double sampleRateIn, int samplesPerBlock
     juce::ignoreUnused (samplesPerBlock);
 
     sampleRate = sampleRateIn > 0.0 ? sampleRateIn : 44100.0;
-    currentNumChannels = juce::jmax (0, numChannels);
-
-    resizeStates (currentNumChannels);
+    currentNumChannels = juce::jlimit (0, kMaxChannels, numChannels);
 
     bass.smoothed.reset (sampleRate, kSmoothingSeconds, 0.0f);
     mid.smoothed.reset (sampleRate, kSmoothingSeconds, 0.0f);
@@ -63,7 +52,7 @@ void ToneStackProcessor::processBlock (juce::AudioBuffer<float>& buffer)
         return;
 
     const auto numSamples = buffer.getNumSamples();
-    const auto numCh = juce::jmin (buffer.getNumChannels(), currentNumChannels, (int) bass.states.size());
+    const auto numCh = juce::jmin (buffer.getNumChannels(), currentNumChannels, kMaxChannels);
 
     if (numSamples <= 0 || numCh <= 0)
         return;

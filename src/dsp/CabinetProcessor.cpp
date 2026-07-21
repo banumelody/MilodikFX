@@ -46,9 +46,7 @@ void CabinetProcessor::rebuildCoefficients (float presence, float tone) noexcept
 void CabinetProcessor::prepareToPlay (double sampleRateIn, int, int numChannels)
 {
     sampleRate = sampleRateIn > 0.0 ? sampleRateIn : 44100.0;
-    currentNumChannels = juce::jmax (0, numChannels);
-
-    states.assign ((size_t) currentNumChannels, {});
+    currentNumChannels = juce::jlimit (0, kMaxChannels, numChannels);
 
     smoothedPresence.reset (sampleRate, kSmoothingSeconds, presenceDb.load (std::memory_order_relaxed));
     smoothedTone.reset (sampleRate, kSmoothingSeconds, toneHz.load (std::memory_order_relaxed));
@@ -65,7 +63,7 @@ void CabinetProcessor::processBlock (juce::AudioBuffer<float>& buffer)
         return;
 
     const auto numSamples = buffer.getNumSamples();
-    const auto numCh = juce::jmin (buffer.getNumChannels(), currentNumChannels, (int) states.size());
+    const auto numCh = juce::jmin (buffer.getNumChannels(), currentNumChannels, kMaxChannels);
 
     if (numSamples <= 0 || numCh <= 0)
         return;

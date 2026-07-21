@@ -123,9 +123,16 @@ int AudioDeviceController::chooseBufferSize (juce::AudioIODevice& device, int de
     return best;
 }
 
-juce::String AudioDeviceController::initialise (const juce::XmlElement* savedState,
-                                                int desiredBufferSize,
-                                                double desiredSampleRate)
+void AudioDeviceController::setPreferred (double sampleRate, int bufferSize) noexcept
+{
+    if (sampleRate > 0.0)
+        preferredSampleRate.store (sampleRate, std::memory_order_relaxed);
+
+    if (bufferSize > 0)
+        preferredBufferSize.store (bufferSize, std::memory_order_relaxed);
+}
+
+juce::String AudioDeviceController::initialise (const juce::XmlElement* savedState)
 {
     // The saved state is owned by the caller and may die before the message
     // thread runs, so copy it into the lambda.
@@ -134,15 +141,52 @@ juce::String AudioDeviceController::initialise (const juce::XmlElement* savedSta
     if (savedState != nullptr)
         stateCopy = std::make_shared<juce::XmlElement> (*savedState);
 
-    return runOnMessageThread ([this, stateCopy, desiredBufferSize, desiredSampleRate]
+    return runOnMessageThread ([this, stateCopy]
     {
-        return initialiseOnMessageThread (stateCopy.get(), desiredBufferSize, desiredSampleRate);
+        return initialiseOnMessageThread (stateCopy.get());
     });
 }
 
-juce::String AudioDeviceController::initialiseOnMessageThread (const juce::XmlElement* savedState,
-                                                               int desiredBufferSize,
-                                                               double desiredSampleRate)
+juce::String AudioDeviceController::optimiseForLowLatency()
+{
+    const auto error = runOnMessageThread ([this]
+    {
+        log ("Re-running the low-latency device search on request");
+
+        // Aim at the floor, not at the stored preference. Once someone has
+        // picked, say, 480 samples by hand, that becomes the preference -- and a
+        // button labelled "optimise latency" that targets the value you are
+        // trying to get away from is useless.
+        const auto previousPreference = preferredBufferSize.exchange (kLowestUsefulBufferSize,
+                                                                      std::memory_order_relaxed);
+
+        const auto result = openPreferredType();
+
+        if (! result.isEmpty())
+            preferredBufferSize.store (previousPreference, std::memory_order_relaxed);
+
+        return result;
+    });
+
+    if (error.isNotEmpty())
+        return error;
+
+    // Whatever the search settled on becomes the new target, so the next launch
+    // restores it instead of drifting back to the old preference.
+    const auto snapshot = getSnapshot();
+
+    if (snapshot.bufferSize > 0)
+    {
+        setPreferred (snapshot.sampleRate, snapshot.bufferSize);
+
+        if (onUserRequestedSetup)
+            onUserRequestedSetup (snapshot.sampleRate, snapshot.bufferSize);
+    }
+
+    return {};
+}
+
+juce::String AudioDeviceController::initialiseOnMessageThread (const juce::XmlElement* savedState)
 {
     auto types = juce::StringArray();
 
@@ -169,6 +213,19 @@ juce::String AudioDeviceController::initialiseOnMessageThread (const juce::XmlEl
     {
         log ("Ignoring saved audio state in an unrecognised format; searching for a low-latency device");
     }
+
+    return openPreferredType();
+}
+
+juce::String AudioDeviceController::openPreferredType()
+{
+    const auto desiredSampleRate = preferredSampleRate.load (std::memory_order_relaxed);
+    const auto desiredBufferSize = preferredBufferSize.load (std::memory_order_relaxed);
+
+    juce::StringArray types;
+
+    for (auto* type : deviceManager.getAvailableDeviceTypes())
+        types.add (type->getTypeName());
 
     juce::String lastError;
 
@@ -212,22 +269,19 @@ juce::String AudioDeviceController::initialiseOnMessageThread (const juce::XmlEl
         setup.useDefaultInputChannels = true;
         setup.useDefaultOutputChannels = true;
 
-        // Exclusive mode in particular rejects a buffer size or rate it does not
-        // offer, so relax the request one step at a time rather than writing the
-        // whole device type off after a single "buffer size mismatch".
-        const std::pair<double, int> attempts[] = {
-            { desiredSampleRate, desiredBufferSize },
-            { desiredSampleRate, 0 },
-            { 0.0, desiredBufferSize },
-            { 0.0, 0 }
-        };
+        // Only the sample rate is negotiated here; the buffer is left to the
+        // driver and tuned afterwards, once the open device can tell us what it
+        // actually supports. Guessing at a buffer up front just cost a failed
+        // open per guess, and each of those takes a second or more of hardware
+        // round trip.
+        const double rateAttempts[] = { desiredSampleRate, 0.0 };
 
         juce::String error = "not attempted";
 
-        for (const auto& [rate, buffer] : attempts)
+        for (const auto rate : rateAttempts)
         {
             setup.sampleRate = rate;
-            setup.bufferSize = buffer;
+            setup.bufferSize = 0;
 
             // initialise(), not setAudioDeviceSetup(): the manager only records
             // how many input channels are *needed* here. Going straight to
@@ -259,66 +313,9 @@ juce::String AudioDeviceController::initialiseOnMessageThread (const juce::XmlEl
             continue;
         }
 
-        // The device is open, so it can now tell us what it really supports.
-        // Walk it down towards the requested rate and buffer one step at a time,
-        // rolling back anything it refuses -- a driver that rejects a setting
-        // outright must not cost us the working device we already have.
-        auto tryRefine = [this] (double rate, int buffer)
-        {
-            auto current = deviceManager.getAudioDeviceSetup();
-            const auto previous = current;
+        negotiateTowardsPreferred();
 
-            current.sampleRate = rate;
-            current.bufferSize = buffer;
-
-            const auto refineError = deviceManager.setAudioDeviceSetup (current, true);
-            auto* refined = deviceManager.getCurrentAudioDevice();
-
-            if (refineError.isEmpty() && refined != nullptr
-                && refined->getActiveInputChannels().countNumberOfSetBits() > 0)
-                return true;
-
-            log ("  refine to " + juce::String (rate) + " Hz / " + juce::String (buffer)
-                 + " rejected: " + (refineError.isEmpty() ? juce::String ("no input channels") : refineError));
-
-            deviceManager.setAudioDeviceSetup (previous, true);
-            return false;
-        };
-
-        if (std::abs (device->getCurrentSampleRate() - desiredSampleRate) > 1.0)
-        {
-            const auto rates = device->getAvailableSampleRates();
-
-            if (rates.contains (desiredSampleRate)
-                && tryRefine (desiredSampleRate, device->getCurrentBufferSizeSamples()))
-                device = deviceManager.getCurrentAudioDevice();
-        }
-
-        if (device == nullptr)
-            continue;
-
-        if (device->getCurrentBufferSizeSamples() > desiredBufferSize)
-        {
-            auto candidates = device->getAvailableBufferSizes();
-            candidates.sort();
-
-            auto tried = 0;
-
-            for (const auto candidate : candidates)
-            {
-                if (candidate < 32 || candidate >= device->getCurrentBufferSizeSamples())
-                    continue;
-
-                if (++tried > 4)
-                    break;
-
-                if (tryRefine (device->getCurrentSampleRate(), candidate))
-                {
-                    device = deviceManager.getCurrentAudioDevice();
-                    break;
-                }
-            }
-        }
+        device = deviceManager.getCurrentAudioDevice();
 
         if (device == nullptr)
             continue;
@@ -348,6 +345,79 @@ juce::String AudioDeviceController::initialiseOnMessageThread (const juce::XmlEl
         log ("Fell back to the default device after: " + lastError);
 
     return {};
+}
+
+void AudioDeviceController::negotiateTowardsPreferred()
+{
+    auto* device = deviceManager.getCurrentAudioDevice();
+
+    if (device == nullptr)
+        return;
+
+    const auto desiredSampleRate = preferredSampleRate.load (std::memory_order_relaxed);
+    const auto desiredBufferSize = preferredBufferSize.load (std::memory_order_relaxed);
+
+    // The device is open, so it can now tell us what it really supports. Step it
+    // towards the target and roll back anything it refuses -- a driver that
+    // rejects a setting outright must not cost us the working device we have.
+    auto tryRefine = [this] (double rate, int buffer)
+    {
+        auto current = deviceManager.getAudioDeviceSetup();
+        const auto previous = current;
+
+        current.sampleRate = rate;
+        current.bufferSize = buffer;
+
+        const auto refineError = deviceManager.setAudioDeviceSetup (current, true);
+        auto* refined = deviceManager.getCurrentAudioDevice();
+
+        if (refineError.isEmpty() && refined != nullptr
+            && refined->getActiveInputChannels().countNumberOfSetBits() > 0)
+            return true;
+
+        log ("  refine to " + juce::String (rate) + " Hz / " + juce::String (buffer)
+             + " rejected: " + (refineError.isEmpty() ? juce::String ("no input channels") : refineError));
+
+        deviceManager.setAudioDeviceSetup (previous, true);
+        return false;
+    };
+
+    if (std::abs (device->getCurrentSampleRate() - desiredSampleRate) > 1.0)
+    {
+        const auto rates = device->getAvailableSampleRates();
+
+        if (rates.contains (desiredSampleRate)
+            && tryRefine (desiredSampleRate, device->getCurrentBufferSizeSamples()))
+            device = deviceManager.getCurrentAudioDevice();
+    }
+
+    if (device == nullptr)
+        return;
+
+    if (device->getCurrentBufferSizeSamples() > desiredBufferSize)
+    {
+        auto candidates = device->getAvailableBufferSizes();
+        candidates.sort();
+
+        // Each attempt closes and reopens the hardware, so cap them: three
+        // tries is enough to find the floor on every driver seen so far, and
+        // more than that makes the UI feel hung.
+        auto tried = 0;
+
+        for (const auto candidate : candidates)
+        {
+            if (candidate < 32
+                || candidate < desiredBufferSize
+                || candidate >= device->getCurrentBufferSizeSamples())
+                continue;
+
+            if (++tried > 3)
+                break;
+
+            if (tryRefine (device->getCurrentSampleRate(), candidate))
+                break;
+        }
+    }
 }
 
 juce::String AudioDeviceController::applyRequest (const AudioDeviceRequest& request)
@@ -403,9 +473,28 @@ juce::String AudioDeviceController::applyRequestOnMessageThread (const AudioDevi
     const auto error = deviceManager.setAudioDeviceSetup (setup, true);
 
     if (error.isNotEmpty())
+    {
         log ("Device change rejected: " + error);
+        return error;
+    }
 
-    return error;
+    // Changing driver or device otherwise leaves us on that driver's default
+    // buffer, which is typically ten times larger than we want. Only skip this
+    // when the caller named a buffer size explicitly -- that is their choice.
+    if (request.bufferSize <= 0)
+        negotiateTowardsPreferred();
+
+    if (auto* device = deviceManager.getCurrentAudioDevice())
+    {
+        const auto rate = device->getCurrentSampleRate();
+        const auto block = device->getCurrentBufferSizeSamples();
+
+        log ("Device now: " + deviceManager.getCurrentAudioDeviceType() + " / " + device->getName()
+             + " @ " + juce::String (rate) + " Hz, buffer " + juce::String (block)
+             + " (" + juce::String (rate > 0.0 ? 1000.0 * block / rate : 0.0, 2) + " ms)");
+    }
+
+    return {};
 }
 
 AudioDeviceSnapshot AudioDeviceController::getSnapshot() const

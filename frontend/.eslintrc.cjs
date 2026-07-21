@@ -1,8 +1,14 @@
 module.exports = {
-  extends: ['eslint:recommended', 'plugin:react/recommended', 'plugin:react-hooks/recommended', 'prettier'],
+  root: true,
+  extends: [
+    'eslint:recommended',
+    'plugin:react/recommended',
+    'plugin:react-hooks/recommended',
+    'prettier',
+  ],
   parser: '@typescript-eslint/parser',
   parserOptions: {
-    ecmaVersion: 2020,
+    ecmaVersion: 2022,
     sourceType: 'module',
     ecmaFeatures: {
       jsx: true,
@@ -10,7 +16,7 @@ module.exports = {
   },
   env: {
     browser: true,
-    es2020: true,
+    es2022: true,
     node: true,
   },
   plugins: ['react', 'react-hooks'],
@@ -21,10 +27,16 @@ module.exports = {
     'react-hooks/exhaustive-deps': 'warn',
     'no-console': 'warn',
     'no-unused-vars': 'off',
+
+    // TypeScript already reports unknown identifiers, and it understands types
+    // that exist only at compile time (React.PointerEvent, RequestInit). Leaving
+    // this on made eslint report those as undefined globals.
+    'no-undef': 'off',
   },
   settings: {
     react: {
       version: 'detect',
     },
   },
+  ignorePatterns: ['dist/', 'node_modules/', 'coverage/', '*.config.ts', '*.config.js'],
 }

@@ -4,6 +4,10 @@
 
 #include "MainComponent.h"
 
+#if JUCE_DEBUG && JUCE_WINDOWS
+ #include <crtdbg.h>
+#endif
+
 namespace
 {
 constexpr const char* kKeyWindowBounds = "ui.windowBounds";
@@ -65,6 +69,33 @@ private:
     std::ofstream stream;
     juce::CriticalSection mutex;
 };
+
+#if JUCE_DEBUG && JUCE_WINDOWS
+/**
+ * Turns a Debug CRT assertion (an STL bounds check, say) into a logged stack
+ * trace instead of a modal dialog.
+ *
+ * A dialog stops the process dead with nothing written down, which is exactly
+ * what happened when a "vector subscript out of range" showed up during a
+ * device change: no trace, no clue which container it was.
+ */
+int crtReportHook (int reportType, char* message, int* returnValue)
+{
+    if (reportType == _CRT_ASSERT || reportType == _CRT_ERROR)
+    {
+        if (auto* logger = juce::Logger::getCurrentLogger())
+        {
+            logger->writeToLog ("!!! CRT ASSERTION: " + juce::String (message != nullptr ? message : "(none)"));
+            logger->writeToLog ("--- stack ---\n" + juce::SystemStats::getStackBacktrace());
+        }
+    }
+
+    if (returnValue != nullptr)
+        *returnValue = 0; // carry on rather than break into a debugger
+
+    return TRUE; // handled: suppress the dialog
+}
+#endif
 
 /** Renders the tray/window icon so no external asset is needed at runtime. */
 juce::Image createAppIcon (int size)
@@ -129,6 +160,10 @@ public:
         const auto appData = getAppDataDirectory();
 
         juce::Logger::setCurrentLogger (new AppFileLogger (appData.getChildFile ("milodikfx.log")));
+
+       #if JUCE_DEBUG && JUCE_WINDOWS
+        _CrtSetReportHook (crtReportHook);
+       #endif
 
         juce::Logger::getCurrentLogger()->writeToLog ("========== MilodikFX "
                                                      + getApplicationVersion() + " started ==========");

@@ -98,8 +98,11 @@ MainComponent::MainComponent (juce::PropertiesFile& settingsFileToUse)
         if (buffer > 0)
             desiredBufferSize = buffer;
 
+        deviceController.setPreferred (desiredSampleRate, desiredBufferSize);
         markSettingsDirty();
     };
+
+    deviceController.setPreferred (desiredSampleRate, desiredBufferSize);
 
     deviceManager.addChangeListener (this);
     initialiseAudioAsync();
@@ -355,9 +358,9 @@ void MainComponent::initialiseAudioAsync()
             if (stateText.isNotEmpty())
                 savedState = juce::parseXML (stateText);
 
-            const auto error = self->deviceController.initialise (savedState.get(),
-                                                                  self->desiredBufferSize,
-                                                                  self->desiredSampleRate);
+            self->deviceController.setPreferred (self->desiredSampleRate, self->desiredBufferSize);
+
+            const auto error = self->deviceController.initialise (savedState.get());
 
             if (error.isNotEmpty())
                 log ("Audio init failed: " + error);

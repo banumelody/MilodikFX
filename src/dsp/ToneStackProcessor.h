@@ -3,9 +3,9 @@
 #include "AudioProcessorBase.h"
 #include "Biquad.h"
 
+#include <array>
 #include <atomic>
 #include <limits>
-#include <vector>
 
 namespace milodikfx::dsp {
 
@@ -41,15 +41,17 @@ public:
 private:
     static constexpr float kRecomputeThresholdDb = 0.01f;
 
+    /** Fixed so nothing here is ever reallocated while audio is running. */
+    static constexpr int kMaxChannels = 8;
+
     struct Band
     {
         SmoothedParam smoothed;
         BiquadCoeffs coeffs;
-        std::vector<BiquadState> states;
+        std::array<BiquadState, kMaxChannels> states {};
         float builtForDb = std::numeric_limits<float>::quiet_NaN();
     };
 
-    void resizeStates (int numChannels);
     void snapToTargets();
 
     double sampleRate = 44100.0;

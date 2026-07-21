@@ -93,7 +93,7 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         e.label = "Input";
         e.description = "How the interface's input channels feed the chain";
         e.isEnabled = [] { return true; };
-        e.setEnabled = [] (bool) {};
+        e.setEnabled = nullptr; // always in the path; nothing to bypass
         e.parameters.push_back (makeParam ("mode", "Mode", "", 0.0f, 3.0f, 1.0f, 0.0f,
                                            std::move (getInputMode), std::move (setInputMode)));
         registry.addEffect (std::move (e));
@@ -291,10 +291,17 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         e.id = "master";
         e.label = "Master";
         e.description = "Output level and safety limiter";
-        // Switching the master "off" mutes rather than bypasses, so the limiter
-        // can never be taken out of the signal path.
-        e.isEnabled = [p] { return ! p->isMuted(); };
-        e.setEnabled = [p] (bool v) { p->setMuted (! v); };
+
+        // Deliberately not toggleable. A header switch here looks exactly like
+        // every other effect's bypass, but it would silence the whole app --
+        // which is precisely how the output once ended up dead with no clue as
+        // to why. Mute is an explicit, labelled control instead.
+        e.isEnabled = [] { return true; };
+        e.setEnabled = nullptr;
+
+        e.parameters.push_back (makeToggle ("muted", "Mute", false,
+                                            [p] { return p->isMuted(); },
+                                            [p] (bool v) { p->setMuted (v); }));
         e.parameters.push_back (makeParam ("volumeDb", "Volume", "dB",
                                            MasterOutProcessor::kMinVolumeDb,
                                            MasterOutProcessor::kMaxVolumeDb,
