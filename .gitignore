@@ -42,3 +42,6 @@ package-lock.json
 build/Release/
 dist/
 *.exe
+
+# Release artefacts produced by scripts/build-release.ps1
+dist/

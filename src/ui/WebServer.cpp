@@ -5,8 +5,36 @@
 #include <sstream>
 #include <thread>
 
+#if MILODIKFX_EMBED_UI
+ #include "MilodikFXUiData.h"
+#endif
+
 namespace
 {
+#if MILODIKFX_EMBED_UI
+/**
+ * Looks a file up in the bundle baked into the exe.
+ *
+ * Matching is by original filename rather than by JUCE's mangled symbol name,
+ * so renaming a bundle file cannot silently stop it being found.
+ */
+bool findEmbeddedResource (const std::string& fileName, const char*& data, int& size)
+{
+    for (int i = 0; i < MilodikFXUiData::namedResourceListSize; ++i)
+    {
+        if (fileName == MilodikFXUiData::originalFilenames[i])
+        {
+            int resourceSize = 0;
+            data = MilodikFXUiData::getNamedResource (MilodikFXUiData::namedResourceList[i], resourceSize);
+            size = resourceSize;
+            return data != nullptr && resourceSize > 0;
+        }
+    }
+
+    return false;
+}
+#endif
+
 void log (const juce::String& message)
 {
     // The logger is installed and removed by the application, so a connection
@@ -216,20 +244,40 @@ bool WebServer::serveFile (const std::string& filePath, std::string& contentType
 
     // Belt and braces: even if the checks above missed something, the resolved
     // path must still sit inside the web root.
-    if (! target.isAChildOf (webRoot) || ! target.existsAsFile())
-        return false;
+    if (target.isAChildOf (webRoot) && target.existsAsFile())
+    {
+        juce::MemoryBlock contents;
 
-    juce::MemoryBlock contents;
+        if (target.loadFileAsData (contents))
+        {
+            // Read as bytes, not as text: a font or image would be mangled by
+            // any encoding conversion on the way through.
+            body.assign (static_cast<const char*> (contents.getData()), contents.getSize());
+            contentType = getMimeType (requested);
+            return true;
+        }
+    }
 
-    if (! target.loadFileAsData (contents))
-        return false;
+   #if MILODIKFX_EMBED_UI
+    // Nothing on disk, so fall back to the copy baked into the exe. This is
+    // what lets the executable run on its own, with no resources folder.
+    {
+        const auto slash = requested.find_last_of ('/');
+        const auto fileName = slash == std::string::npos ? requested : requested.substr (slash + 1);
 
-    // Read as bytes, not as text: a font or image would be mangled by any
-    // encoding conversion on the way through.
-    body.assign (static_cast<const char*> (contents.getData()), contents.getSize());
-    contentType = getMimeType (requested);
+        const char* data = nullptr;
+        int size = 0;
 
-    return true;
+        if (findEmbeddedResource (fileName, data, size))
+        {
+            body.assign (data, (size_t) size);
+            contentType = getMimeType (fileName);
+            return true;
+        }
+    }
+   #endif
+
+    return false;
 }
 
 std::string WebServer::buildFallbackPage() const

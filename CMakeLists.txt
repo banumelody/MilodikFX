@@ -5,6 +5,15 @@ project(MilodikFX VERSION 0.9.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Static CRT so the shipped exe runs on a machine without the VC++
+# redistributable. This must be set before JUCE is added: every static library
+# in the link has to agree on the runtime, JUCE's included.
+option(MILODIKFX_STATIC_RUNTIME "Link the C runtime statically" ON)
+
+if(MILODIKFX_STATIC_RUNTIME AND MSVC)
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" CACHE STRING "" FORCE)
+endif()
+
 include(FetchContent)
 
 FetchContent_Declare(
@@ -102,6 +111,8 @@ set(MILODIKFX_ENGINE_SOURCES
   src/dsp/MasterOutProcessor.cpp
   src/dsp/DSPChainManager.h
   src/dsp/DSPChainManager.cpp
+  src/dsp/ChainFactory.h
+  src/dsp/ChainFactory.cpp
   src/preset/PresetManager.h
   src/preset/PresetManager.cpp
   src/api/ParameterRegistry.h
@@ -111,10 +122,44 @@ set(MILODIKFX_ENGINE_SOURCES
 juce_add_gui_app(MilodikFX
   PRODUCT_NAME "MilodikFX"
   COMPANY_NAME "MilodikFX"
+  ICON_BIG "${CMAKE_SOURCE_DIR}/resources/icon.png"
   NEEDS_WEBVIEW2 ${MILODIKFX_ENABLE_WEBVIEW}
 )
 
 juce_generate_juce_header(MilodikFX)
+
+# ---------------------------------------------------------------------------
+# Embedded UI
+#
+# Baking the built bundle into the exe is what makes it genuinely standalone:
+# without this it dies as soon as resources/ui/web is not sitting beside it.
+# Embedding is opportunistic so a fresh clone still configures before the
+# frontend has ever been built; re-run CMake after the first `npm run build`.
+# ---------------------------------------------------------------------------
+set(MILODIKFX_UI_DIST "${CMAKE_SOURCE_DIR}/frontend/dist")
+
+if(EXISTS "${MILODIKFX_UI_DIST}/index.html"
+   AND EXISTS "${MILODIKFX_UI_DIST}/assets/index.js"
+   AND EXISTS "${MILODIKFX_UI_DIST}/assets/index.css")
+  message(STATUS "MilodikFX: embedding the UI bundle into the executable")
+
+  juce_add_binary_data(MilodikFX_UiData
+    HEADER_NAME MilodikFXUiData.h
+    NAMESPACE MilodikFXUiData
+    SOURCES
+      "${MILODIKFX_UI_DIST}/index.html"
+      "${MILODIKFX_UI_DIST}/assets/index.js"
+      "${MILODIKFX_UI_DIST}/assets/index.css"
+  )
+
+  set(MILODIKFX_HAS_EMBEDDED_UI 1)
+else()
+  message(WARNING
+    "MilodikFX: frontend/dist not found or incomplete - the exe will only serve "
+    "the UI from resources/ui/web. Run `cd frontend && npm ci && npm run build`, "
+    "then re-run CMake to embed it.")
+  set(MILODIKFX_HAS_EMBEDDED_UI 0)
+endif()
 
 target_sources(MilodikFX
   PRIVATE
@@ -150,7 +195,12 @@ target_compile_definitions(MilodikFX
     JUCE_WEB_BROWSER=$<BOOL:${MILODIKFX_ENABLE_WEBVIEW}>
     JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=$<BOOL:${MILODIKFX_ENABLE_WEBVIEW}>
     MILODIKFX_ENABLE_WEBVIEW=$<BOOL:${MILODIKFX_ENABLE_WEBVIEW}>
+    MILODIKFX_EMBED_UI=${MILODIKFX_HAS_EMBEDDED_UI}
 )
+
+if(MILODIKFX_HAS_EMBEDDED_UI)
+  target_link_libraries(MilodikFX PRIVATE MilodikFX_UiData)
+endif()
 
 if(MILODIKFX_ENABLE_ASIO)
   if(NOT EXISTS "${MILODIKFX_ASIO_SDK_PATH}/common/asio.h")
@@ -206,6 +256,68 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/frontend/dist/index.html")
   )
 else()
   message(WARNING "frontend/dist not found - build the frontend (cd frontend && npm ci && npm run build) before running MilodikFX")
+endif()
+
+# ---------------------------------------------------------------------------
+# Plugin (VST3 + Standalone)
+#
+# Shares src/dsp with the app through ChainFactory. The standalone wrapper is a
+# useful cross-check: it gives JUCE's own device panel, so a latency problem can
+# be told apart from a problem in this project's device handling.
+# ---------------------------------------------------------------------------
+option(MILODIKFX_BUILD_PLUGIN "Build the VST3 / Standalone plugin target" ON)
+
+if(MILODIKFX_BUILD_PLUGIN)
+  juce_add_plugin(MilodikFX_Plugin
+    PRODUCT_NAME "MilodikFX"
+    COMPANY_NAME "MilodikFX"
+    PLUGIN_MANUFACTURER_CODE Mldk
+    PLUGIN_CODE Mfx1
+    BUNDLE_ID "com.milodikfx.plugin"
+    ICON_BIG "${CMAKE_SOURCE_DIR}/resources/icon.png"
+    FORMATS VST3 Standalone
+    IS_SYNTH FALSE
+    NEEDS_MIDI_INPUT FALSE
+    NEEDS_MIDI_OUTPUT FALSE
+    COPY_PLUGIN_AFTER_BUILD FALSE
+  )
+
+  juce_generate_juce_header(MilodikFX_Plugin)
+
+  target_sources(MilodikFX_Plugin
+    PRIVATE
+      src/plugin/PluginProcessor.h
+      src/plugin/PluginProcessor.cpp
+      ${MILODIKFX_ENGINE_SOURCES}
+  )
+
+  target_include_directories(MilodikFX_Plugin PRIVATE src)
+
+  target_compile_definitions(MilodikFX_Plugin
+    PUBLIC
+      JUCE_WEB_BROWSER=0
+      JUCE_USE_CURL=0
+      JUCE_VST3_CAN_REPLACE_VST2=0
+  )
+
+  if(MILODIKFX_ENABLE_ASIO)
+    target_compile_definitions(MilodikFX_Plugin PRIVATE JUCE_ASIO=1)
+    target_include_directories(MilodikFX_Plugin
+      PRIVATE
+        "${MILODIKFX_ASIO_SDK_PATH}/common"
+        "${MILODIKFX_ASIO_SDK_PATH}/host"
+    )
+  endif()
+
+  target_link_libraries(MilodikFX_Plugin
+    PRIVATE
+      juce::juce_audio_utils
+      juce::juce_dsp
+      juce::juce_data_structures
+      juce::juce_recommended_config_flags
+      juce::juce_recommended_lto_flags
+      juce::juce_recommended_warning_flags
+  )
 endif()
 
 # ---------------------------------------------------------------------------

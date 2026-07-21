@@ -4,111 +4,188 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-MilodikFX is a realtime guitar/bass multi-effect processor for Windows. It ships as a **single C++/JUCE executable** that runs the audio engine *and* an embedded HTTP server; the user-facing UI is a React app served by that server and opened in the default browser. There is no visible JUCE UI — `Main.cpp` creates a 1×1 hidden window and calls `juce::URL("http://localhost:3000").launchInDefaultBrowser()`.
+MilodikFX is a realtime guitar/bass multi-effect processor for Windows, built for one person's own rig.
+
+It ships as a **single self-contained C++/JUCE executable**. The exe runs the audio engine, serves a
+loopback-only HTTP API, and hosts the React UI *inside its own window* via Edge WebView2. There is no
+browser tab and no separate UI process. The UI bundle is embedded in the exe, so the binary runs on its
+own with nothing beside it.
+
+A second target builds the same DSP chain as a **VST3 plugin** plus a JUCE Standalone wrapper.
 
 ## Build & run
 
-Frontend **must** be built before the native build: `CMakeLists.txt` has a POST_BUILD step that copies `frontend/dist/{index.html,assets}` into `<exe dir>/resources/ui/web/`. `frontend/dist` is gitignored, so a fresh clone will fail the native build until the frontend is built.
+The frontend must be built **before** CMake configures, because the bundle is embedded into the exe at
+configure time.
 
 ```powershell
-# 1. Frontend (produces frontend/dist)
+# Everything, including the installer if Inno Setup is present:
+powershell -ExecutionPolicy Bypass -File scripts\build-release.ps1
+
+# ...or by hand:
 cd frontend; npm ci; npm run build; cd ..
-
-# 2. Native (JUCE 8.0.0 is fetched by CMake FetchContent on first configure — slow)
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64
-cmake --build build --config Debug --parallel
-
-# 3. Run — opens http://localhost:3000 in the browser
-build\MilodikFX_artefacts\Debug\MilodikFX.exe
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64      # JUCE + WebView2 are fetched on first run
+cmake --build build --config Release --parallel
+build\MilodikFX_artefacts\Release\MilodikFX.exe
 ```
 
-Release exe: `cmake --build build --config Release --target MilodikFX --parallel` → `build\MilodikFX_artefacts\Release\MilodikFX.exe`.
+If `frontend/dist` is missing, CMake warns and the exe falls back to serving from
+`<exe dir>/resources/ui/web`, then to a built-in "UI not built" page. **Re-run CMake after the first
+frontend build** or the embedded copy will be stale.
 
-Runtime log: `milodikfx.log` next to the executable. Startup is logged step-by-step there; it is the first place to look when the app appears to do nothing.
+Runtime log and settings live in `%APPDATA%\MilodikFX\` (`milodikfx.log`, `MilodikFX.settings`).
+Presets are JSON under `Documents\MilodikFX\Presets`.
 
-**Port 3000 is contended.** The Vite dev server (`frontend/vite.config.ts`) and the exe's `WebServer` both want 3000. Never run both. The exe falls back to 3001–3003 if 3000 is taken, which silently breaks the frontend since `audioApi.ts` hardcodes `http://localhost:3000/api`.
+**Ports.** The engine binds `127.0.0.1:3000`, falling back through 3008. The Vite dev server is on
+**5173** so the two can never contend. The UI resolves its API base from `window.location.origin`, so
+the port fallback is handled automatically.
 
-ASIO is optional and off unless the Steinberg SDK is found. Set `$env:ASIOSDK_DIR` (or `ASIO_SDK_PATH`) before configuring and CMake auto-enables `MILODIKFX_ENABLE_ASIO`.
+**ASIO** is optional. Set `$env:ASIOSDK_DIR` (or pass `-AsioSdkPath` to the build script) before
+configuring and CMake enables it. Without the SDK the engine still reaches low latency through WASAPI
+exclusive mode.
 
 ## Tests
 
-Backend (JUCE `UnitTest` classes aggregated into one binary — `tests/UnitTests.cpp`):
-
 ```powershell
+# Backend: JUCE UnitTest classes aggregated into one binary
 cmake --build build --config Debug --target MilodikFX_tests
-ctest --test-dir build -C Debug --output-on-failure          # all: unit + smoke + smoke-asio
-ctest --test-dir build -C Debug -R MilodikFX_UnitTests --output-on-failure
-build\MilodikFX_tests_artefacts\Debug\MilodikFX_tests.exe    # direct, prints per-test output
+build\MilodikFX_tests_artefacts\Debug\MilodikFX_tests.exe     # prints per-test output to stdout
+ctest --test-dir build -C Debug --output-on-failure           # unit tests + HTTP smoke test
+
+# Frontend
+cd frontend
+npx vitest run              # unit tests (note: `npm run test` starts watch mode)
+npm run type-check
+npm run lint
+
+# End-to-end against a real running engine
+powershell -ExecutionPolicy Bypass -File .github\scripts\run-local-e2e.ps1 [-Build]
 ```
 
-There is **no per-test filter** — `runAllTests()` runs every statically-registered `UnitTest`. To iterate on one, temporarily comment out the other `static XTests xTests;` registrations at the bottom of each class. `MilodikFX_Smoke_ASIO` skips when ASIO is disabled or no driver is present.
+There is **no per-test filter** in the native suite — `runAllTests()` runs every statically-registered
+`UnitTest`. To iterate on one, comment out the other `static XTests xTests;` registrations.
 
-Frontend (from `frontend/`):
+`tests/smoke.ps1` starts the exe, probes ports 3000-3008, and exercises the HTTP surface (metering,
+the effect list, a parameter round-trip, clamping, unknown-parameter rejection, path-traversal
+defence). It backs up and restores the user's settings file rather than deleting it.
 
-```powershell
-npm run test -- --run           # vitest, headless (watch mode is the default without --run)
-npm run test -- -t "pattern"    # single test/suite by name
-npm run lint                    # eslint src --ext .ts,.tsx
-npm run type-check              # tsc --noEmit (also runs as part of npm run build)
-npm run e2e:headless            # Cypress; expects a server on http://localhost:5173
-```
-
-Cypress `baseUrl` is **5173**, not 3000 — E2E runs against `npx vite preview --port 5173`, not against the exe. Only `PerformViewSimplified.tsx` carries `data-testid`s, and it exposes `window.__setMasterVolume` specifically for E2E.
-
-End-to-end against the real exe: `.github/scripts/run-local-e2e.ps1 [-Build]` starts the exe, waits for `/index.html`, and smoke-checks `/api/levels` and GET/PUT `/api/parameters/master-volume`.
-
-CI (`.github/workflows/ci.yml`) is **frontend-only on ubuntu-latest** — the native build is never exercised in CI. C++ changes are verified locally or not at all.
+CI (`.github/workflows/ci.yml`) is **frontend-only on ubuntu-latest** — the native build is never
+exercised there. C++ changes are verified locally or not at all.
 
 ## Architecture
 
-### Request path
+### Composition root
 
-`WebServer` (`src/ui/WebServer.cpp`) is a raw Winsock2 server on a `juce::Thread`, one detached `std::thread` per connection. Paths under `/api` go to `RestApiDispatcher`, everything else is served as a static file from `<exe dir>/resources/ui/web/`.
+`MainComponent` owns everything and is also the window's content component. Construction order is
+load-bearing:
 
-`RestApiDispatcher` does **longest-prefix** matching over registered path prefixes, then dispatches by method to an `HttpHandler` subclass (`src/api/*Handler.*`). Handlers return `{statusCode, contentType, body}`. Registration happens in the `MainComponent` constructor (`/api/devices`, `/api/parameters`, `/api/effects`, `/api/levels`, `/api/presets`, `/api/health`).
+1. DSP chain built (`buildGuitarChain`), parameter registry populated, settings applied,
+2. HTTP server started and handlers registered,
+3. WebView created and pointed at the local server,
+4. audio device opened from a **deferred message-thread callback** — it can block for seconds on a bad
+   driver, and a `Component::SafePointer` means quitting during startup cannot touch a dead object.
 
-Handlers do their own sub-path parsing with `std::string::find`, and mostly **build and parse JSON by hand with string concatenation**. `PresetsHandler` is the exception and the direction to move in — it parses request bodies with `juce::JSON::parse` into a `juce::var`. Responses are still assembled as raw strings everywhere, so any value interpolated into one (preset names in particular) is unescaped.
+### The parameter registry is the spine
 
-### Audio path
+`milodikfx::api::ParameterRegistry` (`src/api/ParameterRegistry.*`) holds one descriptor per effect and
+parameter: id, label, unit, range, step, default, and getter/setter closures over the live processor.
 
-`MainComponent` is the composition root and owns everything. Its constructor order is deliberate and load-bearing:
+Everything reads from it: the REST API, the UI (which builds itself from `GET /api/effects`), preset
+capture/restore, and settings persistence (`dsp.<effectId>.<parameterId>`). **Adding a parameter means
+editing `src/dsp/ChainFactory.cpp` and nothing else** — it appears in the API, the UI, presets and the
+settings file automatically.
 
-1. `WebServer` created and started **first** (so the UI is reachable even if audio hangs),
-2. DSP processors constructed and pushed into `audioEngine.getChain()`,
-3. REST handlers constructed over those objects and registered,
-4. audio device initialised on a **detached background thread** (`initialiseWithDefaultDevices`) — it can block for seconds on bad drivers,
-5. settings loaded from `PropertiesFile` and pushed into the processors.
+Ids are camelCase so they double as settings keys; lookups are case-insensitive so URLs need not care.
 
-Signal chain, in fixed order: `GainProcessor` (clean boost) → `OverdriveProcessor` → `EQProcessor` → `CompressorProcessor` → `ReverbProcessor` → `ToneStackProcessor`. Each derives from `milodikfx::dsp::AudioProcessorBase` (`prepareToPlay`/`processBlock`/`reset`) and holds its parameters as `std::atomic` so the REST thread can write while the audio thread reads.
+### Signal chain
 
-`DSPChainManager::findProcessor<T>()` is a `dynamic_cast` scan that returns the **first** instance of a type. Every REST handler reaches its target this way, so **the chain may contain at most one processor of each type** — adding a second overdrive would silently make it unaddressable via the API. Changing that means giving processors IDs.
+Built by `milodikfx::dsp::buildGuitarChain` (`src/dsp/ChainFactory.*`), shared by the app and the
+plugin, in this fixed order:
 
-### Persistence
+```
+NoiseGate -> CleanBoost -> Compressor -> Overdrive -> EQ -> Contour -> Cabinet -> Delay -> Reverb -> MasterOut
+```
 
-- Settings: `%APPDATA%\MilodikFX\MilodikFX.settings` (`juce::PropertiesFile`, XML). Keys follow `dsp.<effect>.<param>` (e.g. `dsp.overdrive.drivePct`) and are declared as `static constexpr` members at the top of `MainComponent.h`. Writes are debounced — `markSettingsDirty()` + a 1 s timer with a 2 s minimum interval.
-- Presets: JSON under `Documents\MilodikFX\Presets`, via `milodikfx::preset::PresetManager` and the flat `PresetState` struct.
+Each processor derives from `AudioProcessorBase` (`prepareToPlay`/`processBlock`/`reset`) and holds its
+parameters as `std::atomic`. `MasterOut` is the only stage that can attenuate, and it carries the
+safety limiter plus a final clamp — **nothing may be added after it**.
 
-Adding a parameter therefore touches: the processor, `MainComponent.h` key constant, load + `saveSettingsIfNeeded` in `MainComponent.cpp`, `PresetState`/`PresetManager` if it should be preset-able, `ParametersHandler`/`EffectsHandler`, and `frontend/src/services/audioApi.ts`.
+`DSPChainManager::findProcessor<T>()` is a `dynamic_cast` scan returning the *first* instance of a
+type, so the chain may contain at most one processor of each type.
+
+### Realtime rules
+
+These are not stylistic; each corresponds to a bug that shipped:
+
+- **No allocation in `processBlock`.** Filter coefficients are plain `BiquadCoeffs` (`src/dsp/Biquad.h`)
+  recomputed on the audio thread only when a smoothed value actually moved. The old code built
+  `juce::dsp::IIR::Coefficients` objects on the audio thread on every knob turn.
+- **No coefficients shared across threads.** REST threads write atomics; the audio thread derives
+  everything else. Three processors used to race plain floats.
+- **Rebuild after `prepareToPlay`.** Fresh filters must be given coefficients explicitly; the EQ once
+  synced its change-detection cache before updating, so it went silently flat after every device restart.
+- **Guard every envelope.** `std::isfinite` checks and clamps in the compressor, limiter, gate and
+  delay. A divide-by-zero in the compressor's gain computer used to latch NaN into the signal
+  permanently.
+- `ScopedNoDenormals` in the audio callback; parameter smoothing on every gain.
+
+### Audio device
+
+`milodikfx::audio::AudioDeviceController` (`src/audio/AudioDeviceController.*`) owns **every**
+interaction with `juce::AudioDeviceManager` and marshals each one onto the message thread. REST handlers
+run on arbitrary Winsock threads and must never touch the device manager directly.
+
+Device selection walks preferred types: ASIO -> WASAPI Exclusive -> WASAPI Low Latency -> WASAPI shared
+-> DirectSound. Three things it gets right that are easy to break again:
+
+- `initialise(2, 2, ...)` is what tells the manager how many input channels are *needed*. Calling only
+  `setAudioDeviceSetup` leaves that at zero and opens the device output-only.
+- The saved state is only restored when it is a real `DEVICESETUP` element. The manager silently ignores
+  an unrecognised one, opens the default device, and reports no error — which looks exactly like success.
+- Buffer/rate **preferences** change only when the user asks. Adopting whatever the device happened to
+  open at once made the app treat a 2048-sample fallback as its target forever after.
+
+On the developer's Scarlett this reaches 288 samples at 96 kHz, 12 ms round trip, ~2.4 % CPU in Release.
+
+### HTTP layer
+
+`WebServer` (`src/ui/WebServer.cpp`) is a raw Winsock2 server on a `juce::Thread`, one detached
+`std::thread` per connection. It binds **loopback only** — the endpoint can switch audio hardware and
+write files. `stop()` waits for in-flight connections, because handlers hold references to objects the
+owner destroys immediately afterwards.
+
+`RestApiDispatcher` does longest-prefix matching, then dispatches by method to an `HttpHandler`
+subclass. Responses are built with `juce::var` + `juce::JSON` (see `src/api/ApiJson.h`) — never by
+string concatenation.
+
+Endpoints: `/api/effects`, `/api/parameters`, `/api/devices`, `/api/levels`, `/api/presets`,
+`/api/health`.
 
 ### Frontend
 
-`main.tsx` → `App.tsx` → `PerformViewSimplified.tsx`, which uses `RotaryKnob.tsx` and `services/audioApi.ts` and nothing else. It fetches devices on mount and polls `/api/levels` at 100 ms via `subscribeLevels`.
+`main.tsx` -> `App.tsx` -> `components/{EffectRack, Knob, Toggle, LevelMeter, DeviceSettings, PresetControls}`
+plus `services/api.ts`. Nothing else exists; the dormant component tree was deleted.
 
-Namespaces: `milodikfx::audio`, `milodikfx::dsp`, `milodikfx::preset` for engine code; API handlers and `WebServer` are in the global namespace.
+The UI is generated from the registry, so it cannot drift from the engine. Knob interaction is a
+**relative vertical drag** from the press point (shift = fine, wheel, double-click to default, full
+keyboard). Parameter writes are coalesced per parameter on a 40 ms timer so a drag cannot flood the
+thread-per-connection server.
 
-## Dormant code — do not assume it runs
+Vite emits **stable filenames** (`assets/index.js`, `assets/index.css`) — the embedding step and the
+resources copy both depend on that.
 
-Large parts of the tree are abandoned or half-built experiments from earlier sprints. Check whether something is reachable before modifying it:
+## Gotchas
 
-- `src/ui/*Component.{h,cpp}` (KnobComponent, EffectCardComponent, LevelMeterComponent, …) — the old native JUCE UI. **Not in `CMakeLists.txt`; not compiled.** Only `src/ui/WebServer.*` is live.
-- `src/ipc/*` (IPCServer, MessageHandler, TunerBridge, MetronomeBridge) — compiled into the exe but **never instantiated**; `MainComponent` doesn't include them.
-- `electron/`, `binding.gyp`, `src/native/*`, and the root `package.json` scripts (`npm run dev`, `dist:win`) — an Electron shell for a planned v0.9. `electron/main.js` hardcodes `isDev = false`, the native addon is a `HelloWorld` stub that is never `require`d, and its meter data is `Math.random()`. Not the shipping path.
-- Most of `frontend/src/components/` (Dashboard, DashboardV2, PerformView, MainLayout, EffectCard, …), `frontend/src/hooks/`, and `frontend/src/services/{audioEngine,messageBridge,effectManager,eventDispatcher}.ts` — orphaned; nothing imports them from `App.tsx`. The socket.io dependency and `types/ipc.ts` belong to this dead path.
-
-Known gap: `DevicesHandler` reads `deviceManager.getAudioDeviceSetup()`, which comes back empty even when a device is open — `GET /api/devices` reports `sampleRate: 0`, `bufferSize: 0` and `"Default"` for both device names while the log shows the device actually running at 48 kHz with a 480-sample block. Read the live device via `getCurrentAudioDevice()` instead.
-
-When debugging meters or device state, `milodikfx.log` now records the device name, sample rate, block size and channel counts at `audioDeviceAboutToStart`. Note that a silent input legitimately reads near the `kMeterFloorDb` floor (-100 dBFS); a real interface idles around -78 dBFS, so anything pinned at exactly the floor means no blocks are arriving.
+- `npm run test` starts vitest in watch mode and will hang a scripted run. Use `npx vitest run`.
+- Cypress `.trigger('keydown')` builds a plain `Event` by default, so React never sees `key`. Pass
+  `eventConstructor: 'KeyboardEvent'`.
+- The Delay and the Noise Gate ship **disabled**; their controls are correctly inert until switched on.
+- The exe holds a single-instance lock. A second launch just raises the existing window.
+- Inno Setup (`iscc.exe`) is only needed for the installer; `scripts\build-release.ps1` skips that step
+  and still produces the standalone exe without it.
 
 ## Docs
 
-`README.md` and the many `SPRINT_*` / `RELEASE_*` / `TEST_*` markdown files at the repo root are historical sprint reports (partly in Indonesian) and describe states the code has since moved past — treat them as changelog, not spec. `docs/prd.md` holds the product requirements and naming conventions. `.github/copilot-instructions.md` is the closest thing to a maintained command reference.
+`docs/prd.md` holds the product requirements and naming conventions. The `SPRINT_*` / `RELEASE_*` /
+`TEST_*` markdown files at the repo root are historical sprint reports (partly in Indonesian) that
+describe states the code has moved well past — treat them as changelog, not spec.

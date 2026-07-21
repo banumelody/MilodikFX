@@ -1,6 +1,7 @@
 #include <JuceHeader.h>
 
 #include "api/ParameterRegistry.h"
+#include "dsp/ChainFactory.h"
 #include "preset/PresetManager.h"
 
 namespace
@@ -254,3 +255,134 @@ public:
 };
 
 static PresetManagerTests presetManagerTests;
+
+//==============================================================================
+class ChainFactoryTests final : public juce::UnitTest
+{
+public:
+    ChainFactoryTests() : juce::UnitTest ("ChainFactory") {}
+
+    void runTest() override
+    {
+        beginTest ("The chain is built in the documented order");
+
+        milodikfx::dsp::DSPChainManager manager;
+        const auto chain = milodikfx::dsp::buildGuitarChain (manager);
+
+        expectEquals (manager.getNumProcessors(), 10);
+
+        expect (chain.noiseGate != nullptr);
+        expect (chain.cleanBoost != nullptr);
+        expect (chain.compressor != nullptr);
+        expect (chain.overdrive != nullptr);
+        expect (chain.eq != nullptr);
+        expect (chain.toneStack != nullptr);
+        expect (chain.cabinet != nullptr);
+        expect (chain.delay != nullptr);
+        expect (chain.reverb != nullptr);
+        expect (chain.masterOut != nullptr);
+
+        beginTest ("The plugin and the app share one parameter set");
+
+        // The app adds an input-routing stage because it owns the device; a
+        // plugin gets whatever the host sends. Everything else must match.
+        milodikfx::api::ParameterRegistry pluginRegistry;
+        milodikfx::dsp::registerChainParameters (pluginRegistry, chain);
+
+        milodikfx::api::ParameterRegistry appRegistry;
+        milodikfx::dsp::registerChainParameters (
+            appRegistry, chain, [] { return 0.0f; }, [] (float) {});
+
+        expectEquals ((int) pluginRegistry.getEffects().size(), 10);
+        expectEquals ((int) appRegistry.getEffects().size(), 11);
+        expect (appRegistry.findEffect ("input") != nullptr);
+        expect (pluginRegistry.findEffect ("input") == nullptr);
+
+        for (const auto& effect : pluginRegistry.getEffects())
+        {
+            const auto* twin = appRegistry.findEffect (effect.id);
+            expect (twin != nullptr, "app registry is missing " + juce::String (effect.id));
+
+            if (twin != nullptr)
+                expectEquals ((int) twin->parameters.size(), (int) effect.parameters.size(),
+                              juce::String (effect.id) + " has a different parameter count");
+        }
+
+        beginTest ("Every parameter is readable, writable and sanely bounded");
+
+        auto parameterCount = 0;
+
+        appRegistry.forEachParameter (
+            [this, &parameterCount] (const milodikfx::api::EffectDescriptor& effect,
+                                     const milodikfx::api::ParameterDescriptor& parameter)
+            {
+                ++parameterCount;
+
+                const auto where = juce::String (effect.id) + "." + juce::String (parameter.id);
+
+                expect (parameter.get != nullptr, where + " has no getter");
+                expect (parameter.set != nullptr, where + " has no setter");
+                expect (parameter.maxValue > parameter.minValue, where + " has an empty range");
+                expect (parameter.defaultValue >= parameter.minValue
+                            && parameter.defaultValue <= parameter.maxValue,
+                        where + " default sits outside its range");
+                expect (! parameter.label.empty(), where + " has no label");
+            });
+
+        expect (parameterCount >= 30, "only " + juce::String (parameterCount) + " parameters registered");
+
+        beginTest ("Writing the extremes of every parameter never breaks the chain");
+
+        milodikfx::dsp::DSPChainManager liveManager;
+        const auto liveChain = milodikfx::dsp::buildGuitarChain (liveManager);
+
+        milodikfx::api::ParameterRegistry liveRegistry;
+        milodikfx::dsp::registerChainParameters (liveRegistry, liveChain);
+
+        liveManager.prepareToPlay (48000.0, 512, 2);
+
+        // Enable everything, including the blocks that ship off, so nothing is
+        // skipped by an early return.
+        for (const auto& effect : liveRegistry.getEffects())
+            if (effect.setEnabled)
+                effect.setEnabled (true);
+
+        const float extremes[] = { 0.0f, 0.5f, 1.0f };
+
+        for (const auto position : extremes)
+        {
+            liveRegistry.forEachParameter (
+                [position] (const milodikfx::api::EffectDescriptor&,
+                            const milodikfx::api::ParameterDescriptor& parameter)
+                {
+                    parameter.set (parameter.minValue
+                                   + position * (parameter.maxValue - parameter.minValue));
+                });
+
+            juce::AudioBuffer<float> buffer (2, 512);
+
+            for (int block = 0; block < 6; ++block)
+            {
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int i = 0; i < 512; ++i)
+                        buffer.setSample (ch, i, 0.8f * std::sin (0.05 * (block * 512 + i)));
+
+                liveManager.processBlock (buffer);
+
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int i = 0; i < 512; ++i)
+                    {
+                        const auto sample = buffer.getSample (ch, i);
+
+                        expect (std::isfinite (sample),
+                                "non-finite output at extreme " + juce::String (position));
+                        expect (std::abs (sample) <= 1.0f,
+                                "output exceeded full scale at extreme " + juce::String (position)
+                                    + ": " + juce::String (sample));
+                    }
+            }
+        }
+    }
+};
+
+static ChainFactoryTests chainFactoryTests;

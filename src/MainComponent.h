@@ -12,16 +12,7 @@
 #include "api/PresetsHandler.h"
 #include "audio/AudioDeviceController.h"
 #include "audio/AudioEngine.h"
-#include "dsp/CabinetProcessor.h"
-#include "dsp/CompressorProcessor.h"
-#include "dsp/DelayProcessor.h"
-#include "dsp/EQProcessor.h"
-#include "dsp/GainProcessor.h"
-#include "dsp/MasterOutProcessor.h"
-#include "dsp/NoiseGateProcessor.h"
-#include "dsp/OverdriveProcessor.h"
-#include "dsp/ReverbProcessor.h"
-#include "dsp/ToneStackProcessor.h"
+#include "dsp/ChainFactory.h"
 #include "preset/PresetManager.h"
 #include "ui/WebServer.h"
 
@@ -130,6 +121,8 @@ private:
     uint32_t lastSettingsSaveMs = 0;
     int desiredBufferSize = 128;
     double desiredSampleRate = 48000.0;
+
+    milodikfx::dsp::GuitarChain chainProcessors;
 
     milodikfx::dsp::NoiseGateProcessor* noiseGateProcessor = nullptr;
     milodikfx::dsp::GainProcessor* cleanBoostProcessor = nullptr;
