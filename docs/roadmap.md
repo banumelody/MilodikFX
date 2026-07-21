@@ -456,6 +456,32 @@ Latar: pertanyaan "butuh amp simulator tidak?" dan "fitur Fractal mana yang bisa
 
 **Fitur Fractal yang TIDAK diadaptasi, dan alasannya:** X/Y channel per blok (scene sudah menutup kebutuhannya; kombinasi scene × channel per blok membingungkan untuk pemakaian satu orang), chain dinamis (alasan arsitektur di Revisi 2), dan global blocks (hanya berguna kalau preset berjumlah ratusan). Yang sudah ada duluan di sini: scene, tuner, metronome, tap tempo + sync, tempo global, bypass per blok via MIDI.
 
+### P4-0. Input Gain / Trim — **kerjakan pertama di P4**
+
+**Masalah:** tidak ada satu pun cara menyetel level sinyal yang masuk ke rantai. Yang ada sekarang: `input.mode` (routing kanal saja, tanpa gain), `cleanBoost` 0…+24 dB (**hanya bisa menaikkan**, dan letaknya *setelah* noise gate), dan `compressor.inputGainDb` (−24…+24 dB, tapi itu untuk mendorong threshold kompresornya sendiri, bukan seluruh rantai). Akibatnya, level pickup menentukan bunyi seluruh rantai dan tidak bisa dikoreksi: humbucker aktif (EMG bisa 6–10 dB lebih panas dari passive) membuat overdrive lebih kotor pada setelan Drive yang sama, sementara single coil vintage yang lemah membuat setelan yang sama terdengar hambar. Ganti gitar berarti mendial ulang seluruh rantai, bukan satu knob. Menaikkan gain di interface bukan jawaban — itu menggeser titik clipping converter dan tetap tidak bisa **menurunkan** sinyal yang sudah terlalu panas.
+
+**Rekomendasi: prosesor baru `InputTrimProcessor`, jadi stage paling awal rantai**, dan parameternya digabung ke kartu **Input** yang sudah ada (`input.gainDb`, −24…+24 dB, step 0.1, default 0).
+
+**Kenapa harus sebelum noise gate.** Ini keputusan yang menentukan. Kalau trim di depan gate, threshold gate tetap benar secara relatif terhadap sinyal: ganti gitar → setel ulang trim saja, gate ikut menyesuaikan. Kalau trim setelah gate, threshold gate terikat ke level mentah interface, jadi ganti gitar berarti mendial ulang trim **dan** gate. Konsekuensinya: `cleanBoost` (yang ada setelah gate) **tidak bisa** dipakai sebagai trim hanya dengan melebarkan rentangnya ke negatif — lihat alternatif yang ditolak di bawah.
+
+**Kenapa prosesor bertipe baru, bukan `GainProcessor` kedua.** `DSPChainManager::findProcessor<T>()` adalah pindaian `dynamic_cast` yang mengembalikan instance **pertama** bertipe itu, jadi rantai hanya boleh memuat satu prosesor per tipe. Menambahkan `GainProcessor` kedua akan membuat `findProcessor<GainProcessor>()` mengembalikan trim, bukan `cleanBoost` — aturan yang sudah didokumentasikan di `CLAUDE.md` dan tidak boleh dilanggar diam-diam.
+
+**Meter harus ikut, kalau tidak knobnya buta.** `inputPeak` diukur di `MainComponent` **sebelum** `audioEngine.processBlock`, jadi trim sebagai stage rantai tidak akan terlihat di meter sama sekali — artinya kamu mendial gain tanpa umpan balik apa pun. Untungnya tidak perlu pengukuran kedua: trim adalah gain murni, jadi level pasca-trim **persis** level pra-trim + nilai trim dalam dB. Tambahkan satu field ke payload `/api/levels` (mis. `chainInputLevel`) yang dihitung begitu. Meter input menampilkan angka pasca-trim (itulah yang benar-benar diterima rantai), sementara angka pra-trim tetap tersedia untuk melihat sinyal yang sudah terlalu panas dari interface — hal yang tidak bisa diperbaiki oleh trim digital berapa pun.
+
+**Kejelasan tiga kontrol gain** (bersaudara dengan P3-2, EQ vs Contour): setelah ini ada Input Gain, Clean Boost, dan Compressor Input. Deskripsi masing-masing harus menyatakan tugasnya, bukan cuma namanya — Input Gain: *"samakan level gitar ini dengan rantai, setel sekali per gitar"*; Clean Boost: *"dorong front-end untuk solo"*; Compressor Input: *"seberapa keras sinyal menabrak threshold kompresor"*.
+
+**Yang perlu ikut berubah:** `GuitarChain` dapat anggota `inputTrim`; `buildGuitarChain` menaruhnya paling depan; `registerChainParameters` membangun efek `input` ketika prosesor trim ada, dengan `mode` ditambahkan hanya bila `ChainExtras` menyediakannya (sekarang seluruh kartu `input` bergantung pada extras) — sehingga build plugin tetap dapat trim meski tidak dapat routing kanal; urutan rantai di `CLAUDE.md` diperbarui; test `ChainFactory` yang mengharapkan `getNumProcessors() == 10` jadi 11, dan hitungan efek plugin/app bertambah satu. `ChainStrip` sudah menyaring `input`, jadi strip tidak berubah — trim diwakili oleh terminal "IN".
+
+**Alternatif yang dipertimbangkan dan ditolak:**
+- *Melebarkan `cleanBoost` ke −24…+24 dB.* Perubahan satu baris, tapi letaknya setelah noise gate (merusak sifat gate-mengikuti-trim di atas) dan memaksa satu knob mengerjakan dua tugas yang disetel pada waktu berbeda — trim sekali per gitar, boost per lagu.
+- *Menerapkan trim di pemetaan input `MainComponent`.* Menguntungkan meter dan tuner secara gratis (keduanya membaca sebelum `processBlock`), tapi hanya berlaku untuk aplikasi standalone — build plugin tidak akan punya trim sama sekali — dan memaksa smoothing ditulis tangan di dalam callback audio alih-alih memakai `SmoothedParam` lewat `AudioProcessorBase` seperti stage lain.
+
+**Test:** 0 dB harus passthrough **bit-identik** (default tidak boleh mengubah sinyal sedikit pun); −6 dB memotong amplitudo setengah, +6 dB menggandakan; perubahan besar meluncur tanpa step (pola yang sama dengan test glide level overdrive); clamp rentang dan `isfinite`. Yang paling penting: **test urutan** — trim +12 dB dengan threshold gate tertentu harus berperilaku sama dengan trim 0 dan input 12 dB lebih panas, membuktikan gate mengikuti trim. Registry: efek `input` mengekspos `gainDb` di build plugin maupun app. Meter: level pasca-trim yang dilaporkan sama dengan pra-trim + trim dB. E2E: ubah trim dari UI, engine melaporkannya, preset round-trip.
+
+**Effort:** ±0.5 weekend. **Kenapa pertama:** paling kecil di P4, tidak bergantung apa pun, dan memperbaiki segalanya di hilirnya sekaligus — termasuk membuat kalibrasi delapan tipe overdrive di P4-1 bisa dilakukan terhadap level input yang diketahui, bukan terhadap kebetulan level pickup yang sedang dipakai.
+
+---
+
 ### P4-1. Tipe Overdrive (adaptasi Drive block Fractal)
 
 **Konsep:** parameter `overdrive.type` (enum) memilih voicing; setiap tipe menentukan pre-EQ → kurva clipping → post-EQ/tone → kompensasi level, meniru sirkuit aslinya. Knob yang tampil **menyesuaikan tipe** — bukan satu set knob generik.
@@ -544,7 +570,15 @@ Satu slot rekam/overdub/undo di akhir chain (post-master, seperti metronome). Ma
 | 24 | Preset import/export | P3-7 | ~0.5–1 weekend | — |
 | 25 | Metronome | P3-8 | ~0.5–1 weekend | setelah P2-4 |
 | 26 | CPU sparkline + versi di header | P3-9 | ~2–3 jam | — |
+| 27 | **Input gain / trim** | P4-0 | ~0.5 weekend | — |
+| 28 | Spillover ekor delay/reverb | P4-2 | ~0.5 weekend | — |
+| 29 | Tipe overdrive (8 tipe, 3 batch) | P4-1 | ~2 weekend | idealnya setelah P4-0 |
+| 30 | Dual IR + blend di cabinet | P4-3 | ~0.5–1 weekend | — |
+| 31 | Modifier (envelope/LFO → parameter) | P4-4 | ~1.5–2 weekend | desain dulu; setelah P4-1/P4-2 |
+| 32 | Looper sederhana | P4-5 | ~1–1.5 weekend | — |
 
-Total estimasi kalau semua dikerjakan: kira-kira 21–27 weekend, dengan catatan NAM adalah yang paling tidak pasti dan bisa melar jauh dari estimasi tergantung hasil tahap riset.
+Total estimasi kalau semua dikerjakan: kira-kira 27–35 weekend, dengan catatan NAM adalah yang paling tidak pasti dan bisa melar jauh dari estimasi tergantung hasil tahap riset.
+
+**Urutan dalam P4** (bukan urutan nomornya): P4-0 input gain dulu karena paling kecil dan memperbaiki segala yang di hilirnya; lalu P4-2 spillover karena kecil dan langsung memperbaiki fitur scene yang sudah ada; baru P4-1 tipe overdrive yang jadi pekerjaan besarnya; sisanya menyusul.
 
 **Catatan adaptasi mockup:** dari seluruh elemen mockup `docs/E0B4AFA6-...png`, hanya satu yang sengaja tidak diadaptasi — ADD BLOCK / CLEAR CHAIN (chain dinamis), karena bertabrakan dengan arsitektur satu-prosesor-per-tipe dan urutan chain tetap; alasan lengkap di catatan Revisi 2 di atas. Sisanya tersebar: chain strip & kartu pedal → P1-5, Global Bypass → P1-6, tuner → P0-2, EXP/assign → P0-3, scene → P2-3, tap tempo & sync → P2-4, tab navigasi → P2-5, star/notes preset → P3-1, import/export → P3-7, metronome → P3-8, CPU history & versi → P3-9, meter LED tersegmen → P3-6b. Elemen mockup yang sudah ada di aplikasi sekarang (tidak perlu item): pemilihan device/sample rate/buffer, indikator AUDIO RUNNING, master volume + mute, readout CPU/kHz/samples.
