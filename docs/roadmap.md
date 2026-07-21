@@ -43,7 +43,18 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - P3-8 Metronome — `MetronomeProcessor` sebagai post-processor, di luar jalur bypass
 - P3-9 CPU sparkline
 
-**Belum:** P2-1 (NAM), P2-5 (multi-view), dan seluruh backlog baru **P4** (tipe overdrive + adaptasi Fractal, ditambahkan 22 Jul 2026 — lihat bagian P4 di bawah).
+**Belum:** P2-1 (NAM), P2-5 (multi-view), P4-4 (modifier), P4-5 (looper).
+
+**Kenapa empat itu belum, per 22 Jul 2026:**
+
+- **P2-1 NAM** — riset teknisnya lengkap (lihat entry-nya di bawah), tapi ini dependensi eksternal dengan submodule, tanpa target CMake sendiri, dan belum pernah diuji upstream di MSVC. Estimasi 3–5 weekend dan yang paling tidak pasti dari seluruh roadmap. Mengerjakannya setengah jalan lalu menandainya selesai bukan pilihan yang jujur.
+- **P4-4 Modifier** — butuh jalur modulasi baru di thread audio yang menulis parameter per blok. Roadmap sendiri menuliskan "desain dulu sebelum koding", dan keputusan desainnya belum diambil.
+- **P4-5 Looper** — mandiri dan tidak menyentuh arsitektur lain, tapi bukan kebutuhan inti; paling akhir sejak awal.
+- **P2-5 Multi-view** — sidebar masih terbaca dalam satu layar, jadi tab Perform/Edit/Library/Settings belum menyelesaikan masalah nyata. Akan terasa perlu begitu panelnya bertambah lagi.
+
+**Rilis terbaru:** v0.11.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.11.0
+
+**Catatan P4-1 yang lahir dari implementasi:** tiga hal yang hanya ketahuan lewat pengukuran, bukan pembacaan kode. (1) Split butuh dua filter sungguhan; mengurangi salinan low-pass *tampak* setara tapi menyisakan selisih fasa yang lalu kena gain penuh clipper — Tube Screamer terukur mendistorsi bass lebih keras daripada drive full-range, persis terbalik. (2) Tahap kaskade harus membagi gain; dua tahap gain penuh mengotakkan sinyal, DC blocker menengahkannya, dan harmonik genap — alasan utama memilih voicing asimetris — hilang sama sekali. (3) Test harmoniknya sempat mengukur kebocoran spektralnya sendiri; di luar bin analisis, fundamental menyebar di sekitar −43 dB, satu orde dengan harmonik yang diukur, sehingga kurva simetris tampak punya harmonik genap sebanyak yang asimetris. Tepat di bin, kurva simetris terbaca 0,000000.
 
 **Kenapa dua itu belum:** NAM adalah dependensi eksternal dengan submodule, tanpa target CMake sendiri, dan belum pernah diuji di MSVC oleh upstream — riset teknisnya sudah lengkap di P2-1 di bawah, tapi integrasinya cukup besar untuk jadi satu sesi sendiri dan tidak pantas dikerjakan setengah jalan lalu ditandai selesai. Multi-view (P2-5) menunggu sampai jumlah panel di sidebar benar-benar terasa sesak; sekarang masih terbaca dalam satu layar.
 
