@@ -335,6 +335,22 @@ void MainComponent::loadSettingsIntoRegistry()
 
     if (presetsHandler != nullptr)
         presetsHandler->setSelectedName (settingsFile.getValue (kKeyPresetSelectedName, {}));
+
+    // Scenes normally travel inside a preset, but the chain has to come back the
+    // way it was left even when no preset was loaded.
+    const auto storedScenes = settingsFile.getValue (kKeyScenes, {});
+
+    if (storedScenes.isNotEmpty())
+    {
+        juce::var parsed;
+
+        if (juce::JSON::parse (storedScenes, parsed).wasOk() && parsed.isArray())
+            sceneManager.fromVar (parsed);
+    }
+    else
+    {
+        sceneManager.resetToCurrent();
+    }
 }
 
 void MainComponent::markSettingsDirty()
@@ -370,6 +386,8 @@ void MainComponent::saveSettingsIfNeeded (bool force)
         settingsFile.setValue (kKeyPresetSelectedName, presetsHandler->getSelectedName());
 
     saveMidiSettings();
+
+    settingsFile.setValue (kKeyScenes, juce::JSON::toString (sceneManager.toVar(), true));
 
     settingsFile.saveIfNeeded();
 
@@ -416,8 +434,12 @@ void MainComponent::startServer()
 
     levelsHandler = std::make_shared<LevelsHandler>();
     presetsHandler = std::make_shared<PresetsHandler> (presetManager, registry);
+    presetsHandler->setSceneManager (&sceneManager);
     presetsHandler->setSelectedName (settingsFile.getValue (kKeyPresetSelectedName, {}));
     presetsHandler->onSelectionChanged = [this] (const juce::String&) { markSettingsDirty(); };
+
+    auto scenesHandler = std::make_shared<ScenesHandler> (sceneManager);
+    scenesHandler->onChanged = [this] { markSettingsDirty(); };
 
     webServer->registerApiHandler ("/api/devices", std::make_shared<DevicesHandler> (deviceController));
     webServer->registerApiHandler ("/api/parameters",
@@ -428,6 +450,7 @@ void MainComponent::startServer()
     webServer->registerApiHandler ("/api/tuner", std::make_shared<TunerHandler> (tunerAnalyzer));
     webServer->registerApiHandler ("/api/midi", std::make_shared<MidiHandler> (midiController));
     webServer->registerApiHandler ("/api/presets", presetsHandler);
+    webServer->registerApiHandler ("/api/scenes", scenesHandler);
     webServer->registerApiHandler ("/api/health", std::make_shared<HealthHandler>());
 
     // Meters over one held-open connection instead of a fresh HTTP request every

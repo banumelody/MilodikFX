@@ -463,6 +463,113 @@ describe('MilodikFX UI against a live engine', () => {
     cy.request('PUT', '/api/effects/eq/midDb', { value: 0 });
   });
 
+  it('switches the chain with a scene, without moving a knob', () => {
+    // The design decision scenes rest on: a scene change mid-song must not jump
+    // a parameter to a value you cannot see on a control you were not touching.
+    cy.request('POST', '/api/effects/overdrive/enabled', { enabled: true });
+    cy.request('PUT', '/api/effects/overdrive/drivePct', { value: 40 });
+    cy.request('POST', '/api/scenes/1/capture', {});
+
+    cy.request('POST', '/api/effects/overdrive/enabled', { enabled: false });
+    cy.request('PUT', '/api/effects/overdrive/drivePct', { value: 80 });
+    cy.request('POST', '/api/scenes/0/capture', {});
+
+    cy.request('POST', '/api/scenes/1/recall', {}).then(({ body }) => {
+      expect(body.active).to.eq(1);
+    });
+
+    cy.request('/api/effects/overdrive').then(({ body }) => {
+      expect(body.enabled, 'the scene restored the switch').to.eq(true);
+
+      const drive = body.parameters.find((p: { id: string }) => p.id === 'drivePct');
+      expect(Number(drive.value), 'the scene moved a knob').to.be.closeTo(80, 0.01);
+    });
+  });
+
+  it('shows the scene grid and recalls from it', () => {
+    cy.request('POST', '/api/scenes/0/capture', {});
+    cy.reload();
+
+    cy.get('section[aria-label="Scene"]').should('exist');
+    cy.get('section[aria-label="Scene"]').scrollIntoView();
+    cy.get('section[aria-label="Scene"]').within(() => {
+      cy.contains('[role="rowheader"]', 'Crunch').click();
+    });
+
+    cy.wait(300);
+    cy.request('/api/scenes').then(({ body }) => {
+      expect(body.active).to.eq(1);
+    });
+  });
+
+  it('refuses a scene slot that does not exist', () => {
+    cy.request({ method: 'POST', url: '/api/scenes/9/recall', body: {}, failOnStatusCode: false })
+      .then((response) => expect(response.status).to.eq(404));
+
+    cy.request({
+      method: 'PUT',
+      url: '/api/scenes/0/effects/master',
+      body: { enabled: false },
+      failOnStatusCode: false,
+    }).then((response) => {
+      // Master is always in the path; a scene must not be able to silence it.
+      expect(response.status).to.eq(404);
+    });
+  });
+
+  it('carries metadata and scenes through a preset round trip', () => {
+    const name = 'Cypress Metadata';
+
+    cy.request('POST', '/api/presets/save', { name });
+    cy.request('POST', '/api/presets/metadata', {
+      name,
+      description: 'Dibuat oleh Cypress',
+      tags: ['test', 'e2e'],
+      favourite: true,
+      notes: 'catatan',
+    }).then(({ body }) => {
+      expect(body.tags).to.deep.equal(['test', 'e2e']);
+      expect(body.favourite).to.eq(true);
+    });
+
+    // Re-saving the sound must not discard the notes.
+    cy.request('POST', '/api/presets/save', { name });
+
+    cy.request('/api/presets').then(({ body }) => {
+      const entry = body.details.find((d: { name: string }) => d.name === name);
+      expect(entry.notes).to.eq('catatan');
+      expect(entry.description).to.eq('Dibuat oleh Cypress');
+    });
+
+    cy.request('POST', '/api/presets/export', { name }).then(({ body }) => {
+      expect(body.filename).to.eq(`${name}.milodikfx.json`);
+      expect(body.data).to.contain('Dibuat oleh Cypress');
+
+      cy.request('POST', '/api/presets/import', { name: 'Cypress Imported', data: body.data })
+        .then((response) => {
+          expect(response.body.presets).to.include('Cypress Imported');
+        });
+    });
+
+    cy.request('POST', '/api/presets/delete', { name });
+    cy.request('POST', '/api/presets/delete', { name: 'Cypress Imported' });
+  });
+
+  it('refuses to import a file that is not a preset', () => {
+    cy.request({
+      method: 'POST',
+      url: '/api/presets/import',
+      body: { name: 'Rubbish', data: '{"hello":"world"}' },
+      failOnStatusCode: false,
+    }).then((response) => {
+      expect(response.status).to.eq(400);
+    });
+
+    cy.request('/api/presets').then(({ body }) => {
+      expect(body.presets).to.not.include('Rubbish');
+    });
+  });
+
   it('reports MIDI state even with no controller attached', () => {
     // A build machine has no MIDI hardware, so the contract that has to hold is
     // that the endpoint answers with an empty device list rather than failing.

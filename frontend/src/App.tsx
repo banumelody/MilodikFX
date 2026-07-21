@@ -7,14 +7,17 @@ import { Knob } from './components/Knob';
 import { LevelMeter, ReductionMeter } from './components/LevelMeter';
 import { MidiMapping } from './components/MidiMapping';
 import { PresetControls } from './components/PresetControls';
+import { SceneGrid } from './components/SceneGrid';
 import { Sparkline } from './components/Sparkline';
 import { TempoPanel } from './components/TempoPanel';
 import { TunerDisplay } from './components/TunerDisplay';
 import {
   deletePreset,
+  exportPreset,
   getDevices,
   getEffects,
   getPresets,
+  importPreset,
   loadPreset,
   optimiseDevice,
   revealIrFolder,
@@ -22,6 +25,7 @@ import {
   setDevice,
   setEffectEnabled,
   setParameter,
+  setPresetMetadata,
   subscribeLevels,
 } from './services/api';
 import type {
@@ -29,6 +33,7 @@ import type {
   DevicesResponse,
   EffectDescriptor,
   Levels,
+  PresetMetadata,
 } from './services/api';
 
 type Connection = 'connecting' | 'online' | 'offline';
@@ -63,6 +68,7 @@ export function App() {
   const [cpuHistory, setCpuHistory] = useState<number[]>([]);
   const [devices, setDevices] = useState<DevicesResponse | null>(null);
   const [presets, setPresets] = useState<string[]>([]);
+  const [presetDetails, setPresetDetails] = useState<PresetMetadata[]>([]);
   const [selectedPreset, setSelectedPreset] = useState('');
   const [connection, setConnection] = useState<Connection>('connecting');
   const [message, setMessage] = useState<string | null>(null);
@@ -93,6 +99,7 @@ export function App() {
   const refreshPresets = useCallback(async () => {
     const response = await getPresets();
     setPresets(response.presets);
+    setPresetDetails(response.details ?? []);
     setSelectedPreset(response.selected);
   }, []);
 
@@ -269,6 +276,49 @@ export function App() {
         await deletePreset(name);
         await refreshPresets();
       }, `Preset "${name}" dihapus`),
+    [refreshPresets, withMessage],
+  );
+
+  const handleMetadataChange = useCallback(
+    (name: string, changes: Parameters<typeof setPresetMetadata>[1]) =>
+      void withMessage(async () => {
+        await setPresetMetadata(name, changes);
+        await refreshPresets();
+      }, 'Info preset diperbarui'),
+    [refreshPresets, withMessage],
+  );
+
+  const handlePresetExport = useCallback(
+    (name: string) =>
+      void withMessage(async () => {
+        const exported = await exportPreset(name);
+
+        // A Blob download rather than writing a file from the engine: the
+        // browser already knows where this machine puts downloads.
+        const url = URL.createObjectURL(
+          new Blob([exported.data], { type: 'application/json' }),
+        );
+
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = exported.filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+
+        // Revoked on the next tick; doing it immediately can cancel the
+        // download before it starts.
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }, 'Preset diekspor'),
+    [withMessage],
+  );
+
+  const handlePresetImport = useCallback(
+    (name: string, data: string) =>
+      void withMessage(async () => {
+        await importPreset(name, data);
+        await refreshPresets();
+      }, `Preset "${name}" diimpor`),
     [refreshPresets, withMessage],
   );
 
@@ -488,13 +538,23 @@ export function App() {
             onEnabledChange={(id, enabled) => void handleEnabledChange(id, enabled)}
           />
 
+          <SceneGrid
+            effects={rackEffects}
+            disabled={offline}
+            onRecalled={() => void refreshEffects()}
+          />
+
           <PresetControls
             presets={presets}
+            details={presetDetails}
             selected={selectedPreset}
             busy={offline}
             onLoad={handlePresetLoad}
             onSave={handlePresetSave}
             onDelete={handlePresetDelete}
+            onMetadataChange={handleMetadataChange}
+            onExport={handlePresetExport}
+            onImport={handlePresetImport}
           />
 
           <MidiMapping effects={effects} disabled={offline} />

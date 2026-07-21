@@ -91,9 +91,35 @@ export interface DeviceRequest {
   bufferSize?: number;
 }
 
+export interface PresetMetadata {
+  name: string;
+  description: string;
+  tags: string[];
+  favourite: boolean;
+  notes: string;
+  savedAt: string;
+}
+
 export interface PresetsResponse {
+  /** Names alone, for callers that only need to know what exists. */
   presets: string[];
+  details: PresetMetadata[];
   selected: string;
+}
+
+export interface Scene {
+  index: number;
+  name: string;
+  /** effectId -> on. Absent means the scene says nothing about that effect. */
+  enabled: Record<string, boolean>;
+  /** False for a slot nothing has been stored in yet. */
+  populated: boolean;
+}
+
+export interface ScenesState {
+  scenes: Scene[];
+  /** -1 once the chain has been changed by hand and matches no slot. */
+  active: number;
 }
 
 export class ApiError extends Error {
@@ -294,6 +320,44 @@ export const loadPreset = (name: string) =>
   request<{ success: boolean; name: string; effects: EffectDescriptor[] }>('/presets/load', {
     method: 'POST',
     body: JSON.stringify({ name }),
+  });
+
+export const setPresetMetadata = (
+  name: string,
+  changes: Partial<Pick<PresetMetadata, 'description' | 'tags' | 'favourite' | 'notes'>>,
+) =>
+  request<PresetMetadata>('/presets/metadata', {
+    method: 'POST',
+    body: JSON.stringify({ name, ...changes }),
+  });
+
+export const exportPreset = (name: string) =>
+  request<{ name: string; filename: string; data: string }>('/presets/export', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+
+export const importPreset = (name: string, data: string) =>
+  request<PresetsResponse>('/presets/import', {
+    method: 'POST',
+    body: JSON.stringify({ name, data }),
+  });
+
+export const getScenes = () => request<ScenesState>('/scenes');
+
+export const recallScene = (index: number) =>
+  request<ScenesState>(`/scenes/${index}/recall`, { method: 'POST', body: '{}' });
+
+export const captureScene = (index: number) =>
+  request<ScenesState>(`/scenes/${index}/capture`, { method: 'POST', body: '{}' });
+
+export const renameScene = (index: number, name: string) =>
+  request<ScenesState>(`/scenes/${index}`, { method: 'PUT', body: JSON.stringify({ name }) });
+
+export const setSceneEffect = (index: number, effect: string, enabled: boolean) =>
+  request<ScenesState>(`/scenes/${index}/effects/${encodeURIComponent(effect)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ enabled }),
   });
 
 export const deletePreset = (name: string) =>

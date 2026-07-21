@@ -216,7 +216,25 @@ Measured delivery is ~22 Hz against a 33 ms target: Windows rounds a sleep up to
 granularity.
 
 Endpoints: `/api/effects`, `/api/parameters`, `/api/devices`, `/api/levels`, `/api/tuner`, `/api/ir`,
-`/api/midi`, `/api/presets`, `/api/health`.
+`/api/midi`, `/api/scenes`, `/api/presets`, `/api/health`.
+
+### Presets and scenes
+
+A preset file is `{schemaVersion, name, savedAt, description, tags, favourite, notes, scenes, state}`.
+`state` is exactly what `ParameterRegistry::captureState` produced and nothing else — the metadata sits
+*beside* it so the DSP snapshot never depends on how presets happen to be catalogued. Schema 2 files
+still load; the new fields simply come back empty.
+
+`savePreset` reads the existing file first and carries its metadata forward. Overwriting a preset to
+change how it sounds must not throw away how it was filed.
+
+`milodikfx::preset::SceneManager` holds four slots and stores **only the enable flags**, never
+parameter values. That is the load-bearing decision: a scene change mid-song has to be instant and
+predictable, and jumping a parameter to a value you cannot see on a control you were not touching is
+exactly what it must not do. Full snapshots are what presets are for. Scenes live inside the preset,
+with a copy in the settings file so the chain returns as left even when no preset was loaded.
+`active` is -1 once the chain has been changed by hand, so nothing claims a slot describes what you
+are hearing when it does not.
 
 ### MIDI
 

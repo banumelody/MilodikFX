@@ -73,6 +73,18 @@ juce::StringArray PresetManager::listPresets() const
 
 bool PresetManager::savePreset (const juce::String& presetName, const juce::var& state) const
 {
+    // Carry forward whatever the file already said about itself. Overwriting a
+    // preset to change its sound must not throw away its notes and tags.
+    PresetDocument document;
+    loadDocument (presetName, document);
+
+    document.state = state;
+
+    return saveDocument (presetName, document);
+}
+
+bool PresetManager::saveDocument (const juce::String& presetName, const PresetDocument& document) const
+{
     const auto file = getPresetFile (presetName);
 
     if (file == juce::File())
@@ -85,12 +97,39 @@ bool PresetManager::savePreset (const juce::String& presetName, const juce::var&
     root->setProperty ("schemaVersion", kSchemaVersion);
     root->setProperty ("name", sanitisePresetName (presetName));
     root->setProperty ("savedAt", juce::Time::getCurrentTime().toISO8601 (true));
-    root->setProperty ("state", state);
+
+    root->setProperty ("description", document.metadata.description);
+    root->setProperty ("favourite", document.metadata.favourite);
+    root->setProperty ("notes", document.metadata.notes);
+
+    juce::Array<juce::var> tags;
+
+    for (const auto& tag : document.metadata.tags)
+        if (tag.trim().isNotEmpty())
+            tags.add (tag.trim());
+
+    root->setProperty ("tags", tags);
+
+    if (document.scenes.isArray())
+        root->setProperty ("scenes", document.scenes);
+
+    root->setProperty ("state", document.state);
 
     return file.replaceWithText (juce::JSON::toString (juce::var (root), false));
 }
 
 bool PresetManager::loadPreset (const juce::String& presetName, juce::var& outState) const
+{
+    PresetDocument document;
+
+    if (! loadDocument (presetName, document))
+        return false;
+
+    outState = document.state;
+    return true;
+}
+
+bool PresetManager::loadDocument (const juce::String& presetName, PresetDocument& outDocument) const
 {
     const auto file = getPresetFile (presetName);
 
@@ -107,8 +146,83 @@ bool PresetManager::loadPreset (const juce::String& presetName, juce::var& outSt
     if (! state.isObject())
         return false;
 
-    outState = state;
+    outDocument.state = state;
+    outDocument.scenes = parsed["scenes"];
+
+    // Absent in a version 2 file, which is fine: the fields simply stay empty
+    // rather than the whole preset being refused.
+    outDocument.metadata.description = parsed["description"].toString();
+    outDocument.metadata.notes = parsed["notes"].toString();
+    outDocument.metadata.favourite = (bool) parsed["favourite"];
+    outDocument.metadata.savedAt = parsed["savedAt"].toString();
+
+    outDocument.metadata.tags.clear();
+
+    if (const auto* tags = parsed["tags"].getArray())
+        for (const auto& tag : *tags)
+            if (const auto text = tag.toString().trim(); text.isNotEmpty())
+                outDocument.metadata.tags.addIfNotAlreadyThere (text);
+
     return true;
+}
+
+bool PresetManager::updateMetadata (const juce::String& presetName, const PresetMetadata& metadata) const
+{
+    PresetDocument document;
+
+    if (! loadDocument (presetName, document))
+        return false;
+
+    document.metadata = metadata;
+
+    return saveDocument (presetName, document);
+}
+
+juce::String PresetManager::exportPreset (const juce::String& presetName) const
+{
+    const auto file = getPresetFile (presetName);
+
+    if (file == juce::File() || ! file.existsAsFile())
+        return {};
+
+    return file.loadFileAsString();
+}
+
+juce::String PresetManager::importPreset (const juce::String& presetName, const juce::String& json) const
+{
+    juce::var parsed;
+
+    if (! juce::JSON::parse (json, parsed).wasOk() || ! parsed.isObject())
+        return {};
+
+    // A file without a state is not a preset, whatever else it contains.
+    // Accepting one would put an entry in the library that loads into nothing.
+    if (! parsed["state"].isObject())
+        return {};
+
+    PresetDocument document;
+    document.state = parsed["state"];
+    document.scenes = parsed["scenes"];
+    document.metadata.description = parsed["description"].toString();
+    document.metadata.notes = parsed["notes"].toString();
+    document.metadata.favourite = (bool) parsed["favourite"];
+
+    if (const auto* tags = parsed["tags"].getArray())
+        for (const auto& tag : *tags)
+            if (const auto text = tag.toString().trim(); text.isNotEmpty())
+                document.metadata.tags.addIfNotAlreadyThere (text);
+
+    // The requested name wins, falling back to whatever the file called itself,
+    // so importing without naming it still lands somewhere sensible.
+    auto name = sanitisePresetName (presetName);
+
+    if (name.isEmpty())
+        name = sanitisePresetName (parsed["name"].toString());
+
+    if (name.isEmpty())
+        return {};
+
+    return saveDocument (name, document) ? name : juce::String();
 }
 
 bool PresetManager::deletePreset (const juce::String& presetName) const

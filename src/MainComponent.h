@@ -12,6 +12,7 @@
 #include "api/ParameterRegistry.h"
 #include "api/ParametersHandler.h"
 #include "api/PresetsHandler.h"
+#include "api/ScenesHandler.h"
 #include "api/TunerHandler.h"
 #include "audio/AudioDeviceController.h"
 #include "audio/AudioEngine.h"
@@ -67,6 +68,7 @@ private:
     static constexpr const char* kKeyPresetSelectedName = "ui.preset.selectedName";
     static constexpr const char* kKeyInputMode = "audio.inputMode";
     static constexpr const char* kKeyMidiDevice = "midi.device";
+    static constexpr const char* kKeyScenes = "ui.scenes";
 
     void buildChain();
     void buildRegistry();
@@ -106,6 +108,7 @@ private:
     milodikfx::preset::PresetManager presetManager;
     milodikfx::preset::IrLibrary irLibrary;
     milodikfx::api::ParameterRegistry registry;
+    milodikfx::preset::SceneManager sceneManager { registry };
 
     juce::AudioDeviceManager deviceManager;
     milodikfx::audio::AudioDeviceController deviceController { deviceManager };
