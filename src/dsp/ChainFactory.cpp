@@ -115,6 +115,10 @@ GuitarChain buildGuitarChain (DSPChainManager& chain)
     result.reverb = add<ReverbProcessor> (chain);
     result.masterOut = add<MasterOutProcessor> (chain);
 
+    // Not a stage of the chain: mixed in afterwards so bypass cannot silence it.
+    result.metronome = dynamic_cast<MetronomeProcessor*> (
+        chain.addPostProcessor (std::make_unique<MetronomeProcessor>()));
+
     return result;
 }
 
@@ -138,6 +142,28 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         e.parameters.push_back (makeToggle ("bypass", "Bypass", false,
                                             [&manager] { return manager.isBypassed(); },
                                             [&manager] (bool v) { manager.setBypassed (v); }));
+
+        // One tempo for the whole app. The metronome stores it and the delay is
+        // handed a copy, so a synced repeat always lands on the click rather
+        // than drifting against a second, separately-edited BPM.
+        if (auto* metronome = chain.metronome)
+        {
+            auto* delay = chain.delay;
+
+            e.parameters.push_back (makeParam ("bpm", "Tempo", "BPM",
+                                               MetronomeProcessor::kMinBpm,
+                                               MetronomeProcessor::kMaxBpm,
+                                               1.0f, 120.0f,
+                                               [metronome] { return metronome->getBpm(); },
+                                               [metronome, delay] (float v)
+                                               {
+                                                   metronome->setBpm (v);
+
+                                                   if (delay != nullptr)
+                                                       delay->setBpm (v);
+                                               }));
+        }
+
         registry.addEffect (std::move (e));
     }
 
@@ -340,6 +366,13 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         e.parameters.push_back (makeToggle ("pingPong", "Ping-Pong", false,
                                             [p] { return p->isPingPong(); },
                                             [p] (bool v) { p->setPingPong (v); }));
+        // Enum 0..5 = Off / 1/4 / 1/8. / 1/8 / 1/8T / 1/16. Anything but Off
+        // overrides the Time knob, which the UI shows by disabling it.
+        e.parameters.push_back (makeParam ("syncMode", "Sync", "", 0.0f,
+                                           (float) (DelayProcessor::kNumSyncDivisions - 1),
+                                           1.0f, 0.0f,
+                                           [p] { return (float) p->getSyncDivision(); },
+                                           [p] (float v) { p->setSyncDivision ((int) std::lround (v)); }));
         registry.addEffect (std::move (e));
     }
 
@@ -405,6 +438,28 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         e.parameters.push_back (makeToggle ("limiterEnabled", "Limiter", true,
                                             [p] { return p->isLimiterEnabled(); },
                                             [p] (bool v) { p->setLimiterEnabled (v); }));
+        registry.addEffect (std::move (e));
+    }
+
+    if (auto* p = chain.metronome)
+    {
+        EffectDescriptor e;
+        e.id = "metronome";
+        e.label = "Metronome";
+        e.description = "Klik latihan, dicampur setelah master (tidak lewat rantai efek)";
+
+        // The stage itself is always present; "enabled" here means the click is
+        // sounding, which is the metronome's own on/off rather than a bypass.
+        e.isEnabled = [p] { return p->isEnabled(); };
+        e.setEnabled = [p] (bool v) { p->setEnabled (v); };
+
+        e.parameters.push_back (makeParam ("volumePct", "Volume", "%", 0.0f, 100.0f, 1.0f, 50.0f,
+                                           [p] { return p->getVolumePercent(); },
+                                           [p] (float v) { p->setVolumePercent (v); }));
+        e.parameters.push_back (makeParam ("beatsPerBar", "Ketukan/Bar", "",
+                                           1.0f, (float) MetronomeProcessor::kMaxBeatsPerBar, 1.0f, 4.0f,
+                                           [p] { return (float) p->getBeatsPerBar(); },
+                                           [p] (float v) { p->setBeatsPerBar ((int) std::lround (v)); }));
         registry.addEffect (std::move (e));
     }
 }

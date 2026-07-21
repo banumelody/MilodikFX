@@ -24,9 +24,24 @@ void DSPChainManager::prepareToPlay (double sampleRate, int samplesPerBlock, int
     for (const auto& processor : processors)
         if (processor != nullptr)
             processor->prepareToPlay (sampleRate, samplesPerBlock, numChannels);
+
+    for (const auto& processor : postProcessors)
+        if (processor != nullptr)
+            processor->prepareToPlay (sampleRate, samplesPerBlock, numChannels);
 }
 
 void DSPChainManager::processBlock (juce::AudioBuffer<float>& buffer)
+{
+    processChain (buffer);
+
+    // Outside the bypass logic on purpose: these are mixed into the output, so
+    // bypassing the effects must not silence them.
+    for (const auto& processor : postProcessors)
+        if (processor != nullptr)
+            processor->processBlock (buffer);
+}
+
+void DSPChainManager::processChain (juce::AudioBuffer<float>& buffer)
 {
     const auto wantBypass = bypassed.load (std::memory_order_relaxed);
     const auto targetGain = wantBypass ? 0.0f : 1.0f;
@@ -85,6 +100,10 @@ void DSPChainManager::reset()
     for (const auto& processor : processors)
         if (processor != nullptr)
             processor->reset();
+
+    for (const auto& processor : postProcessors)
+        if (processor != nullptr)
+            processor->reset();
 }
 
 AudioProcessorBase* DSPChainManager::addProcessor (std::unique_ptr<AudioProcessorBase> processor)
@@ -100,9 +119,23 @@ AudioProcessorBase* DSPChainManager::addProcessor (std::unique_ptr<AudioProcesso
     return raw;
 }
 
+AudioProcessorBase* DSPChainManager::addPostProcessor (std::unique_ptr<AudioProcessorBase> processor)
+{
+    if (processor == nullptr)
+        return nullptr;
+
+    if (prepared)
+        processor->prepareToPlay (currentSampleRate, currentSamplesPerBlock, currentNumChannels);
+
+    auto* raw = processor.get();
+    postProcessors.push_back (std::move (processor));
+    return raw;
+}
+
 void DSPChainManager::clear()
 {
     processors.clear();
+    postProcessors.clear();
 }
 
 void DSPChainManager::setBypassed (bool shouldBypass) noexcept

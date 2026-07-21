@@ -8,6 +8,11 @@
  #include <crtdbg.h>
 #endif
 
+#if JUCE_WINDOWS
+ #include <dwmapi.h>
+ #pragma comment (lib, "dwmapi.lib")
+#endif
+
 namespace
 {
 constexpr const char* kKeyWindowBounds = "ui.windowBounds";
@@ -247,6 +252,9 @@ private:
             setVisible (true);
             toFront (true);
 
+            // Only once the peer exists, which needs the window to be visible.
+            applyDarkTitleBar();
+
             trayIcon = std::make_unique<TrayIcon> (*this);
         }
 
@@ -278,6 +286,35 @@ private:
         }
 
     private:
+        /**
+         * Asks Windows for the dark title bar.
+         *
+         * The UI behind it is near-black; the default light frame around it
+         * reads as a rendering bug. DWMWA_USE_IMMERSIVE_DARK_MODE is 20 on
+         * Windows 10 20H1 and later and 19 on the builds just before it, so both
+         * are tried -- an unsupported attribute is simply refused, which is why
+         * the return value is ignored.
+         */
+        void applyDarkTitleBar()
+        {
+           #if JUCE_WINDOWS
+            auto* peer = getPeer();
+
+            if (peer == nullptr)
+                return;
+
+            auto* handle = (HWND) peer->getNativeHandle();
+
+            if (handle == nullptr)
+                return;
+
+            const BOOL dark = TRUE;
+
+            for (const DWORD attribute : { (DWORD) 20, (DWORD) 19 })
+                DwmSetWindowAttribute (handle, attribute, &dark, sizeof (dark));
+           #endif
+        }
+
         void restoreBounds()
         {
             const auto stored = settingsFile.getValue (kKeyWindowBounds, {});

@@ -11,9 +11,11 @@
 #include "api/ParameterRegistry.h"
 #include "api/ParametersHandler.h"
 #include "api/PresetsHandler.h"
+#include "api/TunerHandler.h"
 #include "audio/AudioDeviceController.h"
 #include "audio/AudioEngine.h"
 #include "dsp/ChainFactory.h"
+#include "dsp/TunerAnalyzer.h"
 #include "preset/IrLibrary.h"
 #include "preset/PresetManager.h"
 #include "ui/WebServer.h"
@@ -137,6 +139,10 @@ private:
     milodikfx::dsp::DelayProcessor* delayProcessor = nullptr;
     milodikfx::dsp::ReverbProcessor* reverbProcessor = nullptr;
     milodikfx::dsp::MasterOutProcessor* masterOutProcessor = nullptr;
+
+    // Analyses the post-input signal without being part of the chain, so it
+    // reads what the pickup sends rather than what the overdrive makes of it.
+    milodikfx::dsp::TunerAnalyzer tunerAnalyzer;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

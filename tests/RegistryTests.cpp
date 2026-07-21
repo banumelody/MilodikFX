@@ -274,7 +274,10 @@ public:
         milodikfx::dsp::DSPChainManager manager;
         const auto chain = milodikfx::dsp::buildGuitarChain (manager);
 
+        // Ten stages the guitar passes through. The metronome is deliberately
+        // not one of them -- it is mixed in afterwards, outside bypass.
         expectEquals (manager.getNumProcessors(), 10);
+        expect (chain.metronome != nullptr);
 
         expect (chain.noiseGate != nullptr);
         expect (chain.cleanBoost != nullptr);
@@ -301,8 +304,8 @@ public:
 
         milodikfx::dsp::registerChainParameters (appRegistry, chain, manager, std::move (appExtras));
 
-        expectEquals ((int) pluginRegistry.getEffects().size(), 11);
-        expectEquals ((int) appRegistry.getEffects().size(), 12);
+        expectEquals ((int) pluginRegistry.getEffects().size(), 12);
+        expectEquals ((int) appRegistry.getEffects().size(), 13);
         expect (appRegistry.findEffect ("input") != nullptr);
         expect (pluginRegistry.findEffect ("input") == nullptr);
 

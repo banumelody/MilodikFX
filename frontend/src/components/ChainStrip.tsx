@@ -1,6 +1,8 @@
 import { EFFECT_ACCENTS } from './EffectRack';
 import type { EffectDescriptor } from '../services/api';
 
+const NOT_A_STAGE = new Set(['input', 'global', 'metronome']);
+
 export interface ChainStripProps {
   effects: EffectDescriptor[];
   onSelect: (effectId: string) => void;
@@ -15,9 +17,10 @@ export interface ChainStripProps {
  * in series. This strip is where the order is actually visible.
  */
 export function ChainStrip({ effects, onSelect, onToggle, disabled = false }: ChainStripProps) {
-  // Input routing and the global controls are not stages you can see signal pass
-  // through, so they stay out of the picture.
-  const stages = effects.filter((effect) => effect.id !== 'input' && effect.id !== 'global');
+  // Input routing, the global controls and the metronome are not stages the
+  // guitar passes through, so they stay out of the picture. The metronome is
+  // genuinely outside the chain -- it is mixed in after the master stage.
+  const stages = effects.filter((effect) => !NOT_A_STAGE.has(effect.id));
 
   if (stages.length === 0) return null;
 

@@ -20,6 +20,17 @@ public:
     void reset();
 
     AudioProcessorBase* addProcessor (std::unique_ptr<AudioProcessorBase> processor);
+
+    /**
+     * Adds a processor that runs after the chain and after the bypass crossfade.
+     *
+     * For things that are mixed into the output rather than applied to the
+     * guitar: the metronome belongs here because global bypass must not silence
+     * the click, and because a click routed through the amp and cabinet would
+     * not sound like a click.
+     */
+    AudioProcessorBase* addPostProcessor (std::unique_ptr<AudioProcessorBase> processor);
+
     void clear();
 
     void setBypassed (bool shouldBypass) noexcept;
@@ -36,10 +47,19 @@ public:
             if (auto* t = dynamic_cast<T*>(p.get()))
                 return t;
         }
+
+        for (auto& p : postProcessors)
+        {
+            if (auto* t = dynamic_cast<T*>(p.get()))
+                return t;
+        }
+
         return nullptr;
     }
 
 private:
+    void processChain (juce::AudioBuffer<float>& buffer);
+
     // The dry copy used to crossfade in and out of bypass. Allocated once, at a
     // size no realistic device block will exceed, so toggling bypass never
     // allocates and prepareToPlay never moves memory the audio thread is reading.
@@ -50,6 +70,7 @@ private:
     static constexpr double kBypassFadeSeconds = 0.01;
 
     std::vector<std::unique_ptr<AudioProcessorBase>> processors;
+    std::vector<std::unique_ptr<AudioProcessorBase>> postProcessors;
     std::atomic<bool> bypassed { false };
     double currentSampleRate = 0.0;
     int currentSamplesPerBlock = 0;

@@ -121,10 +121,40 @@ NoiseGate -> CleanBoost -> Compressor -> Overdrive -> EQ -> Contour -> Cabinet -
 
 Each processor derives from `AudioProcessorBase` (`prepareToPlay`/`processBlock`/`reset`) and holds its
 parameters as `std::atomic`. `MasterOut` is the only stage that can attenuate, and it carries the
-safety limiter plus a final clamp — **nothing may be added after it**.
+safety limiter plus a final clamp — **no stage may be added after it**.
 
 `DSPChainManager::findProcessor<T>()` is a `dynamic_cast` scan returning the *first* instance of a
 type, so the chain may contain at most one processor of each type.
+
+#### Post-chain processors
+
+`DSPChainManager::addPostProcessor` registers something that runs *after* the chain **and after the
+bypass crossfade** — for signal mixed into the output rather than applied to the guitar. Only
+`MetronomeProcessor` uses it. A click routed through the chain would be distorted and cabinet-filtered,
+and would vanish the moment global bypass was pressed, which is exactly when you still want the beat.
+Anything here carries its own clamp, because it adds level to an already-limited signal.
+
+`findProcessor<T>()` scans both lists, so the one-per-type rule still holds across them.
+`getNumProcessors()` counts chain stages only.
+
+#### Tuner
+
+`milodikfx::dsp::TunerAnalyzer` (`src/dsp/TunerAnalyzer.*`) is not in the chain at all. `MainComponent`
+taps the input buffer *before* `audioEngine.processBlock`: pitch detection has to see the raw pickup,
+since a signal that has been through the overdrive has harmonics that mislead it.
+
+The audio thread only copies into a ring buffer. YIN over a 2048-sample window is around a million
+operations — running it inline would overrun a 32-sample callback's 0.67 ms budget several times over —
+so a worker thread analyses roughly ten times a second and publishes the result as plain atomics.
+Analysis stays off until `POST /api/tuner/enable`; the UI panel is what switches it on.
+
+#### Tempo
+
+One BPM for the whole app, stored by `MetronomeProcessor` and pushed into `DelayProcessor` by the
+`global.bpm` setter in `ChainFactory.cpp`. Two independently-edited tempi would let a synced delay
+repeat drift against the click. `delay.syncMode` is an enum index into `DelayProcessor::SyncDivision`;
+when it is anything but Off, `getEffectiveTimeMs()` derives the time from the tempo and the UI disables
+the Time knob rather than leaving it showing a number the delay is not using.
 
 ### Realtime rules
 
@@ -171,8 +201,8 @@ owner destroys immediately afterwards.
 subclass. Responses are built with `juce::var` + `juce::JSON` (see `src/api/ApiJson.h`) — never by
 string concatenation.
 
-Endpoints: `/api/effects`, `/api/parameters`, `/api/devices`, `/api/levels`, `/api/presets`,
-`/api/health`.
+Endpoints: `/api/effects`, `/api/parameters`, `/api/devices`, `/api/levels`, `/api/tuner`, `/api/ir`,
+`/api/presets`, `/api/health`.
 
 ### Frontend
 

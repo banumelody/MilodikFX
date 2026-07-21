@@ -800,6 +800,189 @@ input[type='text']:disabled {
   opacity: 0.5;
 }
 
+/* ------------------------------------------------------------------- tuner */
+
+.tuner {
+  --tuner-accent: var(--text-dim);
+}
+
+.tuner--in-tune {
+  --tuner-accent: #28c76f;
+}
+
+.tuner--flat,
+.tuner--sharp {
+  --tuner-accent: #ffc93c;
+}
+
+.tuner__note {
+  margin: 12px 0 10px;
+  padding: 14px 0;
+  border-radius: 12px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  color: var(--tuner-accent);
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  transition:
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.tuner--in-tune .tuner__note {
+  border-color: rgba(40, 199, 111, 0.45);
+  box-shadow: 0 0 0 3px rgba(40, 199, 111, 0.12);
+}
+
+.tuner__scale {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 28px;
+  padding: 0 2px;
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+}
+
+.tuner__tick {
+  width: 1px;
+  background: var(--line);
+}
+
+.tuner__tick--edge {
+  height: 10px;
+}
+
+.tuner__tick--centre {
+  height: 20px;
+  background: #28c76f;
+}
+
+.tuner__needle {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  width: 3px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: var(--tuner-accent);
+  /* Fast enough to feel attached to the string, slow enough not to jitter on
+     the noise floor between pluck and decay. */
+  transition:
+    left 80ms linear,
+    background 120ms ease;
+}
+
+.tuner__readout {
+  display: flex;
+  gap: 16px;
+  margin: 10px 0 0;
+}
+
+.tuner__readout div {
+  flex: 1 1 0;
+}
+
+.tuner__readout dt {
+  font-size: 11px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.tuner__readout dd {
+  margin: 2px 0 0;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------- tempo */
+
+.tempo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tempo__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tempo__bpm {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex: 1 1 auto;
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.tempo__unit {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-faint);
+  letter-spacing: 0.08em;
+}
+
+.tempo__tap {
+  min-width: 64px;
+}
+
+.tempo__slider,
+.tempo input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.tempo__beats {
+  display: flex;
+  gap: 6px;
+}
+
+.tempo__beat {
+  flex: 1 1 0;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  transition: background 60ms linear;
+}
+
+.tempo__beat--accent {
+  border-color: rgba(77, 163, 255, 0.5);
+}
+
+.tempo__beat--on {
+  background: var(--accent);
+}
+
+.tempo__beat--accent.tempo__beat--on {
+  background: #fff;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.field__label {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
 /* ----------------------------------------------------------------- presets */
 
 .preset {

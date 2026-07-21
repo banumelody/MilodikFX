@@ -12,10 +12,10 @@ describe('MilodikFX UI against a live engine', () => {
 
   it('renders the signal chain the engine reports', () => {
     cy.request('/api/effects').then(({ body }) => {
-      // "global" holds chain-wide controls rather than a stage, so it is
-      // surfaced in the top bar instead of as a card in the rack.
+      // "global" holds chain-wide controls and "metronome" is mixed in after
+      // the master stage; both get their own panels rather than a rack card.
       const labels: string[] = body.effects
-        .filter((effect: { id: string }) => effect.id !== 'global')
+        .filter((effect: { id: string }) => !['global', 'metronome'].includes(effect.id))
         .map((effect: { label: string }) => effect.label);
 
       expect(labels.length).to.be.greaterThan(5);
@@ -131,7 +131,7 @@ describe('MilodikFX UI against a live engine', () => {
 
     cy.request('/api/effects').then(({ body }) => {
       const stages = body.effects
-        .filter((e: { id: string }) => e.id !== 'input' && e.id !== 'global')
+        .filter((e: { id: string }) => !['input', 'global', 'metronome'].includes(e.id))
         .map((e: { label: string }) => e.label);
 
       cy.get('nav[aria-label="Rantai sinyal"] button').should('have.length', stages.length);
@@ -240,6 +240,152 @@ describe('MilodikFX UI against a live engine', () => {
     cy.request('/api/effects/master').then(({ body }) => {
       expect(body.enabled).to.eq(true);
     });
+  });
+
+  it('switches the tuner on only while its panel is open', () => {
+    // Pitch detection costs a background thread in the engine, so the panel is
+    // the switch: leaving it analysing behind a closed card is the bug here.
+    cy.request('POST', '/api/tuner/enable', { enabled: false });
+    cy.reload();
+
+    cy.request('/api/tuner').then(({ body }) => {
+      expect(body.enabled).to.eq(false);
+    });
+
+    cy.get('section[aria-label="Tuner"]').within(() => {
+      cy.contains('button', 'Mulai').click();
+    });
+
+    cy.wait(300);
+    cy.request('/api/tuner').then(({ body }) => {
+      expect(body.enabled).to.eq(true);
+      expect(body).to.have.property('note');
+      expect(body).to.have.property('cents');
+      expect(body).to.have.property('frequency');
+      expect(body).to.have.property('confidence');
+    });
+
+    cy.get('section[aria-label="Tuner"]').within(() => {
+      cy.contains('button', 'Berhenti').click();
+    });
+
+    cy.wait(300);
+    cy.request('/api/tuner').then(({ body }) => {
+      expect(body.enabled).to.eq(false);
+    });
+  });
+
+  it('refuses a tuner request it does not understand', () => {
+    cy.request({
+      method: 'POST',
+      url: '/api/tuner/enable',
+      body: { nonsense: true },
+      failOnStatusCode: false,
+    }).then((response) => {
+      expect(response.status).to.eq(400);
+    });
+  });
+
+  it('shares one tempo between the metronome and a synced delay', () => {
+    // Two separately-edited BPMs would drift against each other, which is the
+    // whole reason the tempo lives on "global" rather than on the metronome.
+    cy.request('PUT', '/api/effects/global/bpm', { value: 100 });
+    cy.reload();
+
+    cy.get('[aria-label="Tempo dalam BPM"]').should('contain.text', '100');
+
+    cy.request('PUT', '/api/effects/delay/syncMode', { value: 1 }); // 1/4
+    cy.request('PUT', '/api/effects/global/bpm', { value: 120 });
+    cy.wait(300);
+
+    cy.request('/api/effects/global/bpm').then(({ body }) => {
+      expect(Number(body.value)).to.eq(120);
+    });
+
+    cy.request('PUT', '/api/effects/delay/syncMode', { value: 0 });
+  });
+
+  it('disables the delay Time knob while it is locked to the tempo', () => {
+    cy.request('POST', '/api/effects/delay/enabled', { enabled: true });
+    cy.request('PUT', '/api/effects/delay/syncMode', { value: 0 });
+    cy.reload();
+
+    cy.get('section[aria-label="Delay"] [role="slider"][aria-label="Time"]')
+      .should('have.attr', 'aria-disabled', 'false');
+
+    cy.get('section[aria-label="Delay"]').within(() => {
+      cy.contains('label', 'Sync').find('select').select('1/8');
+    });
+
+    // The delay is taking its time from the tempo now, so a Time knob still
+    // showing a number it is not using would be a lie.
+    cy.get('section[aria-label="Delay"] [role="slider"][aria-label="Time"]')
+      .should('have.attr', 'aria-disabled', 'true');
+
+    cy.wait(300);
+    cy.request('/api/effects/delay/syncMode').then(({ body }) => {
+      expect(Number(body.value)).to.eq(3);
+    });
+
+    cy.request('PUT', '/api/effects/delay/syncMode', { value: 0 });
+  });
+
+  it('starts and stops the metronome from the tempo panel', () => {
+    cy.request('POST', '/api/effects/metronome/enabled', { enabled: false });
+    cy.reload();
+
+    cy.get('[aria-label="Metronom"]').should('have.attr', 'aria-pressed', 'false');
+    cy.get('[aria-label="Metronom"]').click();
+    cy.wait(300);
+
+    cy.request('/api/effects/metronome').then(({ body }) => {
+      expect(body.enabled).to.eq(true);
+    });
+
+    cy.get('[aria-label="Metronom"]').click();
+    cy.wait(300);
+
+    cy.request('/api/effects/metronome').then(({ body }) => {
+      expect(body.enabled).to.eq(false);
+    });
+  });
+
+  it('keeps the metronome out of the signal chain strip', () => {
+    // It is mixed in after the master stage, so drawing it as a stage the
+    // guitar passes through would misrepresent what it does.
+    cy.get('nav[aria-label="Rantai sinyal"]').should('exist');
+    cy.get('nav[aria-label="Rantai sinyal"]').should('not.contain.text', 'Metronome');
+    cy.get('section[aria-label="Metronome"]').should('not.exist');
+    cy.get('section[aria-label="Tempo"]').should('exist');
+  });
+
+  it('sets the tempo by tapping', () => {
+    cy.request('PUT', '/api/effects/global/bpm', { value: 120 });
+    cy.reload();
+
+    cy.get('section[aria-label="Tempo"]').within(() => {
+      // Four taps a second apart is 60 BPM.
+      cy.contains('button', 'Tap').click();
+      cy.wait(1000);
+      cy.contains('button', 'Tap').click();
+      cy.wait(1000);
+      cy.contains('button', 'Tap').click();
+    });
+
+    cy.wait(300);
+    cy.request('/api/effects/global/bpm').then(({ body }) => {
+      const tapped = Number(body.value);
+
+      // Bounded rather than compared to 60: cy.wait guarantees *at least* a
+      // second between taps, and command overhead adds a hundred-odd ms on top,
+      // so the real tempo is always somewhat under 60. The upper bound is the
+      // hard one -- a tap tempo reading faster than the taps is measuring
+      // something other than the gaps between them.
+      expect(tapped).to.be.at.most(60);
+      expect(tapped).to.be.at.least(40);
+    });
+
+    cy.request('PUT', '/api/effects/global/bpm', { value: 120 });
   });
 
   it('offers a way back to low latency after the device has been changed', () => {

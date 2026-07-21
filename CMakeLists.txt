@@ -109,6 +109,10 @@ set(MILODIKFX_ENGINE_SOURCES
   src/dsp/DelayProcessor.cpp
   src/dsp/MasterOutProcessor.h
   src/dsp/MasterOutProcessor.cpp
+  src/dsp/MetronomeProcessor.h
+  src/dsp/MetronomeProcessor.cpp
+  src/dsp/TunerAnalyzer.h
+  src/dsp/TunerAnalyzer.cpp
   src/dsp/IrEngine.h
   src/dsp/IrEngine.cpp
   src/dsp/DSPChainManager.h
@@ -188,6 +192,8 @@ target_sources(MilodikFX
     src/api/IrHandler.cpp
     src/api/LevelsHandler.h
     src/api/LevelsHandler.cpp
+    src/api/TunerHandler.h
+    src/api/TunerHandler.cpp
     src/api/PresetsHandler.h
     src/api/PresetsHandler.cpp
     ${MILODIKFX_ENGINE_SOURCES}
@@ -341,6 +347,7 @@ target_sources(MilodikFX_tests
     tests/DspTests.cpp
     tests/RegistryTests.cpp
     tests/IrTests.cpp
+    tests/TunerTests.cpp
     ${MILODIKFX_ENGINE_SOURCES}
 )
 

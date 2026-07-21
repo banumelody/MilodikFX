@@ -44,6 +44,31 @@ public:
     void setPingPong (bool shouldPingPong) noexcept;
     bool isPingPong() const noexcept;
 
+    /** Note divisions the delay time can be locked to. Index order is the
+        order the UI shows, so appending is safe but reordering is not --
+        the index is what gets written to presets and settings. */
+    enum class SyncDivision
+    {
+        off = 0,
+        quarter,
+        eighthDotted,
+        eighth,
+        eighthTriplet,
+        sixteenth
+    };
+
+    static constexpr int kNumSyncDivisions = 6;
+
+    void setSyncDivision (int index) noexcept;
+    int getSyncDivision() const noexcept;
+
+    void setBpm (float beatsPerMinute) noexcept;
+    float getBpm() const noexcept;
+
+    /** The time actually in use: the dialled ms, or the tempo-derived one when
+        a division is selected. This is what the UI should display. */
+    float getEffectiveTimeMs() const noexcept;
+
     void setEnabled (bool shouldEnable) noexcept;
     bool isEnabled() const noexcept;
 
@@ -67,6 +92,8 @@ private:
     std::atomic<float> mixPercent { 25.0f };
     std::atomic<float> dampingHz { 20000.0f };
     std::atomic<bool> pingPong { false };
+    std::atomic<int> syncDivision { 0 };
+    std::atomic<float> bpm { 120.0f };
     std::atomic<bool> enabled { false };
 
     // Fixed size, allocated in the constructor. Never resized.

@@ -7,6 +7,8 @@ import { Knob } from './components/Knob';
 import { LevelMeter, ReductionMeter } from './components/LevelMeter';
 import { PresetControls } from './components/PresetControls';
 import { Sparkline } from './components/Sparkline';
+import { TempoPanel } from './components/TempoPanel';
+import { TunerDisplay } from './components/TunerDisplay';
 import {
   deletePreset,
   getDevices,
@@ -285,6 +287,12 @@ export function App() {
 
   const global = useMemo(() => effects.find((effect) => effect.id === 'global'), [effects]);
   const bypass = global?.parameters.find((parameter) => parameter.id === 'bypass');
+  const bpm = global?.parameters.find((parameter) => parameter.id === 'bpm');
+
+  const metronome = useMemo(
+    () => effects.find((effect) => effect.id === 'metronome'),
+    [effects],
+  );
 
   const offline = connection === 'offline';
   const isMuted = Number(masterMuted?.value ?? 0) >= 0.5;
@@ -331,7 +339,12 @@ export function App() {
     });
   }, []);
 
-  const rackEffects = useMemo(() => effects.filter((effect) => effect.id !== 'global'), [effects]);
+  // Global has its own controls in the top bar and the tempo panel; the
+  // metronome gets the tempo panel too. Neither belongs in the rack of stages.
+  const rackEffects = useMemo(
+    () => effects.filter((effect) => effect.id !== 'global' && effect.id !== 'metronome'),
+    [effects],
+  );
 
   return (
     <div className="app">
@@ -461,6 +474,16 @@ export function App() {
             onApply={(request) => void handleDeviceApply(request)}
             onRefresh={() => void refreshDevices()}
             onOptimise={() => void handleOptimise()}
+          />
+
+          <TunerDisplay disabled={offline} />
+
+          <TempoPanel
+            bpm={bpm}
+            metronome={metronome}
+            disabled={offline}
+            onParameterChange={handleParameterChange}
+            onEnabledChange={(id, enabled) => void handleEnabledChange(id, enabled)}
           />
 
           <PresetControls

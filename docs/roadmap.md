@@ -10,6 +10,38 @@ Dasar arsitektur yang dipakai semua item DSP baru di bawah: `src/dsp/ChainFactor
 
 ---
 
+## Status implementasi
+
+Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis lengkap di bawah sebagai catatan keputusan desainnya, jangan dihapus.
+
+**Selesai:**
+
+- P0-1 IR Loader — `IrEngine`, `IrLibrary`, `IrHandler`, parameter teks di registry
+- P0-2 Tuner — `TunerAnalyzer` (YIN di thread latar), `/api/tuner`, `TunerDisplay.tsx`
+- P1-2 Overdrive asimetri + oversampling adjustable
+- P1-3 Delay damping + ping-pong
+- P1-4 Compressor parallel mix
+- P1-5 Chain strip + kepadatan kartu
+- P1-6 Global bypass (crossfade 10 ms)
+- P2-2 Convolution reverb
+- P2-4 Tap tempo + delay tempo-sync — BPM global dipakai bersama metronome dan delay
+- P3-3 Pencarian preset
+- P3-4 Global mute / panic (Esc = mute, B = bypass)
+- P3-6a Title bar gelap (`DWMWA_USE_IMMERSIVE_DARK_MODE`)
+- P3-6b Meter: skala berguna, peak hold, tampilan saat hening
+- P3-8 Metronome — `MetronomeProcessor` sebagai post-processor, di luar jalur bypass
+- P3-9 CPU sparkline
+
+**Belum:** P0-3 (MIDI), P1-1 (SSE + kurva EQ), P2-1 (NAM), P2-3 (scene), P2-5 (multi-view), P3-1 (metadata preset), P3-5 (undo/redo), P3-6 (installer), P3-7 (import/export preset).
+
+### Catatan arsitektur yang lahir dari implementasi ini
+
+`DSPChainManager` sekarang punya dua daftar prosesor: **chain** (yang dilewati sinyal gitar, kena global bypass) dan **post** (`addPostProcessor`, dijalankan setelah crossfade bypass). Metronome ada di daftar kedua — klik yang lewat rantai efek akan terdistorsi dan terfilter cabinet, dan akan ikut hilang saat bypass ditekan, justru ketika ketukannya paling dibutuhkan. `findProcessor<T>()` menyisir kedua daftar, jadi batas "maksimal satu prosesor per tipe" tetap berlaku menyeluruh.
+
+Tuner **bukan** anggota chain sama sekali. `MainComponent` menyadap buffer input sebelum `audioEngine.processBlock`, karena pitch detection harus melihat sinyal pickup mentah — sinyal yang sudah lewat overdrive punya harmonik yang menipu YIN.
+
+---
+
 ## P0 — Dikerjakan lebih dulu (dampak tinggi, effort kecil–menengah, fondasi sudah terverifikasi)
 
 ### P0-1. IR Loader untuk Cabinet

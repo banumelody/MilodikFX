@@ -27,7 +27,7 @@ void DelayProcessor::prepareToPlay (double sampleRateIn, int, int)
     // The delay time in samples depends on the rate, but the storage does not.
     const auto delaySamples = juce::jlimit (1.0f,
                                             (float) (kLineLength - 2),
-                                            timeMs.load (std::memory_order_relaxed) * 0.001f * (float) sampleRate);
+                                            getEffectiveTimeMs() * 0.001f * (float) sampleRate);
 
     smoothedDelaySamples.reset (sampleRate, kTimeSmoothingSeconds, delaySamples);
     smoothedFeedback.reset (sampleRate, kLevelSmoothingSeconds, feedbackPercent.load (std::memory_order_relaxed) / 100.0f);
@@ -54,7 +54,7 @@ void DelayProcessor::processBlock (juce::AudioBuffer<float>& buffer)
 
     const auto delayTarget = juce::jlimit (1.0f,
                                            (float) (kLineLength - 2),
-                                           timeMs.load (std::memory_order_relaxed) * 0.001f * (float) sampleRate);
+                                           getEffectiveTimeMs() * 0.001f * (float) sampleRate);
     const auto feedbackTarget = juce::jlimit (0.0f, 0.95f, feedbackPercent.load (std::memory_order_relaxed) / 100.0f);
     const auto mixTarget = juce::jlimit (0.0f, 1.0f, mixPercent.load (std::memory_order_relaxed) / 100.0f);
 
@@ -158,6 +158,53 @@ void DelayProcessor::setPingPong (bool shouldPingPong) noexcept
 bool DelayProcessor::isPingPong() const noexcept
 {
     return pingPong.load (std::memory_order_relaxed);
+}
+
+void DelayProcessor::setSyncDivision (int index) noexcept
+{
+    syncDivision.store (juce::jlimit (0, kNumSyncDivisions - 1, index), std::memory_order_relaxed);
+}
+
+int DelayProcessor::getSyncDivision() const noexcept
+{
+    return syncDivision.load (std::memory_order_relaxed);
+}
+
+void DelayProcessor::setBpm (float beatsPerMinute) noexcept
+{
+    bpm.store (juce::jlimit (30.0f, 300.0f, beatsPerMinute), std::memory_order_relaxed);
+}
+
+float DelayProcessor::getBpm() const noexcept
+{
+    return bpm.load (std::memory_order_relaxed);
+}
+
+float DelayProcessor::getEffectiveTimeMs() const noexcept
+{
+    const auto division = (SyncDivision) syncDivision.load (std::memory_order_relaxed);
+
+    if (division == SyncDivision::off)
+        return timeMs.load (std::memory_order_relaxed);
+
+    const auto beats = juce::jlimit (30.0f, 300.0f, bpm.load (std::memory_order_relaxed));
+    const auto quarterMs = 60000.0f / beats;
+
+    auto ms = quarterMs;
+
+    switch (division)
+    {
+        case SyncDivision::quarter:       ms = quarterMs; break;
+        case SyncDivision::eighthDotted:  ms = quarterMs * 0.75f; break;
+        case SyncDivision::eighth:        ms = quarterMs * 0.5f; break;
+        case SyncDivision::eighthTriplet: ms = quarterMs / 3.0f; break;
+        case SyncDivision::sixteenth:     ms = quarterMs * 0.25f; break;
+        case SyncDivision::off:           break;
+    }
+
+    // A quarter note at 30 bpm is 2 s, past what the line holds, so the same
+    // bounds the manual control has apply to the synced time too.
+    return juce::jlimit (10.0f, kMaxDelayMs, ms);
 }
 
 void DelayProcessor::setTimeMs (float ms) noexcept

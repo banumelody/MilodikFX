@@ -10,6 +10,7 @@
 #include "dsp/EQProcessor.h"
 #include "dsp/GainProcessor.h"
 #include "dsp/MasterOutProcessor.h"
+#include "dsp/MetronomeProcessor.h"
 #include "dsp/NoiseGateProcessor.h"
 #include "dsp/OverdriveProcessor.h"
 #include "dsp/ReverbProcessor.h"
@@ -31,6 +32,9 @@ struct GuitarChain
     DelayProcessor* delay = nullptr;
     ReverbProcessor* reverb = nullptr;
     MasterOutProcessor* masterOut = nullptr;
+
+    /** Sits after the master stage, outside the bypass path. */
+    MetronomeProcessor* metronome = nullptr;
 };
 
 /**

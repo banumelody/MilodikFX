@@ -174,6 +174,60 @@ export const importIr = (category: 'cabinet' | 'reverb', name: string, base64: s
     body: JSON.stringify({ category, name, data: base64 }),
   });
 
+export interface TunerReading {
+  enabled: boolean;
+  /** Empty when nothing is detected. */
+  note: string;
+  midiNote: number;
+  frequency: number;
+  /** Deviation from the nearest semitone, -50..+50. */
+  cents: number;
+  confidence: number;
+  /** The engine's own verdict on whether the reading is worth showing. */
+  detected: boolean;
+}
+
+export const getTuner = () => request<TunerReading>('/tuner');
+
+export const setTunerEnabled = (enabled: boolean) =>
+  request<TunerReading>('/tuner/enable', {
+    method: 'POST',
+    body: JSON.stringify({ enabled }),
+  });
+
+/**
+ * Polls the tuner while it is open. Same skip-while-in-flight rule as the
+ * meters; 60 ms is fast enough for the needle to feel attached to the string.
+ */
+export function subscribeTuner(
+  onReading: (reading: TunerReading) => void,
+  onError: (error: unknown) => void,
+  intervalMs = 60,
+): () => void {
+  let stopped = false;
+  let inFlight = false;
+
+  const timer = window.setInterval(async () => {
+    if (stopped || inFlight) return;
+
+    inFlight = true;
+
+    try {
+      const reading = await getTuner();
+      if (!stopped) onReading(reading);
+    } catch (error) {
+      if (!stopped) onError(error);
+    } finally {
+      inFlight = false;
+    }
+  }, intervalMs);
+
+  return () => {
+    stopped = true;
+    window.clearInterval(timer);
+  };
+}
+
 export const setEffectEnabled = (effect: string, enabled: boolean) =>
   request<{ effect: string; enabled: boolean }>(
     `/effects/${encodeURIComponent(effect)}/enabled`,

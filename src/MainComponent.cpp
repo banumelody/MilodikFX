@@ -308,6 +308,7 @@ void MainComponent::startServer()
     webServer->registerApiHandler ("/api/effects", std::make_shared<EffectsHandler> (registry));
     webServer->registerApiHandler ("/api/ir", std::make_shared<IrHandler> (irLibrary));
     webServer->registerApiHandler ("/api/levels", levelsHandler);
+    webServer->registerApiHandler ("/api/tuner", std::make_shared<TunerHandler> (tunerAnalyzer));
     webServer->registerApiHandler ("/api/presets", presetsHandler);
     webServer->registerApiHandler ("/api/health", std::make_shared<HealthHandler>());
 
@@ -397,6 +398,7 @@ void MainComponent::audioDeviceAboutToStart (juce::AudioIODevice* device)
     engineBuffer.clear();
 
     audioEngine.prepareToPlay (currentSampleRate, engineBuffer.getNumSamples(), kMaxEngineChannels);
+    tunerAnalyzer.prepare (currentSampleRate);
 
     audioRunning.store (true, std::memory_order_relaxed);
 
@@ -495,6 +497,11 @@ void MainComponent::audioDeviceIOCallbackWithContext (const float* const* inputC
     juce::AudioBuffer<float> view (engineBuffer.getArrayOfWritePointers(), kMaxEngineChannels, samples);
 
     const auto inputPeak = view.getMagnitude (0, samples);
+
+    // Tap the signal before the chain: the tuner has to see the raw pickup, not
+    // a clipped and cabinet-filtered version of it whose harmonics would fool
+    // pitch detection. A no-op unless the tuner is actually open.
+    tunerAnalyzer.pushSamples (left, samples);
 
     audioEngine.processBlock (view);
 

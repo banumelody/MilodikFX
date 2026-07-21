@@ -16,6 +16,7 @@ export const EFFECT_ACCENTS: Record<string, string> = {
   delay: '#ffc93c',
   reverb: '#4dd0ff',
   master: '#ff5c7a',
+  metronome: '#8b95a7',
 };
 
 /**
@@ -25,6 +26,18 @@ export const EFFECT_ACCENTS: Record<string, string> = {
 const ENUM_OPTIONS: Record<string, string[]> = {
   'input.mode': ['Mono - Input 1', 'Mono - Input 2', 'Mono - Sum both', 'Stereo'],
   'overdrive.oversampling': ['Mati', '2x', '4x', '8x'],
+  // Order fixed by DelayProcessor::SyncDivision; the index is what the engine
+  // stores, so these labels must stay lined up with it.
+  'delay.syncMode': ['Mati', '1/4', '1/8.', '1/8', '1/8T', '1/16'],
+};
+
+/**
+ * Parameters that another control overrides, and the value at which it does.
+ * Locking a delay to the tempo makes its Time knob a lie, so the knob is
+ * disabled rather than left showing a number the delay is not using.
+ */
+const OVERRIDDEN_BY: Record<string, { parameter: string; whenNot: number }> = {
+  'delay.timeMs': { parameter: 'syncMode', whenNot: 0 },
 };
 
 export interface EffectRackProps {
@@ -155,6 +168,15 @@ export function EffectRack({
             );
           }
 
+          const override = OVERRIDDEN_BY[enumKey];
+          const overridden =
+            override != null &&
+            Math.round(
+              Number(
+                effect.parameters.find((other) => other.id === override.parameter)?.value ?? 0,
+              ),
+            ) !== override.whenNot;
+
           return (
             <Knob
               key={parameter.id}
@@ -166,7 +188,7 @@ export function EffectRack({
               label={parameter.label}
               unit={parameter.unit}
               accent={accent}
-              disabled={inactive}
+              disabled={inactive || overridden}
               format={(value) => formatValue(parameter, value)}
               onChange={(value) => onParameterChange(effect.id, parameter.id, value)}
             />
