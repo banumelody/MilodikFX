@@ -224,6 +224,17 @@ Device selection walks preferred types: ASIO -> WASAPI Exclusive -> WASAPI Low L
 
 On the developer's Scarlett this reaches 288 samples at 96 kHz, 12 ms round trip, ~2.4 % CPU in Release.
 
+### Performance
+
+`tests/PerformanceTests.cpp` measures the whole chain against a 32-sample block at 96 kHz — a 0.33 ms
+budget, which is what every realtime rule here exists to protect. The absolute figures it logs are from
+a Debug build and are not the shipping numbers; the assertions that bite are the build-independent
+ratios (a decayed spillover tail must cost less than a ringing one, no voicing may cost 3x another,
+cost must not creep between runs).
+
+Measured on the developer's rig in Release, ASIO 96 kHz / 32 samples / 4.33 ms round trip: **7.6 % DSP**
+with every effect on, **16.3 %** worst case (Marshall-in-a-Box at 8x oversampling, 90 % drive).
+
 ### HTTP layer
 
 `WebServer` (`src/ui/WebServer.cpp`) is a raw Winsock2 server on a `juce::Thread`, one detached

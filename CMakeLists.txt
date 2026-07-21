@@ -368,6 +368,7 @@ target_sources(MilodikFX_tests
     tests/UndoTests.cpp
     tests/InputTrimTests.cpp
     tests/DriveVoicingTests.cpp
+    tests/PerformanceTests.cpp
     ${MILODIKFX_ENGINE_SOURCES}
 )
 
