@@ -49,6 +49,7 @@ void CabinetProcessor::prepareToPlay (double sampleRateIn, int samplesPerBlock, 
     currentNumChannels = juce::jlimit (0, kMaxChannels, numChannels);
 
     irEngine.prepare (sampleRate, juce::jmax (1, samplesPerBlock), juce::jmax (1, currentNumChannels));
+    irEngineB.prepare (sampleRate, juce::jmax (1, samplesPerBlock), juce::jmax (1, currentNumChannels));
 
     smoothedPresence.reset (sampleRate, kSmoothingSeconds, presenceDb.load (std::memory_order_relaxed));
     smoothedTone.reset (sampleRate, kSmoothingSeconds, toneHz.load (std::memory_order_relaxed));
@@ -57,6 +58,69 @@ void CabinetProcessor::prepareToPlay (double sampleRateIn, int samplesPerBlock, 
     reset();
 
     prepared = true;
+}
+
+CabinetProcessor::CabinetProcessor()
+{
+    // Allocated once, up front. Loading a second IR mid-song must not allocate
+    // under a running audio thread.
+    blendScratch.setSize (kMaxChannels, kMaxIrBlock, false, true, false);
+}
+
+void CabinetProcessor::setIrBlend (float amount) noexcept
+{
+    irBlend.store (juce::jlimit (0.0f, 1.0f, amount), std::memory_order_relaxed);
+}
+
+float CabinetProcessor::getIrBlend() const noexcept
+{
+    return irBlend.load (std::memory_order_relaxed);
+}
+
+/**
+ * Runs one or both impulse responses.
+ *
+ * Returns false when nothing usable is loaded, so the caller falls through to
+ * the analytic chain rather than going silent.
+ */
+bool CabinetProcessor::processConvolution (juce::AudioBuffer<float>& buffer, int numSamples, int numCh)
+{
+    const auto hasA = irEngine.hasImpulseResponse();
+    const auto hasB = irEngineB.hasImpulseResponse();
+
+    if (! hasA && ! hasB)
+        return false;
+
+    const auto blend = irBlend.load (std::memory_order_relaxed);
+
+    // Only one side in play: no scratch copy, no mixing.
+    if (! hasB || blend <= 0.0f)
+        return hasA && irEngine.process (buffer);
+
+    if (! hasA || blend >= 1.0f)
+        return irEngineB.process (buffer);
+
+    if (numSamples > blendScratch.getNumSamples() || numCh > blendScratch.getNumChannels())
+        return irEngine.process (buffer);
+
+    for (int ch = 0; ch < numCh; ++ch)
+        blendScratch.copyFrom (ch, 0, buffer, ch, 0, numSamples);
+
+    juce::AudioBuffer<float> bView (blendScratch.getArrayOfWritePointers(), numCh, numSamples);
+
+    if (! irEngine.process (buffer))
+        return irEngineB.process (buffer);
+
+    if (! irEngineB.process (bView))
+        return true; // A already ran; B declined, so leave A's result in place
+
+    auto* const* a = buffer.getArrayOfWritePointers();
+
+    for (int ch = 0; ch < numCh; ++ch)
+        for (int i = 0; i < numSamples; ++i)
+            a[ch][i] = a[ch][i] * (1.0f - blend) + bView.getSample (ch, i) * blend;
+
+    return true;
 }
 
 void CabinetProcessor::processBlock (juce::AudioBuffer<float>& buffer)
@@ -72,7 +136,7 @@ void CabinetProcessor::processBlock (juce::AudioBuffer<float>& buffer)
 
     // Convolution when an IR is loaded and selected; otherwise fall through to
     // the analytic chain, so a missing or unreadable file never means silence.
-    if (useImpulseResponse.load (std::memory_order_relaxed) && irEngine.process (buffer))
+    if (useImpulseResponse.load (std::memory_order_relaxed) && processConvolution (buffer, numSamples, numCh))
         return;
 
     const auto presenceTarget = presenceDb.load (std::memory_order_relaxed);
@@ -109,6 +173,8 @@ void CabinetProcessor::reset()
             s.reset();
 
     irEngine.reset();
+    irEngineB.reset();
+    blendScratch.clear();
 }
 
 void CabinetProcessor::setUseImpulseResponse (bool shouldUseIr) noexcept

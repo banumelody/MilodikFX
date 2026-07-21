@@ -392,6 +392,36 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
                                                 [p] (bool v) { p->setUseImpulseResponse (v); }));
             e.parameters.push_back (makeIrFileParam (p, *extras.irLibrary,
                                                      milodikfx::preset::IrLibrary::Category::cabinet));
+
+            // A second IR and a blend between them. Close mic plus room mic is
+            // standard studio practice and the cheapest way past the slightly
+            // static quality a single impulse has.
+            auto second = makeIrFileParam (p, *extras.irLibrary,
+                                           milodikfx::preset::IrLibrary::Category::cabinet);
+            second.id = "irFileB";
+            second.label = "Impulse Response B";
+            second.getText = [p] { return p->getIrEngineB().getLoadedName(); };
+            second.setText = [p, library = extras.irLibrary] (const juce::String& name)
+            {
+                auto& engine = p->getIrEngineB();
+
+                if (name.isEmpty())
+                {
+                    engine.clear();
+                    return;
+                }
+
+                const auto file = library->resolve (milodikfx::preset::IrLibrary::Category::cabinet, name);
+
+                if (! engine.loadFromFile (file))
+                    engine.clear();
+            };
+
+            e.parameters.push_back (std::move (second));
+
+            e.parameters.push_back (makeParam ("irBlend", "A/B Blend", "", 0.0f, 1.0f, 0.01f, 0.0f,
+                                               [p] { return p->getIrBlend(); },
+                                               [p] (float v) { p->setIrBlend (v); }));
         }
 
         registry.addEffect (std::move (e));

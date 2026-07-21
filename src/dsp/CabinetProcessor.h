@@ -25,6 +25,8 @@ namespace milodikfx::dsp
 class CabinetProcessor final : public AudioProcessorBase
 {
 public:
+    CabinetProcessor();
+
     void prepareToPlay (double sampleRate, int samplesPerBlock, int numChannels) override;
     void processBlock (juce::AudioBuffer<float>& buffer) override;
     void reset() override;
@@ -46,13 +48,31 @@ public:
     /** The shared convolution front-end; owned here, driven by the API layer. */
     IrEngine& getIrEngine() noexcept { return irEngine; }
 
+    /**
+     * A second impulse response, blended with the first.
+     *
+     * Blending two cabinet IRs -- a close mic and a room mic, or two different
+     * speakers -- is standard practice in a studio, and it is the cheapest way
+     * to get past the slightly static quality a single IR has.
+     */
+    IrEngine& getIrEngineB() noexcept { return irEngineB; }
+
+    /** 0 = only the first IR, 1 = only the second. */
+    void setIrBlend (float amount) noexcept;
+    float getIrBlend() const noexcept;
+
 private:
     static constexpr int kNumStages = 6;
+
+    /** Scratch for the second convolution. Fixed size, allocated once. */
+    static constexpr int kMaxIrBlock = 8192;
 
     /** Fixed so nothing here is ever reallocated while audio is running. */
     static constexpr int kMaxChannels = 8;
 
     void rebuildCoefficients (float presenceDb, float toneHz) noexcept;
+
+    bool processConvolution (juce::AudioBuffer<float>& buffer, int numSamples, int numCh);
 
     double sampleRate = 44100.0;
     int currentNumChannels = 0;
@@ -64,6 +84,10 @@ private:
     std::atomic<bool> useImpulseResponse { false };
 
     IrEngine irEngine;
+    IrEngine irEngineB;
+    std::atomic<float> irBlend { 0.0f };
+
+    juce::AudioBuffer<float> blendScratch;
 
     // Audio-thread-owned.
     std::array<BiquadCoeffs, kNumStages> coeffs;

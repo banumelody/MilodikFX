@@ -744,6 +744,33 @@ describe('MilodikFX UI against a live engine', () => {
     });
   });
 
+  it('offers two cabinet impulse responses and a blend between them', () => {
+    cy.request('/api/effects/cabinet').then(({ body }) => {
+      const ids = body.parameters.map((p: { id: string }) => p.id);
+
+      expect(ids).to.include('irFile');
+      expect(ids).to.include('irFileB');
+      expect(ids).to.include('irBlend');
+
+      const blend = body.parameters.find((p: { id: string }) => p.id === 'irBlend');
+      expect(blend.min).to.eq(0);
+      expect(blend.max).to.eq(1);
+      // Defaults to the first IR alone, so adding a second slot changes nothing
+      // until it is deliberately blended in.
+      expect(blend.default).to.eq(0);
+
+      const second = body.parameters.find((p: { id: string }) => p.id === 'irFileB');
+      expect(second.type).to.eq('text');
+    });
+
+    cy.request('PUT', '/api/effects/cabinet/irBlend', { value: 0.5 });
+    cy.request('/api/effects/cabinet/irBlend').then(({ body }) => {
+      expect(Number(body.value)).to.be.closeTo(0.5, 0.01);
+    });
+
+    cy.request('PUT', '/api/effects/cabinet/irBlend', { value: 0 });
+  });
+
   it('reports MIDI state even with no controller attached', () => {
     // A build machine has no MIDI hardware, so the contract that has to hold is
     // that the endpoint answers with an empty device list rather than failing.

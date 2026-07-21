@@ -13,6 +13,43 @@ namespace
 {
 constexpr double kRate = 48000.0;
 
+/**
+ * Writes a bright impulse response: mostly a single spike.
+ *
+ * Deliberately different in character from writeTestIr's decaying burst, so a
+ * blend between the two lands somewhere measurably in between rather than
+ * being indistinguishable from either.
+ */
+bool writeBrightIr (const juce::File& file, int lengthSamples)
+{
+    file.getParentDirectory().createDirectory();
+    file.deleteFile();
+
+    juce::WavAudioFormat wav;
+    std::unique_ptr<juce::FileOutputStream> stream (file.createOutputStream());
+
+    if (stream == nullptr)
+        return false;
+
+    std::unique_ptr<juce::AudioFormatWriter> writer (
+        wav.createWriterFor (stream.get(), kRate, 1, 16, {}, 0));
+
+    if (writer == nullptr)
+        return false;
+
+    stream.release();
+
+    juce::AudioBuffer<float> buffer (1, lengthSamples);
+    buffer.clear();
+    buffer.setSample (0, 0, 0.9f);
+    buffer.setSample (0, lengthSamples / 2, -0.3f);
+
+    writer->writeFromAudioSampleBuffer (buffer, 0, lengthSamples);
+    writer.reset();
+
+    return file.existsAsFile();
+}
+
 /** Writes a short, valid impulse response so the load path is exercised for real. */
 bool writeTestIr (const juce::File& file, int lengthSamples, int numChannels = 1)
 {
@@ -370,3 +407,146 @@ public:
 };
 
 static IrChainIntegrationTests irChainIntegrationTests;
+
+//==============================================================================
+class DualIrTests final : public juce::UnitTest
+{
+public:
+    DualIrTests() : juce::UnitTest ("Dual IR blend", "dsp") {}
+
+    void runTest() override
+    {
+        auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                       .getChildFile ("MilodikFX_DualIrTests");
+        dir.deleteRecursively();
+        dir.createDirectory();
+
+        const auto darkFile = dir.getChildFile ("dark.wav");
+        const auto brightFile = dir.getChildFile ("bright.wav");
+
+        expect (writeTestIr (darkFile, 512));
+        expect (writeBrightIr (brightFile, 512));
+
+        auto runCabinet = [&] (bool loadA, bool loadB, float blend)
+        {
+            milodikfx::dsp::CabinetProcessor cab;
+            cab.setEnabled (true);
+            cab.setUseImpulseResponse (true);
+            // Prepared for the block it is actually given: the convolution
+            // allocates its working buffers from this figure.
+            cab.prepareToPlay (kRate, 2048, 1);
+
+            if (loadA)
+                expect (cab.getIrEngine().loadFromFile (darkFile));
+
+            if (loadB)
+                expect (cab.getIrEngineB().loadFromFile (brightFile));
+
+            cab.setIrBlend (blend);
+
+            // juce::dsp::Convolution loads on a background thread, so the first
+            // blocks after a load still run the previous (empty) response. Wait
+            // it out, then warm up, or the comparison is a race.
+            juce::Thread::sleep (300);
+
+            juce::AudioBuffer<float> buffer (1, 2048);
+
+            for (int pass = 0; pass < 8; ++pass)
+            {
+                for (int i = 0; i < buffer.getNumSamples(); ++i)
+                    buffer.setSample (0, i, (float) std::sin (0.03 * (double) i) * 0.4f);
+
+                cab.processBlock (buffer);
+            }
+
+            return buffer;
+        };
+
+        beginTest ("Blend at either end is exactly that IR alone");
+        {
+            const auto onlyA = runCabinet (true, false, 0.0f);
+            const auto bothAtA = runCabinet (true, true, 0.0f);
+
+            for (int i = 0; i < onlyA.getNumSamples(); ++i)
+                expectWithinAbsoluteError (bothAtA.getSample (0, i), onlyA.getSample (0, i), 1.0e-5f,
+                                           "loading a second IR changed the sound at blend 0");
+
+            const auto onlyB = runCabinet (false, true, 1.0f);
+            const auto bothAtB = runCabinet (true, true, 1.0f);
+
+            for (int i = 0; i < onlyB.getNumSamples(); ++i)
+                expectWithinAbsoluteError (bothAtB.getSample (0, i), onlyB.getSample (0, i), 1.0e-5f,
+                                           "blend 1 was not the second IR alone");
+        }
+
+        beginTest ("A blend lands between the two, not on either");
+        {
+            const auto a = runCabinet (true, true, 0.0f);
+            const auto b = runCabinet (true, true, 1.0f);
+            const auto mixed = runCabinet (true, true, 0.5f);
+
+            auto differsFrom = [] (const juce::AudioBuffer<float>& x,
+                                   const juce::AudioBuffer<float>& y)
+            {
+                double sum = 0.0;
+
+                for (int i = 0; i < x.getNumSamples(); ++i)
+                {
+                    const auto d = (double) x.getSample (0, i) - (double) y.getSample (0, i);
+                    sum += d * d;
+                }
+
+                return std::sqrt (sum / (double) x.getNumSamples());
+            };
+
+            logMessage ("  rms A " + juce::String (rmsOf (a), 5)
+                        + "  B " + juce::String (rmsOf (b), 5)
+                        + "  mixed " + juce::String (rmsOf (mixed), 5));
+
+            expect (differsFrom (mixed, a) > 1.0e-4, "the blend sounded exactly like IR A");
+            expect (differsFrom (mixed, b) > 1.0e-4, "the blend sounded exactly like IR B");
+
+            // And it really is the average of the two, sample for sample.
+            for (int i = 0; i < mixed.getNumSamples(); ++i)
+                expectWithinAbsoluteError (mixed.getSample (0, i),
+                                           0.5f * (a.getSample (0, i) + b.getSample (0, i)),
+                                           1.0e-4f);
+        }
+
+        beginTest ("One IR missing still works rather than going silent");
+        {
+            // Whatever is loaded should be heard. Falling silent because the
+            // other slot is empty would be the worst possible failure here.
+            const auto onlyB = runCabinet (false, true, 0.0f);
+            expect (onlyB.getMagnitude (0, onlyB.getNumSamples()) > 0.001f,
+                    "blend 0 with only B loaded produced silence");
+
+            const auto onlyA = runCabinet (true, false, 1.0f);
+            expect (onlyA.getMagnitude (0, onlyA.getNumSamples()) > 0.001f,
+                    "blend 1 with only A loaded produced silence");
+        }
+
+        beginTest ("Neither loaded falls back to the analytic cabinet");
+        {
+            const auto neither = runCabinet (false, false, 0.5f);
+
+            expect (neither.getMagnitude (0, neither.getNumSamples()) > 0.001f,
+                    "no IR at all produced silence instead of the analytic chain");
+        }
+
+        beginTest ("The blend is clamped to its range");
+        {
+            milodikfx::dsp::CabinetProcessor cab;
+
+            cab.setIrBlend (-4.0f);
+            expectEquals (cab.getIrBlend(), 0.0f);
+
+            cab.setIrBlend (9.0f);
+            expectEquals (cab.getIrBlend(), 1.0f);
+        }
+
+        dir.deleteRecursively();
+    }
+};
+
+static DualIrTests dualIrTests;
