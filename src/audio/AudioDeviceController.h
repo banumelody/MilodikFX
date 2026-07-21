@@ -107,6 +107,9 @@ private:
     /** What "optimise" aims for; drivers clamp upwards from here on their own. */
     static constexpr int kLowestUsefulBufferSize = 32;
 
+    /** Bounds how long the search can take: each open is a hardware round trip. */
+    static constexpr int kMaxDevicesPerType = 4;
+
     std::atomic<double> preferredSampleRate { 48000.0 };
     std::atomic<int> preferredBufferSize { 128 };
     juce::String applyRequestOnMessageThread (const AudioDeviceRequest& request);

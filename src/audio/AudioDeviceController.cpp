@@ -1,5 +1,9 @@
 #include "audio/AudioDeviceController.h"
 
+#include <algorithm>
+#include <numeric>
+#include <vector>
+
 namespace milodikfx::audio
 {
 namespace
@@ -54,19 +58,55 @@ juce::String describeDeviceNames (juce::AudioIODeviceType& type, bool inputs)
 }
 
 /**
- * The user's interface should win over the motherboard codec on first run.
- * Only consulted when there is no saved preference to restore.
+ * Ranks a device name for a USB audio interface.
+ *
+ * Only decides the order things are tried in; anything that fails simply falls
+ * through to the next candidate. The Thunderbolt penalty matters in practice:
+ * Focusrite's driver package registers a Thunderbolt ASIO driver even on a
+ * machine with no Thunderbolt hardware, and it always fails to open.
  */
-int indexOfPreferredDevice (const juce::StringArray& names)
+int scoreDeviceName (const juce::String& name)
 {
-    static const char* preferredSubstrings[] = { "Focusrite", "Scarlett", "USB Audio" };
+    auto score = 0;
 
-    for (const auto* needle : preferredSubstrings)
-        for (int i = 0; i < names.size(); ++i)
-            if (names[i].containsIgnoreCase (needle))
-                return i;
+    if (name.containsIgnoreCase ("Scarlett"))     score += 100;
+    if (name.containsIgnoreCase ("Focusrite"))    score += 40;
+    if (name.containsIgnoreCase ("USB"))          score += 30;
+    if (name.containsIgnoreCase ("Thunderbolt"))  score -= 80;
+    if (name.containsIgnoreCase ("Primary Sound")) score -= 40;
 
-    return -1;
+    return score;
+}
+
+/** Device indices, best candidate first. */
+std::vector<int> rankedDeviceIndices (const juce::StringArray& names)
+{
+    std::vector<int> order ((size_t) names.size());
+    std::iota (order.begin(), order.end(), 0);
+
+    std::stable_sort (order.begin(), order.end(), [&names] (int a, int b)
+    {
+        return scoreDeviceName (names[a]) > scoreDeviceName (names[b]);
+    });
+
+    return order;
+}
+
+/**
+ * Picks the input to pair with a chosen output. ASIO exposes one driver as both
+ * sides, so an exact name match wins; otherwise take the best-ranked input.
+ */
+juce::String chooseInputFor (const juce::StringArray& inputNames, const juce::String& outputName)
+{
+    if (inputNames.isEmpty())
+        return {};
+
+    for (const auto& name : inputNames)
+        if (name == outputName)
+            return name;
+
+    const auto ranked = rankedDeviceIndices (inputNames);
+    return inputNames[ranked.front()];
 }
 } // namespace
 
@@ -255,81 +295,85 @@ juce::String AudioDeviceController::openPreferredType()
         log ("Trying " + typeName + " -- outputs: " + describeDeviceNames (*type, false)
              + " | inputs: " + describeDeviceNames (*type, true));
 
-        juce::AudioDeviceManager::AudioDeviceSetup setup;
+        // Try several devices within the type, not just the best-ranked one.
+        // ASIO in particular exposes every installed driver as a device, and the
+        // first pick can be one with no hardware behind it -- abandoning the
+        // whole type at that point skipped the driver we actually wanted.
+        auto attemptsLeft = kMaxDevicesPerType;
 
-        const auto preferredOutput = indexOfPreferredDevice (outputNames);
-        setup.outputDeviceName = outputNames[preferredOutput >= 0 ? preferredOutput : 0];
-
-        if (! inputNames.isEmpty())
+        for (const auto outputIndex : rankedDeviceIndices (outputNames))
         {
-            const auto preferredInput = indexOfPreferredDevice (inputNames);
-            setup.inputDeviceName = inputNames[preferredInput >= 0 ? preferredInput : 0];
-        }
-
-        setup.useDefaultInputChannels = true;
-        setup.useDefaultOutputChannels = true;
-
-        // Only the sample rate is negotiated here; the buffer is left to the
-        // driver and tuned afterwards, once the open device can tell us what it
-        // actually supports. Guessing at a buffer up front just cost a failed
-        // open per guess, and each of those takes a second or more of hardware
-        // round trip.
-        const double rateAttempts[] = { desiredSampleRate, 0.0 };
-
-        juce::String error = "not attempted";
-
-        for (const auto rate : rateAttempts)
-        {
-            setup.sampleRate = rate;
-            setup.bufferSize = 0;
-
-            // initialise(), not setAudioDeviceSetup(): the manager only records
-            // how many input channels are *needed* here. Going straight to
-            // setAudioDeviceSetup leaves that at zero and opens output-only.
-            error = deviceManager.initialise (2, 2, nullptr, false, setup.outputDeviceName, &setup);
-
-            if (error.isEmpty() && deviceManager.getCurrentAudioDevice() != nullptr)
+            if (attemptsLeft-- <= 0)
                 break;
+
+            juce::AudioDeviceManager::AudioDeviceSetup setup;
+            setup.outputDeviceName = outputNames[outputIndex];
+            setup.inputDeviceName = chooseInputFor (inputNames, setup.outputDeviceName);
+            setup.useDefaultInputChannels = true;
+            setup.useDefaultOutputChannels = true;
+
+            // Only the sample rate is negotiated here; the buffer is left to the
+            // driver and tuned afterwards, once the open device can say what it
+            // actually supports. Guessing at a buffer up front cost a failed
+            // open per guess, each a second or more of hardware round trip.
+            const double rateAttempts[] = { desiredSampleRate, 0.0 };
+
+            juce::String error = "not attempted";
+
+            for (const auto rate : rateAttempts)
+            {
+                setup.sampleRate = rate;
+                setup.bufferSize = 0;
+
+                // initialise(), not setAudioDeviceSetup(): the manager only
+                // records how many input channels are *needed* here. Going
+                // straight to setAudioDeviceSetup leaves that at zero and opens
+                // the device output-only.
+                error = deviceManager.initialise (2, 2, nullptr, false, setup.outputDeviceName, &setup);
+
+                if (error.isEmpty() && deviceManager.getCurrentAudioDevice() != nullptr)
+                    break;
+            }
+
+            if (! error.isEmpty())
+            {
+                lastError = error;
+                log ("  " + setup.outputDeviceName + " failed: " + error);
+                continue;
+            }
+
+            auto* device = deviceManager.getCurrentAudioDevice();
+
+            if (device == nullptr)
+                continue;
+
+            // A processor with no input is useless, and some shared-mode drivers
+            // happily open output-only. Treat that as a failure and keep looking.
+            if (! inputNames.isEmpty() && device->getActiveInputChannels().countNumberOfSetBits() == 0)
+            {
+                lastError = setup.outputDeviceName + " opened without any input channels";
+                log ("  " + setup.outputDeviceName + " rejected: no input channels");
+                continue;
+            }
+
+            negotiateTowardsPreferred();
+
+            device = deviceManager.getCurrentAudioDevice();
+
+            if (device == nullptr)
+                continue;
+
+            const auto rate = device->getCurrentSampleRate();
+            const auto block = device->getCurrentBufferSizeSamples();
+
+            log ("Opened " + typeName + " / " + device->getName()
+                 + " @ " + juce::String (rate) + " Hz"
+                 + ", buffer " + juce::String (block)
+                 + " (" + juce::String (rate > 0.0 ? 1000.0 * block / rate : 0.0, 2) + " ms)"
+                 + ", inputs " + juce::String (device->getActiveInputChannels().countNumberOfSetBits()));
+
+            return {};
         }
-
-        if (! error.isEmpty())
-        {
-            lastError = error;
-            log ("Failed to open " + typeName + ": " + error);
-            continue;
-        }
-
-        auto* device = deviceManager.getCurrentAudioDevice();
-
-        if (device == nullptr)
-            continue;
-
-        // A processor with no input is useless, and some shared-mode drivers
-        // happily open output-only. Treat that as a failure and keep looking.
-        if (! inputNames.isEmpty() && device->getActiveInputChannels().countNumberOfSetBits() == 0)
-        {
-            lastError = typeName + " opened without any input channels";
-            log ("Rejecting " + typeName + ": no input channels were opened");
-            continue;
-        }
-
-        negotiateTowardsPreferred();
-
-        device = deviceManager.getCurrentAudioDevice();
-
-        if (device == nullptr)
-            continue;
-
-        const auto rate = device->getCurrentSampleRate();
-        const auto block = device->getCurrentBufferSizeSamples();
-
-        log ("Opened " + typeName + " / " + device->getName()
-             + " @ " + juce::String (rate) + " Hz"
-             + ", buffer " + juce::String (block)
-             + " (" + juce::String (rate > 0.0 ? 1000.0 * block / rate : 0.0, 2) + " ms)"
-             + ", inputs " + juce::String (device->getActiveInputChannels().countNumberOfSetBits()));
-
-        return {};
     }
 
     // Nothing preferred worked, so let JUCE pick whatever it can.

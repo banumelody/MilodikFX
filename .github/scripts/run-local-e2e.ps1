@@ -43,13 +43,18 @@ if (-not (Test-Path $exePath)) {
     exit 1
 }
 
-# A second instance would be refused by the single-instance guard and Cypress
-# would then talk to whichever engine was already running.
-$existing = Get-Process MilodikFX -ErrorAction SilentlyContinue
+# A second instance is refused by the single-instance guard, so Cypress would
+# silently talk to whichever engine was already running. Match on the executable
+# path, not the process name: a copy named MilodikFX-0.9.0.exe reports a
+# different process name and slipped past a name-based check, which meant a
+# whole test session ran against a stale build.
+$existing = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+    Where-Object { $_.ExecutablePath -like '*MilodikFX*.exe' }
+
 if ($existing) {
-    Log 'Stopping an already running MilodikFX...'
-    $existing | Stop-Process -Force
-    Start-Sleep -Seconds 2
+    Log "Stopping $($existing.Count) already running MilodikFX process(es)..."
+    $existing | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    Start-Sleep -Seconds 3
 }
 
 Log "Starting $exePath"

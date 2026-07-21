@@ -40,9 +40,22 @@ Presets are JSON under `Documents\MilodikFX\Presets`.
 **5173** so the two can never contend. The UI resolves its API base from `window.location.origin`, so
 the port fallback is handled automatically.
 
-**ASIO** is optional. Set `$env:ASIOSDK_DIR` (or pass `-AsioSdkPath` to the build script) before
-configuring and CMake enables it. Without the SDK the engine still reaches low latency through WASAPI
-exclusive mode.
+**ASIO** is where the latency actually is. With the Steinberg ASIO SDK present, CMake enables it and
+the engine prefers it over everything else:
+
+```powershell
+$env:ASIOSDK_DIR = "D:\SDKs\ASIOSDK"      # or pass -AsioSdkPath to build-release.ps1
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DMILODIKFX_ASIO_SDK_PATH="D:/SDKs/ASIOSDK"
+```
+
+Measured on the developer's Scarlett 4i4: WASAPI exclusive bottoms out at 144 samples and reports
+12 ms; the Focusrite USB ASIO driver goes down to 16 samples and reports **5.5 ms at 32 samples**,
+at 0.3 % CPU. Do not compare those two numbers naively -- ASIO reports the driver's real figure
+including converters, WASAPI reports an estimate.
+
+Note the SDK is not in the repository: Steinberg's licence permits use but not redistribution.
+
+Without the SDK the engine still works, falling back to WASAPI exclusive mode.
 
 ## Tests
 
@@ -180,7 +193,13 @@ resources copy both depend on that.
 - Cypress `.trigger('keydown')` builds a plain `Event` by default, so React never sees `key`. Pass
   `eventConstructor: 'KeyboardEvent'`.
 - The Delay and the Noise Gate ship **disabled**; their controls are correctly inert until switched on.
-- The exe holds a single-instance lock. A second launch just raises the existing window.
+- The exe holds a single-instance lock, so a second launch silently raises the first window instead of
+  starting. When scripting a restart, match processes by executable **path**: a copy named
+  `MilodikFX-0.9.0.exe` reports a different process name, and `Stop-Process -Name MilodikFX` walks
+  straight past it -- which once left a whole test session talking to a stale build.
+- ASIO exposes every installed driver as a device, including ones with no hardware behind them
+  (Focusrite's package registers a Thunderbolt driver on machines that have none). The device search
+  therefore tries several devices per type rather than giving up on the type after the first failure.
 - Inno Setup (`iscc.exe`) is only needed for the installer; `scripts\build-release.ps1` skips that step
   and still produces the standalone exe without it.
 

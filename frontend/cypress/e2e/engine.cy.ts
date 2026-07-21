@@ -38,6 +38,10 @@ describe('MilodikFX UI against a live engine', () => {
   });
 
   it('writes a knob change through to the engine', () => {
+    // Set up the state this needs rather than inheriting it: a knob on a
+    // switched-off effect is deliberately inert, so a test that assumed Reverb
+    // happened to be on failed for a reason that had nothing to do with knobs.
+    cy.request('POST', '/api/effects/reverb/enabled', { enabled: true });
     cy.request('PUT', '/api/effects/reverb/dryWetMix', { value: 0.25 });
     cy.reload();
 
@@ -67,7 +71,9 @@ describe('MilodikFX UI against a live engine', () => {
   });
 
   it('leaves the knobs of a switched-off effect inert', () => {
-    // The Delay ships disabled, so its controls must not respond until it is on.
+    cy.request('POST', '/api/effects/delay/enabled', { enabled: false });
+    cy.reload();
+
     cy.request('/api/effects/delay').then(({ body }) => {
       expect(body.enabled).to.eq(false);
     });
