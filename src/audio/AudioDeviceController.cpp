@@ -238,16 +238,27 @@ juce::String AudioDeviceController::initialiseOnMessageThread (const juce::XmlEl
     // First choice: exactly what was open last time.
     if (isUsableSavedState (savedState))
     {
+        const auto wantedType = savedState->getStringAttribute ("deviceType");
         const auto error = deviceManager.initialise (2, 2, savedState, true);
+        const auto openedType = deviceManager.getCurrentAudioDeviceType();
 
-        if (error.isEmpty() && deviceManager.getCurrentAudioDevice() != nullptr)
+        // A saved state naming a device type this build does not have -- ASIO in
+        // a build without the SDK, say -- makes JUCE quietly open the default
+        // device instead and report no error. That looked like a successful
+        // restore and skipped the low-latency search entirely.
+        const auto gotWhatWeAskedFor = wantedType.isEmpty() || wantedType.equalsIgnoreCase (openedType);
+
+        if (error.isEmpty() && deviceManager.getCurrentAudioDevice() != nullptr && gotWhatWeAskedFor)
         {
-            log ("Restored saved audio device state ("
-                 + deviceManager.getCurrentAudioDeviceType() + ")");
+            log ("Restored saved audio device state (" + openedType + ")");
             return {};
         }
 
-        log ("Saved audio device state could not be restored (" + error + "); falling back");
+        if (! gotWhatWeAskedFor)
+            log ("Saved state asked for '" + wantedType + "' but got '" + openedType
+                 + "'; searching for a low-latency device instead");
+        else
+            log ("Saved audio device state could not be restored (" + error + "); falling back");
     }
     else if (savedState != nullptr)
     {

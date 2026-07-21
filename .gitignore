@@ -1,5 +1,7 @@
 # CMake build directories
 build/
+build-portable/
+build-*/
 build-vs/
 out/
 
