@@ -11,8 +11,10 @@
 #include "api/MidiHandler.h"
 #include "api/ParameterRegistry.h"
 #include "api/ParametersHandler.h"
+#include "api/HistoryHandler.h"
 #include "api/PresetsHandler.h"
 #include "api/ScenesHandler.h"
+#include "api/UndoHistory.h"
 #include "api/TunerHandler.h"
 #include "audio/AudioDeviceController.h"
 #include "audio/AudioEngine.h"
@@ -109,6 +111,7 @@ private:
     milodikfx::preset::IrLibrary irLibrary;
     milodikfx::api::ParameterRegistry registry;
     milodikfx::preset::SceneManager sceneManager { registry };
+    milodikfx::api::UndoHistory undoHistory { registry };
 
     juce::AudioDeviceManager deviceManager;
     milodikfx::audio::AudioDeviceController deviceController { deviceManager };
@@ -137,6 +140,12 @@ private:
 
     // Written from REST and MIDI threads, read by the message-thread timer.
     std::atomic<bool> settingsDirty { false };
+
+    // An undo step is committed once the chain has been still for a moment;
+    // one per knob frame would mean fifty presses of Ctrl+Z to get back.
+    static constexpr uint32_t kHistorySettleMs = 700;
+    std::atomic<bool> historyDirty { false };
+    std::atomic<uint32_t> lastParameterChangeMs { 0 };
     uint32_t lastSettingsSaveMs = 0;
     int desiredBufferSize = 128;
     double desiredSampleRate = 48000.0;

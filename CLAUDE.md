@@ -228,6 +228,13 @@ still load; the new fields simply come back empty.
 `savePreset` reads the existing file first and carries its metadata forward. Overwriting a preset to
 change how it sounds must not throw away how it was filed.
 
+`milodikfx::api::UndoHistory` stores the same kind of snapshot. A step is committed by
+`MainComponent`'s timer once the chain has been still for `kHistorySettleMs`, never per write:
+dragging a knob produces a write per frame, and one step each would mean fifty presses of Ctrl+Z to
+get back. After applying, the baseline is re-read from the chain rather than trusted, because a
+parameter can clamp what it was given and a baseline that disagreed would make the next commit record
+a step nobody took.
+
 `milodikfx::preset::SceneManager` holds four slots and stores **only the enable flags**, never
 parameter values. That is the load-bearing decision: a scene change mid-song has to be instant and
 predictable, and jumping a parameter to a value you cannot see on a control you were not touching is

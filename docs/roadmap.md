@@ -23,6 +23,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - P2-3 Scene — `SceneManager` (enabled-only), `/api/scenes`, `SceneGrid.tsx`
 - P3-1 Metadata preset — deskripsi/tag/favorit/catatan, di luar `state`
 - P3-7 Impor/ekspor preset — `/api/presets/export` + `/import`, unduhan Blob di browser
+- P3-5 Undo/redo — `UndoHistory`, `/api/history`, tombol di top bar + Ctrl+Z / Ctrl+Shift+Z
 - P1-2 Overdrive asimetri + oversampling adjustable
 - P1-3 Delay damping + ping-pong
 - P1-4 Compressor parallel mix
@@ -37,7 +38,9 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - P3-8 Metronome — `MetronomeProcessor` sebagai post-processor, di luar jalur bypass
 - P3-9 CPU sparkline
 
-**Belum:** P2-1 (NAM), P2-5 (multi-view), P3-5 (undo/redo), P3-6 (installer).
+**Belum:** P2-1 (NAM), P2-5 (multi-view), P3-6 (installer).
+
+**Catatan P3-5:** langkah undo dicatat setelah rantai diam ~700 ms, bukan setiap tulis. Memutar knob menghasilkan satu tulis per frame; kalau tiap tulis jadi satu langkah, Ctrl+Z lima puluh kali baru kembali ke awal. Ada unit test khusus untuk itu. Baseline dibaca ulang dari rantai setelah apply, karena parameter bisa membatasi nilai yang diberikan — baseline yang tidak cocok dengan rantai akan membuat commit berikutnya mencatat langkah yang tidak pernah dilakukan siapa pun.
 
 **Keputusan desain P2-3 yang diambil:** scene menyimpan **hanya flag enabled**, sesuai rekomendasi awal. Alasannya terbukti saat implementasi — pergantian scene di tengah lagu tidak boleh melompatkan parameter ke nilai yang tidak terlihat pada kontrol yang tidak sedang disentuh. Ada unit test khusus untuk itu. Penyimpanan: di dalam preset (satu preset membawa empat scene-nya), plus salinan di settings supaya rantai kembali seperti ditinggalkan walau tidak ada preset yang dimuat.
 

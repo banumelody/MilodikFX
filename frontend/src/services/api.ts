@@ -343,6 +343,23 @@ export const importPreset = (name: string, data: string) =>
     body: JSON.stringify({ name, data }),
   });
 
+export interface HistoryState {
+  canUndo: boolean;
+  canRedo: boolean;
+  undoDepth: number;
+  redoDepth: number;
+  /** Present on undo/redo, so the UI redraws from what the engine settled on. */
+  effects?: EffectDescriptor[];
+}
+
+export const getHistory = () => request<HistoryState>('/history');
+
+export const undoChange = () =>
+  request<HistoryState>('/history/undo', { method: 'POST', body: '{}' });
+
+export const redoChange = () =>
+  request<HistoryState>('/history/redo', { method: 'POST', body: '{}' });
+
 export const getScenes = () => request<ScenesState>('/scenes');
 
 export const recallScene = (index: number) =>

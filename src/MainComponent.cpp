@@ -110,6 +110,10 @@ MainComponent::MainComponent (juce::PropertiesFile& settingsFileToUse)
     deviceManager.addChangeListener (this);
     initialiseAudioAsync();
 
+    // After the settings have been loaded, so the starting point is the chain
+    // the user left rather than the factory defaults.
+    undoHistory.reset();
+
     startTimer (1000);
     saveSettingsIfNeeded (true);
 
@@ -189,7 +193,13 @@ void MainComponent::buildRegistry()
     milodikfx::dsp::registerChainParameters (registry, chainProcessors, audioEngine.getChain(),
                                              std::move (extras));
 
-    registry.onChanged = [this] { markSettingsDirty(); };
+    registry.onChanged = [this]
+    {
+        markSettingsDirty();
+
+        historyDirty.store (true, std::memory_order_relaxed);
+        lastParameterChangeMs.store (juce::Time::getMillisecondCounter(), std::memory_order_relaxed);
+    };
 
     log ("Registered " + juce::String ((int) registry.getEffects().size()) + " effects");
 }
@@ -451,6 +461,10 @@ void MainComponent::startServer()
     webServer->registerApiHandler ("/api/midi", std::make_shared<MidiHandler> (midiController));
     webServer->registerApiHandler ("/api/presets", presetsHandler);
     webServer->registerApiHandler ("/api/scenes", scenesHandler);
+
+    auto historyHandler = std::make_shared<HistoryHandler> (undoHistory, registry);
+    historyHandler->onChanged = [this] { markSettingsDirty(); };
+    webServer->registerApiHandler ("/api/history", historyHandler);
     webServer->registerApiHandler ("/api/health", std::make_shared<HealthHandler>());
 
     // Meters over one held-open connection instead of a fresh HTTP request every
@@ -724,4 +738,18 @@ void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
 void MainComponent::timerCallback()
 {
     saveSettingsIfNeeded (false);
+
+    // Commit an undo step only once the chain has been still for a moment, so
+    // a knob drag is one step rather than one per frame.
+    if (historyDirty.load (std::memory_order_relaxed))
+    {
+        const auto sinceChange = juce::Time::getMillisecondCounter()
+                                 - lastParameterChangeMs.load (std::memory_order_relaxed);
+
+        if (sinceChange >= kHistorySettleMs)
+        {
+            historyDirty.store (false, std::memory_order_relaxed);
+            undoHistory.commitIfChanged();
+        }
+    }
 }

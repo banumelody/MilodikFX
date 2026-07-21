@@ -16,22 +16,27 @@ import {
   exportPreset,
   getDevices,
   getEffects,
+  getHistory,
   getPresets,
   importPreset,
   loadPreset,
   optimiseDevice,
+  redoChange,
   revealIrFolder,
   savePreset,
+  ApiError,
   setDevice,
   setEffectEnabled,
   setParameter,
   setPresetMetadata,
   subscribeLevels,
+  undoChange,
 } from './services/api';
 import type {
   DeviceRequest,
   DevicesResponse,
   EffectDescriptor,
+  HistoryState,
   Levels,
   PresetMetadata,
 } from './services/api';
@@ -74,6 +79,12 @@ export function App() {
   const [message, setMessage] = useState<string | null>(null);
   const [deviceError, setDeviceError] = useState<string | null>(null);
   const [deviceBusy, setDeviceBusy] = useState(false);
+  const [history, setHistory] = useState<HistoryState>({
+    canUndo: false,
+    canRedo: false,
+    undoDepth: 0,
+    redoDepth: 0,
+  });
 
   // Writes are coalesced per parameter: dragging a knob fires a pointermove per
   // frame, and the engine runs one thread per connection.
@@ -359,6 +370,42 @@ export function App() {
     handleParameterChange('global', 'bypass', isBypassed ? 0 : 1);
   }, [offline, bypass, isBypassed, handleParameterChange]);
 
+  const refreshHistory = useCallback(async () => {
+    try {
+      setHistory(await getHistory());
+    } catch {
+      /* the connection banner already says the engine is unreachable */
+    }
+  }, []);
+
+  // The engine commits a step once the chain has been still for a moment, so
+  // the buttons cannot know they have become available without asking.
+  useEffect(() => {
+    const timer = window.setInterval(() => void refreshHistory(), 1500);
+    void refreshHistory();
+    return () => window.clearInterval(timer);
+  }, [refreshHistory]);
+
+  const applyHistory = useCallback(
+    (action: () => Promise<HistoryState>) =>
+      void (async () => {
+        try {
+          const next = await action();
+          setHistory(next);
+
+          // The response carries the effects, so there is no second round trip
+          // and no window where the rack still shows the pre-undo values.
+          if (next.effects) setEffects(next.effects);
+        } catch (error) {
+          // 409 just means there was nothing to undo, which a keyboard
+          // shortcut does all the time. Not worth a banner.
+          if (!(error instanceof ApiError) || error.status !== 409)
+            setMessage(describeError(error));
+        }
+      })(),
+    [],
+  );
+
   // Panic controls have to be reachable without hunting for a card. Escape mutes
   // and B compares against the dry signal; both are ignored while typing.
   useEffect(() => {
@@ -367,6 +414,22 @@ export function App() {
       const typing =
         target != null &&
         (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.isContentEditable);
+
+      // Undo/redo are the exception: they are modified shortcuts by convention,
+      // and they should work while a name field has focus too.
+      if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+        const key = event.key.toLowerCase();
+
+        if (key === 'z') {
+          event.preventDefault();
+          applyHistory(event.shiftKey ? redoChange : undoChange);
+        } else if (key === 'y') {
+          event.preventDefault();
+          applyHistory(redoChange);
+        }
+
+        return;
+      }
 
       if (typing || event.ctrlKey || event.altKey || event.metaKey) return;
 
@@ -381,7 +444,7 @@ export function App() {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [toggleMute, toggleBypass]);
+  }, [toggleMute, toggleBypass, applyHistory]);
 
   const scrollToEffect = useCallback((effectId: string) => {
     document.getElementById(`rack-${effectId}`)?.scrollIntoView({
@@ -416,6 +479,26 @@ export function App() {
         </div>
 
         <div className="topbar__actions">
+          <button
+            type="button"
+            className="pill-btn"
+            disabled={offline || !history.canUndo}
+            onClick={() => applyHistory(undoChange)}
+            title="Batalkan perubahan terakhir (Ctrl+Z)"
+            aria-label="Batalkan"
+          >
+            ↶
+          </button>
+          <button
+            type="button"
+            className="pill-btn"
+            disabled={offline || !history.canRedo}
+            onClick={() => applyHistory(redoChange)}
+            title="Ulangi perubahan (Ctrl+Shift+Z)"
+            aria-label="Ulangi"
+          >
+            ↷
+          </button>
           {bypass ? (
             <button
               type="button"

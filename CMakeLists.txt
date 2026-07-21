@@ -127,6 +127,8 @@ set(MILODIKFX_ENGINE_SOURCES
   src/preset/SceneManager.cpp
   src/api/ParameterRegistry.h
   src/api/ParameterRegistry.cpp
+  src/api/UndoHistory.h
+  src/api/UndoHistory.cpp
   src/midi/MidiController.h
   src/midi/MidiController.cpp
 )
@@ -202,6 +204,8 @@ target_sources(MilodikFX
     src/api/MidiHandler.cpp
     src/api/ScenesHandler.h
     src/api/ScenesHandler.cpp
+    src/api/HistoryHandler.h
+    src/api/HistoryHandler.cpp
     src/api/PresetsHandler.h
     src/api/PresetsHandler.cpp
     ${MILODIKFX_ENGINE_SOURCES}
@@ -358,6 +362,7 @@ target_sources(MilodikFX_tests
     tests/TunerTests.cpp
     tests/MidiTests.cpp
     tests/SceneTests.cpp
+    tests/UndoTests.cpp
     ${MILODIKFX_ENGINE_SOURCES}
 )
 

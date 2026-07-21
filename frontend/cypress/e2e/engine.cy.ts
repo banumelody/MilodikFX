@@ -172,15 +172,18 @@ describe('MilodikFX UI against a live engine', () => {
     // the control it drives rather than racing the first fetch.
     cy.contains('button', 'Mute').should('be.visible');
 
+    // Waiting for the label to change rather than a fixed 300 ms: writes are
+    // coalesced on a timer, so a flat wait raced the flush and this failed
+    // about one run in three for reasons that had nothing to do with muting.
     cy.get('body').type('{esc}');
-    cy.wait(300);
+    cy.contains('button', 'Bisu').should('be.visible');
 
     cy.request('/api/effects/master/muted').then(({ body }) => {
       expect(Number(body.value)).to.eq(1);
     });
 
     cy.get('body').type('{esc}');
-    cy.wait(300);
+    cy.contains('button', 'Mute').should('be.visible');
 
     cy.request('/api/effects/master/muted').then(({ body }) => {
       expect(Number(body.value)).to.eq(0);
@@ -567,6 +570,60 @@ describe('MilodikFX UI against a live engine', () => {
 
     cy.request('/api/presets').then(({ body }) => {
       expect(body.presets).to.not.include('Rubbish');
+    });
+  });
+
+  it('undoes and redoes a parameter change', () => {
+    cy.request('POST', '/api/effects/overdrive/enabled', { enabled: true });
+    cy.request('PUT', '/api/effects/overdrive/drivePct', { value: 20 });
+
+    // The engine commits a step only once the chain has been still, so a burst
+    // of knob writes is one undo rather than one per frame. Wait it out.
+    cy.wait(2000);
+
+    cy.request('PUT', '/api/effects/overdrive/drivePct', { value: 70 });
+    cy.wait(2000);
+
+    cy.request('/api/history').then(({ body }) => {
+      expect(body.canUndo).to.eq(true);
+    });
+
+    cy.request('POST', '/api/history/undo', {}).then(({ body }) => {
+      expect(body.canRedo).to.eq(true);
+    });
+
+    cy.request('/api/effects/overdrive/drivePct').then(({ body }) => {
+      expect(Number(body.value)).to.be.closeTo(20, 0.5);
+    });
+
+    cy.request('POST', '/api/history/redo', {});
+
+    cy.request('/api/effects/overdrive/drivePct').then(({ body }) => {
+      expect(Number(body.value)).to.be.closeTo(70, 0.5);
+    });
+  });
+
+  it('offers undo in the top bar and answers 409 when there is nothing to undo', () => {
+    cy.contains('button', '↶').should('exist');
+    cy.contains('button', '↷').should('exist');
+
+    // Each undo has to consume a step. Measured rather than drained to
+    // exhaustion: a loop that keeps going until it gets a 409 hangs the whole
+    // run if the stack ever stops emptying, and a page is open here writing to
+    // the same engine, so the depth is not ours alone to predict.
+    cy.request('/api/history').then(({ body }) => {
+      const before = body.undoDepth;
+
+      if (before === 0) {
+        cy.request({ method: 'POST', url: '/api/history/undo', body: {}, failOnStatusCode: false })
+          .then((response) => expect(response.status).to.eq(409));
+        return;
+      }
+
+      cy.request('POST', '/api/history/undo', {}).then((response) => {
+        expect(response.body.undoDepth).to.eq(before - 1);
+        expect(response.body.redoDepth).to.be.greaterThan(0);
+      });
     });
   });
 
