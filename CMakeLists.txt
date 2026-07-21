@@ -125,6 +125,8 @@ set(MILODIKFX_ENGINE_SOURCES
   src/preset/IrLibrary.cpp
   src/api/ParameterRegistry.h
   src/api/ParameterRegistry.cpp
+  src/midi/MidiController.h
+  src/midi/MidiController.cpp
 )
 
 juce_add_gui_app(MilodikFX
@@ -194,6 +196,8 @@ target_sources(MilodikFX
     src/api/LevelsHandler.cpp
     src/api/TunerHandler.h
     src/api/TunerHandler.cpp
+    src/api/MidiHandler.h
+    src/api/MidiHandler.cpp
     src/api/PresetsHandler.h
     src/api/PresetsHandler.cpp
     ${MILODIKFX_ENGINE_SOURCES}
@@ -348,6 +352,7 @@ target_sources(MilodikFX_tests
     tests/RegistryTests.cpp
     tests/IrTests.cpp
     tests/TunerTests.cpp
+    tests/MidiTests.cpp
     ${MILODIKFX_ENGINE_SOURCES}
 )
 
@@ -362,6 +367,9 @@ target_link_libraries(MilodikFX_tests
     juce::juce_core
     juce::juce_audio_basics
     juce::juce_audio_formats
+    # MidiController is part of the shared engine sources, and juce::MidiInput
+    # lives in juce_audio_devices.
+    juce::juce_audio_devices
     juce::juce_dsp
     juce::juce_data_structures
     juce::juce_recommended_config_flags

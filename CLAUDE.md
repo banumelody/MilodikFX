@@ -202,7 +202,27 @@ subclass. Responses are built with `juce::var` + `juce::JSON` (see `src/api/ApiJ
 string concatenation.
 
 Endpoints: `/api/effects`, `/api/parameters`, `/api/devices`, `/api/levels`, `/api/tuner`, `/api/ir`,
-`/api/presets`, `/api/health`.
+`/api/midi`, `/api/presets`, `/api/health`.
+
+### MIDI
+
+`milodikfx::midi::MidiController` (`src/midi/MidiController.*`) owns every interaction with
+`juce::MidiInput` and marshals device open/close to the message thread — the same discipline
+`AudioDeviceController` follows, and for the same reason.
+
+Incoming messages arrive on JUCE's MIDI thread. Writing a parameter from there is safe (processors
+hold them as atomics); anything touching files — a program change selecting a preset — is posted to
+the message thread.
+
+Two mapping modes, and the difference matters: a footswitch sends 127 on press and 0 on release, so a
+`continuous` mapping would need the switch held down to keep the effect on. `toggle` acts on the press
+and ignores the release. Mappings live in the settings file under `midi.cc.<n>.{effect,parameter,mode}`
+and are saved through `MidiController::onConfigurationChanged` — without that hook a binding only
+reached disk if something else happened to have marked the settings dirty.
+
+`handleIncomingMidiMessage` is public deliberately: it is the only way to exercise dispatch without a
+physical controller, and `tests/MidiTests.cpp` drives it directly. What is *not* covered is whether a
+given footswitch really sends 127/0 — that needs hardware.
 
 ### Frontend
 

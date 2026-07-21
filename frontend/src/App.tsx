@@ -5,6 +5,7 @@ import { DeviceSettings } from './components/DeviceSettings';
 import { EffectRack, EFFECT_ACCENTS } from './components/EffectRack';
 import { Knob } from './components/Knob';
 import { LevelMeter, ReductionMeter } from './components/LevelMeter';
+import { MidiMapping } from './components/MidiMapping';
 import { PresetControls } from './components/PresetControls';
 import { Sparkline } from './components/Sparkline';
 import { TempoPanel } from './components/TempoPanel';
@@ -494,6 +495,8 @@ export function App() {
             onSave={handlePresetSave}
             onDelete={handlePresetDelete}
           />
+
+          <MidiMapping effects={effects} disabled={offline} />
 
           <section className="panel" aria-label="Impulse response">
             <header className="panel__head">

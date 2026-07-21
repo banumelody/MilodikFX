@@ -228,6 +228,54 @@ export function subscribeTuner(
   };
 }
 
+export type MidiMappingMode = 'continuous' | 'toggle';
+
+export interface MidiMapping {
+  /** -1 for the pending learn target, which has no controller yet. */
+  cc: number;
+  effect: string;
+  parameter: string;
+  mode: MidiMappingMode;
+}
+
+export interface MidiState {
+  devices: string[];
+  current: string;
+  open: boolean;
+  mappings: MidiMapping[];
+  /** The parameter waiting to be bound, or null when learn is not armed. */
+  learning: MidiMapping | null;
+  /** Last control change seen, so a silent setup can be told from an unmapped one. */
+  lastCc: number;
+  lastValue: number;
+}
+
+export const getMidi = () => request<MidiState>('/midi');
+
+export const setMidiDevice = (name: string) =>
+  request<MidiState>('/midi/device', { method: 'POST', body: JSON.stringify({ name }) });
+
+export const setMidiMapping = (
+  cc: number,
+  effect: string,
+  parameter: string,
+  mode: MidiMappingMode,
+) =>
+  request<MidiState>(`/midi/mappings/${cc}`, {
+    method: 'PUT',
+    body: JSON.stringify({ effect, parameter, mode }),
+  });
+
+export const clearMidiMapping = (cc: number) =>
+  request<MidiState>(`/midi/mappings/${cc}`, { method: 'DELETE' });
+
+/** Arms MIDI learn. Passing no target disarms it. */
+export const learnMidi = (target?: { effect: string; parameter: string; mode: MidiMappingMode }) =>
+  request<MidiState>('/midi/learn', {
+    method: 'POST',
+    body: JSON.stringify(target ?? {}),
+  });
+
 export const setEffectEnabled = (effect: string, enabled: boolean) =>
   request<{ effect: string; enabled: boolean }>(
     `/effects/${encodeURIComponent(effect)}/enabled`,

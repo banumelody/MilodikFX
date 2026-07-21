@@ -983,6 +983,62 @@ input[type='text']:disabled {
   letter-spacing: 0.06em;
 }
 
+/* -------------------------------------------------------------------- midi */
+
+.midi {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.midi__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.midi__last {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.midi__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.midi__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+}
+
+.midi__cc {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.midi__target {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ----------------------------------------------------------------- presets */
 
 .preset {

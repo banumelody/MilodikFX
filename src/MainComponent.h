@@ -8,6 +8,7 @@
 #include "api/EffectsHandler.h"
 #include "api/IrHandler.h"
 #include "api/LevelsHandler.h"
+#include "api/MidiHandler.h"
 #include "api/ParameterRegistry.h"
 #include "api/ParametersHandler.h"
 #include "api/PresetsHandler.h"
@@ -16,6 +17,7 @@
 #include "audio/AudioEngine.h"
 #include "dsp/ChainFactory.h"
 #include "dsp/TunerAnalyzer.h"
+#include "midi/MidiController.h"
 #include "preset/IrLibrary.h"
 #include "preset/PresetManager.h"
 #include "ui/WebServer.h"
@@ -64,9 +66,14 @@ private:
     static constexpr const char* kKeyAudioSampleRatePreference = "audio.sampleRatePreference";
     static constexpr const char* kKeyPresetSelectedName = "ui.preset.selectedName";
     static constexpr const char* kKeyInputMode = "audio.inputMode";
+    static constexpr const char* kKeyMidiDevice = "midi.device";
 
     void buildChain();
     void buildRegistry();
+    void buildMidi();
+
+    void loadMidiSettings();
+    void saveMidiSettings();
     void startServer();
     void createWebView();
     void initialiseAudioAsync();
@@ -104,6 +111,9 @@ private:
     milodikfx::audio::AudioDeviceController deviceController { deviceManager };
     milodikfx::audio::AudioEngine audioEngine;
 
+    // Declared after the registry it writes through, so it is torn down first.
+    milodikfx::midi::MidiController midiController { registry };
+
     std::unique_ptr<WebServer> webServer;
     int serverPort = 0;
 
@@ -122,7 +132,8 @@ private:
     double currentSampleRate = 0.0;
     int currentBlockSize = 0;
 
-    bool settingsDirty = false;
+    // Written from REST and MIDI threads, read by the message-thread timer.
+    std::atomic<bool> settingsDirty { false };
     uint32_t lastSettingsSaveMs = 0;
     int desiredBufferSize = 128;
     double desiredSampleRate = 48000.0;

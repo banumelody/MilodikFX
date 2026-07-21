@@ -86,6 +86,7 @@ MainComponent::MainComponent (juce::PropertiesFile& settingsFileToUse)
     buildChain();
     buildRegistry();
     loadSettingsIntoRegistry();
+    buildMidi();
 
     startServer();
     createWebView();
@@ -118,6 +119,10 @@ MainComponent::MainComponent (juce::PropertiesFile& settingsFileToUse)
 MainComponent::~MainComponent()
 {
     stopTimer();
+
+    // Before anything a mapped message could reach is torn down. Its callbacks
+    // post to the message thread and would otherwise run against dead objects.
+    midiController.openDevice ({});
 
    #if MILODIKFX_ENABLE_WEBVIEW
     webView.reset();
@@ -190,6 +195,116 @@ void MainComponent::buildRegistry()
 }
 
 //==============================================================================
+void MainComponent::buildMidi()
+{
+    midiController.onParameterChanged = [this] { markSettingsDirty(); };
+
+    midiController.onLearned = [this] (int, milodikfx::midi::Mapping) { markSettingsDirty(); };
+    midiController.onConfigurationChanged = [this] { markSettingsDirty(); };
+
+    // Program change selects a preset by position in the list. Names are what
+    // the user thinks in, but a program number has no name to send, so the
+    // ordering the preset list already has is the only mapping available.
+    midiController.onProgramChange = [this] (int program)
+    {
+        if (presetsHandler == nullptr)
+            return;
+
+        const auto names = presetManager.listPresets();
+
+        if (program < 0 || program >= names.size())
+        {
+            log ("MIDI program " + juce::String (program) + " has no preset");
+            return;
+        }
+
+        const auto name = names[program];
+
+        juce::var state;
+
+        if (! presetManager.loadPreset (name, state))
+        {
+            log ("MIDI program " + juce::String (program) + ": preset " + name + " could not be read");
+            return;
+        }
+
+        registry.applyState (state);
+        presetsHandler->setSelectedName (name);
+        markSettingsDirty();
+
+        log ("MIDI program " + juce::String (program) + " loaded preset " + name);
+    };
+
+    loadMidiSettings();
+}
+
+void MainComponent::loadMidiSettings()
+{
+    for (int cc = 0; cc < milodikfx::midi::MidiController::kNumControllers; ++cc)
+    {
+        const auto prefix = "midi.cc." + juce::String (cc) + ".";
+        const auto effect = settingsFile.getValue (prefix + "effect", {});
+
+        if (effect.isEmpty())
+            continue;
+
+        milodikfx::midi::Mapping mapping;
+        mapping.effectId = effect;
+        mapping.parameterId = settingsFile.getValue (prefix + "parameter", {});
+        mapping.mode = settingsFile.getValue (prefix + "mode", "continuous") == "toggle"
+                           ? milodikfx::midi::MappingMode::toggle
+                           : milodikfx::midi::MappingMode::continuous;
+
+        if (mapping.isValid())
+            midiController.setMapping (cc, mapping);
+    }
+
+    const auto deviceName = settingsFile.getValue (kKeyMidiDevice, {});
+
+    if (deviceName.isEmpty())
+        return;
+
+    // A controller that was unplugged since last run is not an error worth
+    // showing; the mapping stays and starts working again when it comes back.
+    const auto error = midiController.openDevice (deviceName);
+
+    if (error.isNotEmpty())
+        log ("MIDI: " + error);
+    else
+        log ("MIDI input opened: " + deviceName);
+}
+
+void MainComponent::saveMidiSettings()
+{
+    settingsFile.setValue (kKeyMidiDevice, midiController.getOpenDeviceName());
+
+    for (int cc = 0; cc < milodikfx::midi::MidiController::kNumControllers; ++cc)
+    {
+        const auto prefix = "midi.cc." + juce::String (cc) + ".";
+        const auto mapping = midiController.getMapping (cc);
+
+        if (! mapping.isValid())
+        {
+            // Removed rather than blanked, so a cleared mapping does not leave
+            // an empty key that later reads back as a half-written one. Guarded
+            // on containsKey because this runs for all 128 controllers on every
+            // save, and removing a key that was never there would still mark
+            // the file as needing a write.
+            for (const auto* suffix : { "effect", "parameter", "mode" })
+                if (settingsFile.containsKey (prefix + suffix))
+                    settingsFile.removeValue (prefix + suffix);
+
+            continue;
+        }
+
+        settingsFile.setValue (prefix + "effect", mapping.effectId);
+        settingsFile.setValue (prefix + "parameter", mapping.parameterId);
+        settingsFile.setValue (prefix + "mode",
+                               mapping.mode == milodikfx::midi::MappingMode::toggle ? "toggle" : "continuous");
+    }
+}
+
+//==============================================================================
 juce::String MainComponent::settingsKeyFor (const std::string& effectId, const std::string& parameterId) const
 {
     return "dsp." + juce::String (effectId) + "." + juce::String (parameterId);
@@ -254,6 +369,8 @@ void MainComponent::saveSettingsIfNeeded (bool force)
     if (presetsHandler != nullptr)
         settingsFile.setValue (kKeyPresetSelectedName, presetsHandler->getSelectedName());
 
+    saveMidiSettings();
+
     settingsFile.saveIfNeeded();
 
     settingsDirty = false;
@@ -309,6 +426,7 @@ void MainComponent::startServer()
     webServer->registerApiHandler ("/api/ir", std::make_shared<IrHandler> (irLibrary));
     webServer->registerApiHandler ("/api/levels", levelsHandler);
     webServer->registerApiHandler ("/api/tuner", std::make_shared<TunerHandler> (tunerAnalyzer));
+    webServer->registerApiHandler ("/api/midi", std::make_shared<MidiHandler> (midiController));
     webServer->registerApiHandler ("/api/presets", presetsHandler);
     webServer->registerApiHandler ("/api/health", std::make_shared<HealthHandler>());
 

@@ -388,6 +388,86 @@ describe('MilodikFX UI against a live engine', () => {
     cy.request('PUT', '/api/effects/global/bpm', { value: 120 });
   });
 
+  it('reports MIDI state even with no controller attached', () => {
+    // A build machine has no MIDI hardware, so the contract that has to hold is
+    // that the endpoint answers with an empty device list rather than failing.
+    cy.request('/api/midi').then(({ body }) => {
+      expect(body.devices).to.be.an('array');
+      expect(body.mappings).to.be.an('array');
+      expect(body).to.have.property('open');
+      expect(body).to.have.property('lastCc');
+    });
+
+    cy.get('section[aria-label="MIDI"]').should('exist');
+    cy.get('section[aria-label="MIDI"]').find('select[aria-label="Perangkat"]').should('exist');
+  });
+
+  it('stores and removes a controller mapping', () => {
+    cy.request('PUT', '/api/midi/mappings/7', {
+      effect: 'overdrive',
+      parameter: 'drivePct',
+      mode: 'continuous',
+    }).then(({ body }) => {
+      const mapping = body.mappings.find((m: { cc: number }) => m.cc === 7);
+      expect(mapping).to.deep.include({
+        cc: 7,
+        effect: 'overdrive',
+        parameter: 'drivePct',
+        mode: 'continuous',
+      });
+    });
+
+    cy.reload();
+    // The panel sits low in a scrolling sidebar, so scroll to it rather than
+    // asserting visibility on something below the fold.
+    cy.get('section[aria-label="MIDI"]').scrollIntoView();
+    cy.get('section[aria-label="MIDI"]').within(() => {
+      cy.contains('.midi__item', 'CC 7').should('contain.text', 'Overdrive — Drive');
+      cy.contains('button', 'Hapus').click();
+    });
+
+    cy.wait(300);
+    cy.request('/api/midi').then(({ body }) => {
+      expect(body.mappings.find((m: { cc: number }) => m.cc === 7)).to.be.undefined;
+    });
+  });
+
+  it('refuses a controller number that does not exist', () => {
+    // 128 wrapping to 0 would silently rebind an unrelated controller.
+    cy.request({
+      method: 'PUT',
+      url: '/api/midi/mappings/128',
+      body: { effect: 'overdrive', parameter: 'drivePct' },
+      failOnStatusCode: false,
+    }).then((response) => {
+      expect(response.status).to.eq(404);
+    });
+
+    cy.request({
+      method: 'PUT',
+      url: '/api/midi/mappings/3',
+      body: { effect: 'overdrive' },
+      failOnStatusCode: false,
+    }).then((response) => {
+      expect(response.status).to.eq(400);
+    });
+  });
+
+  it('arms and cancels MIDI learn', () => {
+    cy.request('POST', '/api/midi/learn', {
+      effect: 'delay',
+      parameter: 'mixPct',
+      mode: 'continuous',
+    }).then(({ body }) => {
+      expect(body.learning).to.not.be.null;
+      expect(body.learning.parameter).to.eq('mixPct');
+    });
+
+    cy.request('POST', '/api/midi/learn', {}).then(({ body }) => {
+      expect(body.learning).to.be.null;
+    });
+  });
+
   it('offers a way back to low latency after the device has been changed', () => {
     cy.contains('button', 'Optimalkan latensi').should('be.visible');
 
