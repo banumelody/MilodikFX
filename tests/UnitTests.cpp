@@ -1,12 +1,12 @@
 #include <JuceHeader.h>
 
 #include <cmath>
+#include <iostream>
 
 #include "dsp/DSPChainManager.h"
 #include "dsp/GainProcessor.h"
 #include "dsp/OverdriveProcessor.h"
 #include "dsp/EQProcessor.h"
-#include "preset/PresetManager.h"
 
 class SettingsPersistenceTests final : public juce::UnitTest
 {
@@ -49,68 +49,7 @@ public:
 
 static SettingsPersistenceTests settingsPersistenceTests;
 
-class PresetManagerTests final : public juce::UnitTest
-{
-public:
-    PresetManagerTests()
-        : juce::UnitTest ("PresetManager")
-    {
-    }
-
-    void runTest() override
-    {
-        beginTest ("Save/Load/Delete preset roundtrip");
-
-        auto tempDir = juce::File::getSpecialLocation (juce::File::tempDirectory);
-        auto presetDir = tempDir.getNonexistentChildFile ("MilodikFXPresetsTest", "", false);
-        presetDir.createDirectory();
-
-        milodikfx::preset::PresetManager mgr (presetDir);
-
-        milodikfx::preset::PresetState s;
-        s.globalBypass = true;
-        s.cleanBoostEnabled = false;
-        s.cleanBoostGainDb = 12.3f;
-        s.overdriveEnabled = true;
-        s.overdriveDrivePct = 77.0f;
-        s.overdriveLevelPct = 42.0f;
-        s.eqEnabled = true;
-        s.eqBassDb = 3.0f;
-        s.eqMidDb = -2.5f;
-        s.eqTrebleDb = 6.0f;
-
-        const auto saveOk = mgr.savePreset ("My Preset", s);
-        expect (saveOk);
-
-        auto names = mgr.listPresets();
-        expect (names.contains ("My Preset"));
-
-        milodikfx::preset::PresetState loaded;
-        const auto loadOk = mgr.loadPreset ("My Preset", loaded);
-        expect (loadOk);
-
-        expect (loaded.globalBypass == s.globalBypass);
-        expect (loaded.cleanBoostEnabled == s.cleanBoostEnabled);
-        expect (std::abs (loaded.cleanBoostGainDb - s.cleanBoostGainDb) < 0.0001f);
-        expect (loaded.overdriveEnabled == s.overdriveEnabled);
-        expect (std::abs (loaded.overdriveDrivePct - s.overdriveDrivePct) < 0.0001f);
-        expect (std::abs (loaded.overdriveLevelPct - s.overdriveLevelPct) < 0.0001f);
-        expect (loaded.eqEnabled == s.eqEnabled);
-        expect (std::abs (loaded.eqBassDb - s.eqBassDb) < 0.0001f);
-        expect (std::abs (loaded.eqMidDb - s.eqMidDb) < 0.0001f);
-        expect (std::abs (loaded.eqTrebleDb - s.eqTrebleDb) < 0.0001f);
-
-        const auto delOk = mgr.deletePreset ("My Preset");
-        expect (delOk);
-
-        names = mgr.listPresets();
-        expect (! names.contains ("My Preset"));
-
-        presetDir.deleteRecursively();
-    }
-};
-
-static PresetManagerTests presetManagerTests;
+// PresetManager and ParameterRegistry are covered in RegistryTests.cpp.
 
 namespace
 {
@@ -296,29 +235,59 @@ public:
 
         beginTest ("Level scales output after drive");
 
-        milodikfx::dsp::OverdriveProcessor odLevel;
-        odLevel.setEnabled (true);
-        odLevel.setDrivePercent (100.0f);
-        odLevel.setLevelPercent (100.0f);
-        odLevel.prepareToPlay (48000.0, 32, 1);
+        // The level control is smoothed, so compare the settled tail of each run
+        // rather than the first sample after the change.
+        const auto out100 = measureDrivenLevel (100.0f);
+        const auto out50 = measureDrivenLevel (50.0f);
 
-        juce::AudioBuffer<float> buffer3 (1, 4);
-        for (int i = 0; i < buffer3.getNumSamples(); ++i)
-            buffer3.setSample (0, i, 0.5f);
+        expect (out100 > 0.01f);
+        expect (std::abs (out50 - (out100 * 0.5f)) < out100 * 0.02f);
+        expect (out50 <= 1.0f);
 
-        odLevel.processBlock (buffer3);
-        const auto out100 = buffer3.getSample (0, 0);
+        beginTest ("Level changes glide instead of stepping");
 
-        // Re-run with level 50% on the same input.
-        odLevel.setLevelPercent (50.0f);
-        for (int i = 0; i < buffer3.getNumSamples(); ++i)
-            buffer3.setSample (0, i, 0.5f);
+        milodikfx::dsp::OverdriveProcessor odGlide;
+        odGlide.setEnabled (true);
+        odGlide.setDrivePercent (0.0f);
+        odGlide.setLevelPercent (100.0f);
+        odGlide.prepareToPlay (48000.0, 512, 1);
 
-        odLevel.processBlock (buffer3);
-        const auto out50 = buffer3.getSample (0, 0);
+        juce::AudioBuffer<float> glideBuf (1, 512);
+        for (int i = 0; i < glideBuf.getNumSamples(); ++i)
+            glideBuf.setSample (0, i, 0.5f);
 
-        expect (std::abs (out50 - (out100 * 0.5f)) < 0.0001f);
-        expect (std::abs (out50) <= 1.0f);
+        odGlide.processBlock (glideBuf);
+        const auto lastBefore = glideBuf.getSample (0, glideBuf.getNumSamples() - 1);
+
+        odGlide.setLevelPercent (0.0f);
+        for (int i = 0; i < glideBuf.getNumSamples(); ++i)
+            glideBuf.setSample (0, i, 0.5f);
+
+        odGlide.processBlock (glideBuf);
+        const auto firstAfter = glideBuf.getSample (0, 0);
+
+        expect (std::abs (firstAfter - lastBefore) < 0.05f,
+                "level stepped by " + juce::String (std::abs (firstAfter - lastBefore)));
+    }
+
+private:
+    // Runs a long block at a fixed level and reports the peak of the settled
+    // second half, so the smoother has finished gliding before we measure.
+    static float measureDrivenLevel (float levelPercent)
+    {
+        milodikfx::dsp::OverdriveProcessor od;
+        od.setEnabled (true);
+        od.setDrivePercent (100.0f);
+        od.setLevelPercent (levelPercent);
+        od.prepareToPlay (48000.0, 4096, 1);
+
+        juce::AudioBuffer<float> buffer (1, 4096);
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+            buffer.setSample (0, i, 0.5f);
+
+        od.processBlock (buffer);
+
+        return buffer.getMagnitude (2048, 2048);
     }
 };
 
@@ -447,17 +416,50 @@ public:
 
 static EQProcessorTests eqProcessorTests;
 
+namespace
+{
+// JUCE's default logger goes to the debugger on Windows, which means a console
+// run shows nothing at all. Route everything to stdout so ctest --output-on-failure
+// and a direct run both show which test failed and why.
+class ConsoleLogger final : public juce::Logger
+{
+public:
+    void logMessage (const juce::String& message) override
+    {
+        std::cout << message << std::endl;
+    }
+};
+} // namespace
+
 int main()
 {
+    ConsoleLogger logger;
+    juce::Logger::setCurrentLogger (&logger);
+
     juce::UnitTestRunner runner;
-    runner.setPassesAreLogged (true);
+    runner.setAssertOnFailure (false);
+    runner.setPassesAreLogged (false);
     runner.runAllTests();
 
     int failures = 0;
+    int passes = 0;
 
     for (int i = 0; i < runner.getNumResults(); ++i)
+    {
         if (const auto* result = runner.getResult (i))
+        {
             failures += result->failures;
+            passes += result->passes;
+
+            if (result->failures > 0)
+                std::cout << "FAILED: " << result->unitTestName << " / " << result->subcategoryName
+                          << " (" << result->failures << " failures)" << std::endl;
+        }
+    }
+
+    std::cout << "==== " << passes << " passed, " << failures << " failed ====" << std::endl;
+
+    juce::Logger::setCurrentLogger (nullptr);
 
     return failures == 0 ? 0 : 1;
 }

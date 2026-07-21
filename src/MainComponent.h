@@ -2,150 +2,145 @@
 
 #include <JuceHeader.h>
 
+#include <memory>
+
+#include "api/DevicesHandler.h"
+#include "api/EffectsHandler.h"
+#include "api/LevelsHandler.h"
+#include "api/ParameterRegistry.h"
+#include "api/ParametersHandler.h"
+#include "api/PresetsHandler.h"
+#include "audio/AudioDeviceController.h"
 #include "audio/AudioEngine.h"
-#include "dsp/GainProcessor.h"
-#include "dsp/OverdriveProcessor.h"
-#include "dsp/EQProcessor.h"
+#include "dsp/CabinetProcessor.h"
 #include "dsp/CompressorProcessor.h"
+#include "dsp/DelayProcessor.h"
+#include "dsp/EQProcessor.h"
+#include "dsp/GainProcessor.h"
+#include "dsp/MasterOutProcessor.h"
+#include "dsp/NoiseGateProcessor.h"
+#include "dsp/OverdriveProcessor.h"
 #include "dsp/ReverbProcessor.h"
 #include "dsp/ToneStackProcessor.h"
 #include "preset/PresetManager.h"
 #include "ui/WebServer.h"
-#include "api/DevicesHandler.h"
-#include "api/ParametersHandler.h"
-#include "api/EffectsHandler.h"
-#include "api/LevelsHandler.h"
-#include "api/PresetsHandler.h"
 
+/**
+ * The composition root and the window's content component.
+ *
+ * Owns the DSP chain, the parameter registry, the local HTTP server, and the
+ * WebView that renders the UI. Construction order matters: the server and the
+ * WebView come up first so the window is usable immediately, and the audio
+ * device is opened afterwards from a message-thread callback.
+ */
 class MainComponent final : public juce::Component,
                             private juce::AudioIODeviceCallback,
                             private juce::ChangeListener,
                             private juce::Timer
 {
 public:
-    explicit MainComponent(juce::PropertiesFile& settingsFile);
+    explicit MainComponent (juce::PropertiesFile& settingsFile);
     ~MainComponent() override;
 
-    void paint(juce::Graphics&) override;
+    void paint (juce::Graphics&) override;
     void resized() override;
 
+    int getServerPort() const noexcept { return serverPort; }
+
+    /** Writes any pending settings immediately (called on quit). */
+    void flushSettings();
+
+    /** How the device's input channels are mapped into the stereo chain. */
+    enum class InputMode
+    {
+        monoLeft = 0,   // guitar in input 1, sent to both ears
+        monoRight = 1,
+        monoSum = 2,
+        stereo = 3
+    };
+
 private:
-    static constexpr const char* kKeyCleanBoostEnabled = "dsp.cleanBoost.enabled";
-    static constexpr const char* kKeyCleanBoostGainDb = "dsp.cleanBoost.gainDb";
-
-    static constexpr const char* kKeyOverdriveEnabled = "dsp.overdrive.enabled";
-    static constexpr const char* kKeyOverdriveDrivePct = "dsp.overdrive.drivePct";
-    static constexpr const char* kKeyOverdriveLevelPct = "dsp.overdrive.levelPct";
-
-    static constexpr const char* kKeyEqEnabled = "dsp.eq.enabled";
-    static constexpr const char* kKeyEqBassDb = "dsp.eq.bassDb";
-    static constexpr const char* kKeyEqMidDb = "dsp.eq.midDb";
-    static constexpr const char* kKeyEqTrebleDb = "dsp.eq.trebleDb";
-
-    static constexpr const char* kKeyCompressorEnabled = "dsp.compressor.enabled";
-    static constexpr const char* kKeyCompressorInputGainDb = "dsp.compressor.inputGainDb";
-    static constexpr const char* kKeyCompressorThresholdDb = "dsp.compressor.thresholdDb";
-    static constexpr const char* kKeyCompressorRatio = "dsp.compressor.ratio";
-    static constexpr const char* kKeyCompressorAttackMs = "dsp.compressor.attackMs";
-    static constexpr const char* kKeyCompressorReleaseMs = "dsp.compressor.releaseMs";
-
-    static constexpr const char* kKeyReverbEnabled = "dsp.reverb.enabled";
-    static constexpr const char* kKeyReverbRoomSize = "dsp.reverb.roomSize";
-    static constexpr const char* kKeyReverbDryWetMix = "dsp.reverb.dryWetMix";
-    static constexpr const char* kKeyReverbDecayTime = "dsp.reverb.decayTime";
-    static constexpr const char* kKeyReverbWidth = "dsp.reverb.width";
-
-    static constexpr const char* kKeyToneStackEnabled = "dsp.toneStack.enabled";
-    static constexpr const char* kKeyToneStackBassDb = "dsp.toneStack.bassDb";
-    static constexpr const char* kKeyToneStackMidDb = "dsp.toneStack.midDb";
-    static constexpr const char* kKeyToneStackTrebleDb = "dsp.toneStack.trebleDb";
+    static constexpr float kMeterFloorDb = -100.0f;
+    static constexpr int kMaxEngineChannels = 2;
+    static constexpr int kDefaultPort = 3000;
 
     static constexpr const char* kKeyAudioDeviceStateXml = "audio.deviceStateXml";
+    static constexpr const char* kKeyAudioBufferPreference = "audio.bufferSizePreference";
+    static constexpr const char* kKeyAudioSampleRatePreference = "audio.sampleRatePreference";
     static constexpr const char* kKeyPresetSelectedName = "ui.preset.selectedName";
+    static constexpr const char* kKeyInputMode = "audio.inputMode";
 
-    // Silence floor reported to /api/levels.
-    static constexpr float kMeterFloorDb = -100.0f;
+    void buildChain();
+    void buildRegistry();
+    void startServer();
+    void createWebView();
+    void initialiseAudioAsync();
 
-    bool initialiseAudioWithFallback(const juce::XmlElement* savedState);
-
+    void loadSettingsIntoRegistry();
     void markSettingsDirty();
-    void saveSettingsIfNeeded(bool force);
-    std::unique_ptr<juce::XmlElement> createAudioDeviceStateXmlForPersistence() const;
-    void updateAudioDeviceStateInSettings();
+    void saveSettingsIfNeeded (bool force);
+    void persistDeviceState();
+
+    juce::String settingsKeyFor (const std::string& effectId, const std::string& parameterId) const;
 
     // juce::AudioIODeviceCallback
-    void audioDeviceIOCallbackWithContext(const float* const* inputChannelData,
-                                         int numInputChannels,
-                                         float* const* outputChannelData,
-                                         int numOutputChannels,
-                                         int numSamples,
-                                         const juce::AudioIODeviceCallbackContext& context) override;
-    void audioDeviceAboutToStart(juce::AudioIODevice*) override;
+    void audioDeviceIOCallbackWithContext (const float* const* inputChannelData,
+                                           int numInputChannels,
+                                           float* const* outputChannelData,
+                                           int numOutputChannels,
+                                           int numSamples,
+                                           const juce::AudioIODeviceCallbackContext& context) override;
+    void audioDeviceAboutToStart (juce::AudioIODevice*) override;
     void audioDeviceStopped() override;
-    void audioDeviceError(const juce::String& errorMessage) override;
+    void audioDeviceError (const juce::String& errorMessage) override;
 
     // juce::ChangeListener
-    void changeListenerCallback(juce::ChangeBroadcaster* source) override;
+    void changeListenerCallback (juce::ChangeBroadcaster* source) override;
 
     // juce::Timer
     void timerCallback() override;
 
     juce::PropertiesFile& settingsFile;
     milodikfx::preset::PresetManager presetManager;
-    std::unique_ptr<WebServer> webServer;
+    milodikfx::api::ParameterRegistry registry;
 
-    // Held so the audio callback can push meter values into it. Assigned in the
-    // constructor before the thread that installs the audio callback is spawned.
+    juce::AudioDeviceManager deviceManager;
+    milodikfx::audio::AudioDeviceController deviceController { deviceManager };
+    milodikfx::audio::AudioEngine audioEngine;
+
+    std::unique_ptr<WebServer> webServer;
+    int serverPort = 0;
+
     std::shared_ptr<LevelsHandler> levelsHandler;
+    std::shared_ptr<PresetsHandler> presetsHandler;
+
+   #if MILODIKFX_ENABLE_WEBVIEW
+    class UiWebView;
+    std::unique_ptr<UiWebView> webView;
+   #endif
+
+    // Audio-thread state.
+    juce::AudioBuffer<float> engineBuffer;
+    std::atomic<int> inputMode { (int) InputMode::monoLeft };
+    std::atomic<bool> audioRunning { false };
+    double currentSampleRate = 0.0;
+    int currentBlockSize = 0;
 
     bool settingsDirty = false;
     uint32_t lastSettingsSaveMs = 0;
-    uint32_t lastDeviceStatePersistTryMs = 0;
+    int desiredBufferSize = 128;
+    double desiredSampleRate = 48000.0;
 
-    juce::AudioDeviceManager deviceManager;
-    juce::AudioBuffer<float> engineBuffer;
-    milodikfx::audio::AudioEngine audioEngine;
-
-    juce::String audioInitError;
-    juce::String audioInitNote;
-    juce::String presetSelectedName;
-
-    std::atomic<float> cleanBoostGainDb { 0.0f };
-    std::atomic<bool> cleanBoostEnabled { true };
-
-    std::atomic<float> overdriveDrivePct { 0.0f };
-    std::atomic<float> overdriveLevelPct { 100.0f };
-    std::atomic<bool> overdriveEnabled { true };
-
-    std::atomic<float> eqBassDb { 0.0f };
-    std::atomic<float> eqMidDb { 0.0f };
-    std::atomic<float> eqTrebleDb { 0.0f };
-    std::atomic<bool> eqEnabled { true };
-
-    std::atomic<float> compressorInputGainDb { 0.0f };
-    std::atomic<float> compressorThresholdDb { -24.0f };
-    std::atomic<float> compressorRatio { 4.0f };
-    std::atomic<float> compressorAttackMs { 10.0f };
-    std::atomic<float> compressorReleaseMs { 100.0f };
-    std::atomic<bool> compressorEnabled { true };
-
-    std::atomic<float> reverbRoomSize { 0.5f };
-    std::atomic<float> reverbDryWetMix { 0.5f };
-    std::atomic<float> reverbDecayTime { 2.0f };
-    std::atomic<float> reverbWidth { 1.0f };
-    std::atomic<bool> reverbEnabled { true };
-
-    std::atomic<float> toneStackBassDb { 0.0f };
-    std::atomic<float> toneStackMidDb { 0.0f };
-    std::atomic<float> toneStackTrebleDb { 0.0f };
-    std::atomic<bool> toneStackEnabled { true };
-
+    milodikfx::dsp::NoiseGateProcessor* noiseGateProcessor = nullptr;
     milodikfx::dsp::GainProcessor* cleanBoostProcessor = nullptr;
+    milodikfx::dsp::CompressorProcessor* compressorProcessor = nullptr;
     milodikfx::dsp::OverdriveProcessor* overdriveProcessor = nullptr;
     milodikfx::dsp::EQProcessor* eqProcessor = nullptr;
-    milodikfx::dsp::CompressorProcessor* compressorProcessor = nullptr;
-    milodikfx::dsp::ReverbProcessor* reverbProcessor = nullptr;
     milodikfx::dsp::ToneStackProcessor* toneStackProcessor = nullptr;
+    milodikfx::dsp::CabinetProcessor* cabinetProcessor = nullptr;
+    milodikfx::dsp::DelayProcessor* delayProcessor = nullptr;
+    milodikfx::dsp::ReverbProcessor* reverbProcessor = nullptr;
+    milodikfx::dsp::MasterOutProcessor* masterOutProcessor = nullptr;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

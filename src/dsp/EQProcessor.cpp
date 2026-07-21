@@ -8,46 +8,61 @@ constexpr double kBassFreqHz = 120.0;
 constexpr double kMidFreqHz = 1000.0;
 constexpr double kTrebleFreqHz = 7000.0;
 
-constexpr float kShelfQ = 0.707f;
-constexpr float kMidQ = 0.9f;
+constexpr double kMidQ = 0.9;
 
-static float clampDb (float db) noexcept
+constexpr float kSmoothingSeconds = 0.02f;
+
+float clampDb (float db) noexcept
 {
     return juce::jlimit (-12.0f, 12.0f, db);
 }
 } // namespace
 
+void EQProcessor::resizeStates (int numChannels)
+{
+    const auto n = (size_t) juce::jmax (0, numChannels);
+
+    bass.states.assign (n, {});
+    mid.states.assign (n, {});
+    treble.states.assign (n, {});
+}
+
+void EQProcessor::snapToTargets()
+{
+    bass.smoothed.snapTo (bassDb.load (std::memory_order_relaxed));
+    mid.smoothed.snapTo (midDb.load (std::memory_order_relaxed));
+    treble.smoothed.snapTo (trebleDb.load (std::memory_order_relaxed));
+
+    // Force a rebuild: fresh filters would otherwise stay at their unit-gain
+    // default while the "nothing changed" guard suppressed the first update.
+    bass.builtForDb = std::numeric_limits<float>::quiet_NaN();
+    mid.builtForDb = std::numeric_limits<float>::quiet_NaN();
+    treble.builtForDb = std::numeric_limits<float>::quiet_NaN();
+}
+
 void EQProcessor::prepareToPlay (double sampleRate, int, int numChannels)
 {
-    currentSampleRate = sampleRate;
+    currentSampleRate = sampleRate > 0.0 ? sampleRate : 44100.0;
     currentNumChannels = juce::jmax (0, numChannels);
 
-    bassFilters.clear();
-    midFilters.clear();
-    trebleFilters.clear();
+    resizeStates (currentNumChannels);
 
-    bassFilters.resize ((size_t) currentNumChannels);
-    midFilters.resize ((size_t) currentNumChannels);
-    trebleFilters.resize ((size_t) currentNumChannels);
+    // Smoothing is stepped once per sample, so the rate is the sample rate.
+    bass.smoothed.reset (currentSampleRate, kSmoothingSeconds, 0.0f);
+    mid.smoothed.reset (currentSampleRate, kSmoothingSeconds, 0.0f);
+    treble.smoothed.reset (currentSampleRate, kSmoothingSeconds, 0.0f);
 
+    snapToTargets();
     reset();
+
     prepared = true;
-
-    lastBassDb = bassDb.load (std::memory_order_relaxed);
-    lastMidDb = midDb.load (std::memory_order_relaxed);
-    lastTrebleDb = trebleDb.load (std::memory_order_relaxed);
-
-    updateCoefficientsIfNeeded();
 }
 
 void EQProcessor::reset()
 {
-    for (auto& f : bassFilters)
-        f.reset();
-    for (auto& f : midFilters)
-        f.reset();
-    for (auto& f : trebleFilters)
-        f.reset();
+    for (auto& f : bass.states) f.reset();
+    for (auto& f : mid.states) f.reset();
+    for (auto& f : treble.states) f.reset();
 }
 
 void EQProcessor::setBassDb (float db) noexcept
@@ -90,65 +105,55 @@ bool EQProcessor::isEnabled() const noexcept
     return enabled.load (std::memory_order_relaxed);
 }
 
-void EQProcessor::updateCoefficientsIfNeeded()
-{
-    if (currentSampleRate <= 0.0 || currentNumChannels <= 0)
-        return;
-
-    const auto b = bassDb.load (std::memory_order_relaxed);
-    const auto m = midDb.load (std::memory_order_relaxed);
-    const auto t = trebleDb.load (std::memory_order_relaxed);
-
-    if (bassCoefs == nullptr || b != lastBassDb)
-    {
-        lastBassDb = b;
-        const auto g = juce::Decibels::decibelsToGain (b);
-        bassCoefs = juce::dsp::IIR::Coefficients<float>::makeLowShelf (currentSampleRate, kBassFreqHz, kShelfQ, (float) g);
-        for (auto& f : bassFilters)
-            f.coefficients = bassCoefs;
-    }
-
-    if (midCoefs == nullptr || m != lastMidDb)
-    {
-        lastMidDb = m;
-        const auto g = juce::Decibels::decibelsToGain (m);
-        midCoefs = juce::dsp::IIR::Coefficients<float>::makePeakFilter (currentSampleRate, kMidFreqHz, kMidQ, (float) g);
-        for (auto& f : midFilters)
-            f.coefficients = midCoefs;
-    }
-
-    if (trebleCoefs == nullptr || t != lastTrebleDb)
-    {
-        lastTrebleDb = t;
-        const auto g = juce::Decibels::decibelsToGain (t);
-        trebleCoefs = juce::dsp::IIR::Coefficients<float>::makeHighShelf (currentSampleRate, kTrebleFreqHz, kShelfQ, (float) g);
-        for (auto& f : trebleFilters)
-            f.coefficients = trebleCoefs;
-    }
-}
-
 void EQProcessor::processBlock (juce::AudioBuffer<float>& buffer)
 {
-    if (! prepared)
+    if (! prepared || ! enabled.load (std::memory_order_relaxed))
         return;
 
-    if (! enabled.load (std::memory_order_relaxed))
+    const auto numSamples = buffer.getNumSamples();
+    const auto numCh = juce::jmin (buffer.getNumChannels(), currentNumChannels, (int) bass.states.size());
+
+    if (numSamples <= 0 || numCh <= 0)
         return;
 
-    updateCoefficientsIfNeeded();
+    const auto bassTarget = bassDb.load (std::memory_order_relaxed);
+    const auto midTarget = midDb.load (std::memory_order_relaxed);
+    const auto trebleTarget = trebleDb.load (std::memory_order_relaxed);
 
-    const auto numCh = juce::jmin (buffer.getNumChannels(), currentNumChannels);
+    auto* const* channels = buffer.getArrayOfWritePointers();
 
-    juce::dsp::AudioBlock<float> block (buffer);
-
-    for (int ch = 0; ch < numCh; ++ch)
+    for (int i = 0; i < numSamples; ++i)
     {
-        auto channelBlock = block.getSingleChannelBlock ((size_t) ch);
-        juce::dsp::ProcessContextReplacing<float> ctx (channelBlock);
+        const auto b = bass.smoothed.next (bassTarget);
+        const auto m = mid.smoothed.next (midTarget);
+        const auto t = treble.smoothed.next (trebleTarget);
 
-        bassFilters[(size_t) ch].process (ctx);
-        midFilters[(size_t) ch].process (ctx);
-        trebleFilters[(size_t) ch].process (ctx);
+        if (! (std::abs (b - bass.builtForDb) < kRecomputeThresholdDb))
+        {
+            bass.builtForDb = b;
+            bass.coeffs = biquad::makeLowShelf (currentSampleRate, kBassFreqHz, b);
+        }
+
+        if (! (std::abs (m - mid.builtForDb) < kRecomputeThresholdDb))
+        {
+            mid.builtForDb = m;
+            mid.coeffs = biquad::makePeak (currentSampleRate, kMidFreqHz, kMidQ, m);
+        }
+
+        if (! (std::abs (t - treble.builtForDb) < kRecomputeThresholdDb))
+        {
+            treble.builtForDb = t;
+            treble.coeffs = biquad::makeHighShelf (currentSampleRate, kTrebleFreqHz, t);
+        }
+
+        for (int ch = 0; ch < numCh; ++ch)
+        {
+            auto s = channels[ch][i];
+            s = bass.states[(size_t) ch].process (bass.coeffs, s);
+            s = mid.states[(size_t) ch].process (mid.coeffs, s);
+            s = treble.states[(size_t) ch].process (treble.coeffs, s);
+            channels[ch][i] = s;
+        }
     }
 }
 } // namespace milodikfx::dsp

@@ -1,27 +1,30 @@
 #pragma once
 
-#include "HttpHandler.h"
 #include <JuceHeader.h>
-#include "../dsp/DSPChainManager.h"
+
+#include "api/HttpHandler.h"
+#include "api/ParameterRegistry.h"
 
 /**
- * Handles /api/effects/* endpoints for effect control.
- * POST /api/effects/{effect}/enabled - Toggle effect on/off
- * GET /api/effects/{effect} - Get effect parameters
- * PUT /api/effects/{effect}/{param} - Set effect parameter
+ * /api/effects/*
+ *
+ *   GET  /api/effects                       every effect, in chain order
+ *   GET  /api/effects/{effect}              one effect with its parameters
+ *   POST /api/effects/{effect}/enabled      { "enabled": bool }
+ *   PUT  /api/effects/{effect}/{param}      { "value": x }
  */
 class EffectsHandler final : public HttpHandler
 {
 public:
-    explicit EffectsHandler(milodikfx::dsp::DSPChainManager& chain)
-        : chain_(chain)
+    explicit EffectsHandler (const milodikfx::api::ParameterRegistry& registry)
+        : registry_ (registry)
     {
     }
 
-    Response handleGet(const std::string& path, const std::string& query) const override;
-    Response handlePost(const std::string& path, const std::string& body) override;
-    Response handlePut(const std::string& path, const std::string& body) override;
+    Response handleGet (const std::string& path, const std::string& query) const override;
+    Response handlePost (const std::string& path, const std::string& body) override;
+    Response handlePut (const std::string& path, const std::string& body) override;
 
 private:
-    milodikfx::dsp::DSPChainManager& chain_;
+    const milodikfx::api::ParameterRegistry& registry_;
 };

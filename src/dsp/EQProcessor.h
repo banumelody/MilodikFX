@@ -3,12 +3,21 @@
 #include <JuceHeader.h>
 
 #include <atomic>
+#include <limits>
 #include <vector>
 
 #include "dsp/AudioProcessorBase.h"
+#include "dsp/Biquad.h"
 
 namespace milodikfx::dsp
 {
+/**
+ * Three-band tone control: 120 Hz low shelf, 1 kHz peak, 7 kHz high shelf.
+ *
+ * Coefficients live on the audio thread and are recomputed only when a band's
+ * smoothed gain actually moved, so there is no allocation in processBlock and
+ * no coefficient sharing across threads.
+ */
 class EQProcessor final : public AudioProcessorBase
 {
 public:
@@ -29,28 +38,32 @@ public:
     bool isEnabled() const noexcept;
 
 private:
-    void updateCoefficientsIfNeeded();
+    // A band is recomputed once its smoothed gain has drifted further than this
+    // from the value the current coefficients were built for.
+    static constexpr float kRecomputeThresholdDb = 0.01f;
+
+    struct Band
+    {
+        SmoothedParam smoothed;
+        BiquadCoeffs coeffs;
+        std::vector<BiquadState> states;
+        float builtForDb = std::numeric_limits<float>::quiet_NaN();
+    };
+
+    void resizeStates (int numChannels);
+    void snapToTargets();
 
     std::atomic<float> bassDb { 0.0f };
     std::atomic<float> midDb { 0.0f };
     std::atomic<float> trebleDb { 0.0f };
     std::atomic<bool> enabled { true };
 
-    float lastBassDb = 0.0f;
-    float lastMidDb = 0.0f;
-    float lastTrebleDb = 0.0f;
-
     double currentSampleRate = 0.0;
     int currentNumChannels = 0;
-
-    juce::dsp::IIR::Coefficients<float>::Ptr bassCoefs;
-    juce::dsp::IIR::Coefficients<float>::Ptr midCoefs;
-    juce::dsp::IIR::Coefficients<float>::Ptr trebleCoefs;
-
-    std::vector<juce::dsp::IIR::Filter<float>> bassFilters;
-    std::vector<juce::dsp::IIR::Filter<float>> midFilters;
-    std::vector<juce::dsp::IIR::Filter<float>> trebleFilters;
-
     bool prepared = false;
+
+    Band bass;
+    Band mid;
+    Band treble;
 };
 } // namespace milodikfx::dsp

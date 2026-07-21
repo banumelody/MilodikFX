@@ -1,187 +1,86 @@
-#include "DevicesHandler.h"
+#include "api/DevicesHandler.h"
 
-/**
- * Simple JSON builder (without external library dependency)
- */
-static std::string buildDevicesJson(
-    const juce::StringArray& inputDevices,
-    const juce::StringArray& outputDevices,
-    const std::string& selectedInput,
-    const std::string& selectedOutput,
-    double sampleRate,
-    int bufferSize)
+#include "api/ApiJson.h"
+
+using namespace milodikfx::api;
+
+namespace
 {
-    std::string json = "{\n";
-    
-    // Input devices array
-    json += "  \"input\": [";
-    for (int i = 0; i < inputDevices.size(); ++i) {
-        json += "\"" + inputDevices[i].toStdString() + "\"";
-        if (i < inputDevices.size() - 1) json += ", ";
-    }
-    json += "],\n";
-    
-    // Output devices array
-    json += "  \"output\": [";
-    for (int i = 0; i < outputDevices.size(); ++i) {
-        json += "\"" + outputDevices[i].toStdString() + "\"";
-        if (i < outputDevices.size() - 1) json += ", ";
-    }
-    json += "],\n";
-    
-    // Selected devices
-    json += "  \"selectedInput\": \"" + selectedInput + "\",\n";
-    json += "  \"selectedOutput\": \"" + selectedOutput + "\",\n";
-    json += "  \"sampleRate\": " + std::to_string(static_cast<int>(sampleRate)) + ",\n";
-    json += "  \"bufferSize\": " + std::to_string(bufferSize) + "\n";
-    json += "}";
-    
-    return json;
-}
+juce::var snapshotToVar (const milodikfx::audio::AudioDeviceSnapshot& snapshot)
+{
+    auto* object = new juce::DynamicObject();
 
-HttpHandler::Response DevicesHandler::handleGet(
-    const std::string& path,
-    const std::string& query) const
+    object->setProperty ("open", snapshot.isOpen);
+    object->setProperty ("type", snapshot.typeName);
+    object->setProperty ("inputDevice", snapshot.inputDeviceName);
+    object->setProperty ("outputDevice", snapshot.outputDeviceName);
+    object->setProperty ("sampleRate", snapshot.sampleRate);
+    object->setProperty ("bufferSize", snapshot.bufferSize);
+    object->setProperty ("inputChannels", snapshot.inputChannels);
+    object->setProperty ("outputChannels", snapshot.outputChannels);
+    object->setProperty ("inputLatencyMs", snapshot.inputLatencyMs);
+    object->setProperty ("outputLatencyMs", snapshot.outputLatencyMs);
+    object->setProperty ("roundTripLatencyMs", snapshot.roundTripLatencyMs);
+    object->setProperty ("lowLatency", snapshot.isLowLatencyType);
+
+    if (snapshot.lastError.isNotEmpty())
+        object->setProperty ("error", snapshot.lastError);
+
+    return juce::var (object);
+}
+} // namespace
+
+HttpHandler::Response DevicesHandler::handleGet (const std::string&, const std::string&) const
 {
     try
     {
-        juce::StringArray inputDevices, outputDevices;
-        std::string selectedInput = "Default";
-        std::string selectedOutput = "Default";
-        double sampleRate = 48000.0;
-        int bufferSize = 256;
-        
-        // Try to get current setup (may fail if audio not yet initialized)
-        try
-        {
-            auto setup = deviceManager_.getAudioDeviceSetup();
-            selectedInput = setup.inputDeviceName.toStdString();
-            selectedOutput = setup.outputDeviceName.toStdString();
-            sampleRate = setup.sampleRate;
-            bufferSize = setup.bufferSize;
-            
-            if (selectedInput.empty()) selectedInput = "Default";
-            if (selectedOutput.empty()) selectedOutput = "Default";
-        }
-        catch (...)
-        {
-            // Audio not yet initialized, use defaults
-        }
-        
-        // Try to enumerate devices (may fail if audio not yet initialized)
-        try
-        {
-            if (auto* type = deviceManager_.getCurrentDeviceTypeObject())
-            {
-                type->scanForDevices();
-                inputDevices = type->getDeviceNames(true);   // true = input
-                outputDevices = type->getDeviceNames(false); // false = output
-            }
-        }
-        catch (...)
-        {
-            // Device enumeration failed, return empty list
-        }
-        
-        std::string json = buildDevicesJson(
-            inputDevices,
-            outputDevices,
-            selectedInput,
-            selectedOutput,
-            sampleRate,
-            bufferSize
-        );
-        
-        return { 200, "application/json", json };
+        auto* root = new juce::DynamicObject();
+        root->setProperty ("current", snapshotToVar (controller.getSnapshot()));
+        root->setProperty ("available", controller.describeAvailable());
+
+        return jsonOk (juce::var (root));
     }
     catch (const std::exception& e)
     {
-        return {
-            500,
-            "application/json",
-            std::string(R"({"error":"Exception: )") + e.what() + R"("})"
-        };
+        return jsonError (500, juce::String ("Exception: ") + e.what());
     }
 }
 
-HttpHandler::Response DevicesHandler::handlePost(
-    const std::string& path,
-    const std::string& body)
+HttpHandler::Response DevicesHandler::handlePost (const std::string&, const std::string& body)
 {
     try
     {
-        // Parse simple JSON body: {"input": "device1", "output": "device2"}
-        // For now, use basic string parsing (TODO: use JSON library)
-        
-        std::string inputDevice, outputDevice;
-        
-        // Extract "input" value
-        size_t inputPos = body.find("\"input\"");
-        if (inputPos != std::string::npos)
-        {
-            size_t colonPos = body.find(":", inputPos);
-            size_t quoteStart = body.find("\"", colonPos);
-            size_t quoteEnd = body.find("\"", quoteStart + 1);
-            if (quoteStart != std::string::npos && quoteEnd != std::string::npos)
-            {
-                inputDevice = body.substr(quoteStart + 1, quoteEnd - quoteStart - 1);
-            }
-        }
-        
-        // Extract "output" value
-        size_t outputPos = body.find("\"output\"");
-        if (outputPos != std::string::npos)
-        {
-            size_t colonPos = body.find(":", outputPos);
-            size_t quoteStart = body.find("\"", colonPos);
-            size_t quoteEnd = body.find("\"", quoteStart + 1);
-            if (quoteStart != std::string::npos && quoteEnd != std::string::npos)
-            {
-                outputDevice = body.substr(quoteStart + 1, quoteEnd - quoteStart - 1);
-            }
-        }
-        
-        if (inputDevice.empty() && outputDevice.empty())
-        {
-            return {
-                400,
-                "application/json",
-                R"({"error":"No input or output device specified"})"
-            };
-        }
-        
-        // Try to set the new device
-        juce::String error;
-        auto setup = deviceManager_.getAudioDeviceSetup();
-        
-        if (!inputDevice.empty())
-            setup.inputDeviceName = juce::String(inputDevice);
-        if (!outputDevice.empty())
-            setup.outputDeviceName = juce::String(outputDevice);
-        
-        error = deviceManager_.setAudioDeviceSetup(setup, true);
-        
+        const auto parsed = parseBody (body);
+
+        if (! parsed.isObject())
+            return jsonError (400, "Body must be a JSON object");
+
+        milodikfx::audio::AudioDeviceRequest request;
+
+        request.typeName = parsed["type"].toString().trim();
+        request.inputDeviceName = parsed["inputDevice"].toString().trim();
+        request.outputDeviceName = parsed["outputDevice"].toString().trim();
+
+        double sampleRate = 0.0;
+        if (readNumber (parsed, "sampleRate", sampleRate))
+            request.sampleRate = sampleRate;
+
+        double bufferSize = 0.0;
+        if (readNumber (parsed, "bufferSize", bufferSize))
+            request.bufferSize = (int) bufferSize;
+
+        const auto error = controller.applyRequest (request);
+
         if (error.isNotEmpty())
-        {
-            return {
-                400,
-                "application/json",
-                std::string(R"({"error":")" + error.toStdString() + R"("})")
-            };
-        }
-        
-        return {
-            200,
-            "application/json",
-            R"({"success":true,"message":"Device changed"})"
-        };
+            return jsonError (400, error);
+
+        auto* root = new juce::DynamicObject();
+        root->setProperty ("current", snapshotToVar (controller.getSnapshot()));
+
+        return jsonOk (juce::var (root));
     }
     catch (const std::exception& e)
     {
-        return {
-            500,
-            "application/json",
-            std::string(R"({"error":"Exception: )") + e.what() + R"("})"
-        };
+        return jsonError (500, juce::String ("Exception: ") + e.what());
     }
 }

@@ -1,28 +1,44 @@
 #pragma once
 
-#include "HttpHandler.h"
 #include <JuceHeader.h>
-#include "../audio/AudioEngine.h"
+
+#include <functional>
+
+#include "api/HttpHandler.h"
+#include "api/ParameterRegistry.h"
 
 /**
- * Handles /api/parameters/* endpoints for DSP parameter control.
- * GET: Returns current parameter values
- * PUT: Sets parameter values
+ * /api/parameters/*
+ *
+ *   GET  /api/parameters                        full state (same shape as /api/effects)
+ *   GET  /api/parameters/master-volume          { "masterVolume": dB }
+ *   PUT  /api/parameters/master-volume          { "value": dB }
+ *   GET  /api/parameters/{effect}/{param}       { "value": x }
+ *   PUT  /api/parameters/{effect}/{param}       { "value": x }
+ *
+ * Everything resolves through the registry, so an endpoint can never drift out
+ * of sync with what the DSP chain actually exposes.
  */
 class ParametersHandler final : public HttpHandler
 {
 public:
-    explicit ParametersHandler(
-        milodikfx::audio::AudioEngine& engine,
-        juce::PropertiesFile& settings)
-        : engine_(engine), settings_(settings)
+    ParametersHandler (const milodikfx::api::ParameterRegistry& registry,
+                       std::string masterEffectId,
+                       std::string masterParameterId)
+        : registry_ (registry),
+          masterEffectId_ (std::move (masterEffectId)),
+          masterParameterId_ (std::move (masterParameterId))
     {
     }
 
-    Response handleGet(const std::string& path, const std::string& query) const override;
-    Response handlePut(const std::string& path, const std::string& body) override;
+    Response handleGet (const std::string& path, const std::string& query) const override;
+    Response handlePut (const std::string& path, const std::string& body) override;
 
 private:
-    milodikfx::audio::AudioEngine& engine_;
-    juce::PropertiesFile& settings_;
+    Response handleMasterVolumeGet() const;
+    Response handleMasterVolumePut (const juce::var& body) const;
+
+    const milodikfx::api::ParameterRegistry& registry_;
+    std::string masterEffectId_;
+    std::string masterParameterId_;
 };

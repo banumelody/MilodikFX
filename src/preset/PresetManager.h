@@ -4,77 +4,37 @@
 
 namespace milodikfx::preset
 {
-struct PresetState final
-{
-    int schemaVersion = 1;
-
-    // Metadata
-    std::string author = "";
-    std::string description = "";
-    std::string category = "";
-    juce::Time createdAt;
-    juce::Time modifiedAt;
-    juce::StringArray tags;
-
-    bool globalBypass = false;
-
-    bool cleanBoostEnabled = true;
-    float cleanBoostGainDb = 0.0f;
-
-    bool overdriveEnabled = true;
-    float overdriveDrivePct = 0.0f;
-    float overdriveLevelPct = 100.0f;
-
-    bool eqEnabled = true;
-    float eqBassDb = 0.0f;
-    float eqMidDb = 0.0f;
-    float eqTrebleDb = 0.0f;
-
-    bool compressorEnabled = true;
-    float compressorInputGainDb = 0.0f;
-    float compressorThresholdDb = -24.0f;
-    float compressorRatio = 4.0f;
-    float compressorAttackMs = 10.0f;
-    float compressorReleaseMs = 100.0f;
-
-    bool reverbEnabled = true;
-    float reverbRoomSize = 0.5f;
-    float reverbDryWetMix = 0.5f;
-    float reverbDecayTime = 2.0f;
-    float reverbWidth = 1.0f;
-
-    bool toneStackEnabled = true;
-    float toneStackBassDb = 0.0f;
-    float toneStackMidDb = 0.0f;
-    float toneStackTrebleDb = 0.0f;
-};
-
+/**
+ * Reads and writes preset files as JSON documents under a directory.
+ *
+ * The payload is an opaque juce::var produced by ParameterRegistry::captureState,
+ * so adding a DSP parameter does not require touching this class at all.
+ */
 class PresetManager final
 {
 public:
+    static constexpr int kSchemaVersion = 2;
+
     explicit PresetManager (juce::File presetsDirectoryIn);
 
     juce::File getPresetsDirectory() const;
 
     juce::StringArray listPresets() const;
 
-    bool savePreset (const juce::String& presetName, const PresetState& state) const;
-    bool loadPreset (const juce::String& presetName, PresetState& outState) const;
+    /** @param state a captured parameter snapshot; stored under "state". */
+    bool savePreset (const juce::String& presetName, const juce::var& state) const;
+    bool loadPreset (const juce::String& presetName, juce::var& outState) const;
     bool deletePreset (const juce::String& presetName) const;
 
-    bool ensurePresetExists (const juce::String& presetName, const PresetState& defaultState) const;
+    bool presetExists (const juce::String& presetName) const;
+    bool ensurePresetExists (const juce::String& presetName, const juce::var& defaultState) const;
 
+    /** Strips anything that cannot appear in a Windows filename. */
     static juce::String sanitisePresetName (const juce::String& name);
 
 private:
     juce::File directory;
 
     juce::File getPresetFile (const juce::String& presetName) const;
-
-    static juce::var stateToVar (const juce::String& presetName, const PresetState& state);
-    static bool varToState (const juce::var& v, PresetState& outState);
-
-    static bool getBool (const juce::NamedValueSet& props, const juce::Identifier& key, bool defaultValue);
-    static double getNumber (const juce::NamedValueSet& props, const juce::Identifier& key, double defaultValue);
 };
 } // namespace milodikfx::preset

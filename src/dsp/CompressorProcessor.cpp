@@ -6,136 +6,182 @@ namespace milodikfx::dsp {
 void CompressorProcessor::prepareToPlay (double sampleRateIn, int samplesPerBlock, int numChannels)
 {
     juce::ignoreUnused (samplesPerBlock, numChannels);
-    sampleRate = sampleRateIn;
-    updateCoefficients();
+    sampleRate = sampleRateIn > 0.0 ? sampleRateIn : 44100.0;
+    timingDirty.store (true, std::memory_order_relaxed);
+    reset();
+    updateCoefficientsIfNeeded();
+}
+
+void CompressorProcessor::updateCoefficientsIfNeeded() noexcept
+{
+    const auto a = attackMs.load (std::memory_order_relaxed);
+    const auto r = releaseMs.load (std::memory_order_relaxed);
+
+    if (! timingDirty.load (std::memory_order_relaxed) && a == lastAttackMs && r == lastReleaseMs)
+        return;
+
+    lastAttackMs = a;
+    lastReleaseMs = r;
+    timingDirty.store (false, std::memory_order_relaxed);
+
+    // One-pole time constant: reach ~63% of the target within the stated time.
+    const auto attackSamples = juce::jmax (1.0, (double) a * sampleRate / 1000.0);
+    const auto releaseSamples = juce::jmax (1.0, (double) r * sampleRate / 1000.0);
+
+    alphaAttack = (float) (1.0 - std::exp (-1.0 / attackSamples));
+    alphaRelease = (float) (1.0 - std::exp (-1.0 / releaseSamples));
 }
 
 void CompressorProcessor::processBlock (juce::AudioBuffer<float>& buffer)
 {
-    if (!enabled.load())
+    if (! enabled.load (std::memory_order_relaxed))
+    {
+        gainReductionDb.store (0.0f, std::memory_order_relaxed);
+        return;
+    }
+
+    updateCoefficientsIfNeeded();
+
+    const auto numChannels = buffer.getNumChannels();
+    const auto numSamples = buffer.getNumSamples();
+
+    if (numChannels <= 0 || numSamples <= 0)
         return;
 
-    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+    const auto inGain = juce::Decibels::decibelsToGain (inputGainDb.load (std::memory_order_relaxed));
+    const auto threshold = thresholdDb.load (std::memory_order_relaxed);
+
+    // slope is the fraction of every dB above the threshold that gets removed.
+    // ratio is clamped >= 1 by the setter, so slope stays in [0, 1) and the
+    // gain computer can never divide by zero or produce a positive gain.
+    const auto ratioValue = juce::jmax (1.0f, ratio.load (std::memory_order_relaxed));
+    const auto slope = 1.0f - (1.0f / ratioValue);
+
+    // Fixed makeup derived from the static curve: how much a signal sitting at
+    // the threshold loses. Independent of the envelope, so it can never cancel
+    // the compression out the way the old reciprocal-of-envelope makeup did.
+    auto makeupDb = 0.0f;
+    if (autoMakeupGain.load (std::memory_order_relaxed))
+        makeupDb = juce::jlimit (0.0f, 24.0f, -threshold * slope * 0.5f);
+
+    auto* const* channels = buffer.getArrayOfWritePointers();
+    auto minEnvelopeThisBlock = 0.0f;
+
+    for (int i = 0; i < numSamples; ++i)
     {
-        auto* samples = buffer.getWritePointer (ch);
-        const int numSamples = buffer.getNumSamples();
+        float peak = 0.0f;
 
-        for (int i = 0; i < numSamples; ++i)
+        for (int ch = 0; ch < numChannels; ++ch)
         {
-            // Apply input gain
-            float sample = samples[i] * std::pow (10.0f, inputGainDb.load() / 20.0f);
-
-            // Measure RMS in dB
-            float sampleDb = 20.0f * std::log10 (std::abs (sample) + 1e-6f);
-
-            // Calculate gain reduction
-            float gainReduction = 1.0f;
-            if (sampleDb > thresholdDb.load())
-            {
-                float excess = sampleDb - thresholdDb.load();
-                float compressionRatio = ratio.load();
-                gainReduction = 1.0f / (1.0f + (compressionRatio - 1.0f) * (excess / thresholdDb.load()));
-            }
-
-            // Apply attack/release envelope
-            float targetDb = 20.0f * std::log10 (gainReduction + 1e-6f);
-            if (targetDb < envelopeDb)
-                envelopeDb += (targetDb - envelopeDb) * alphaAttack;
-            else
-                envelopeDb += (targetDb - envelopeDb) * alphaRelease;
-
-            // Apply makeup gain if enabled
-            float makeupGain = 1.0f;
-            if (autoMakeupGain.load())
-                makeupGain = std::pow (10.0f, -envelopeDb / 20.0f);
-
-            samples[i] = sample * std::pow (10.0f, envelopeDb / 20.0f) * makeupGain;
+            const auto s = channels[ch][i] * inGain;
+            channels[ch][i] = s;
+            peak = juce::jmax (peak, std::abs (s));
         }
+
+        const auto sampleDb = juce::Decibels::gainToDecibels (peak, kDetectorFloorDb);
+        const auto overDb = sampleDb - threshold;
+        const auto targetDb = overDb > 0.0f ? -(overDb * slope) : 0.0f;
+
+        // Attack when we need to pull the gain down further, release on the way back up.
+        const auto alpha = targetDb < envelopeDb ? alphaAttack : alphaRelease;
+        envelopeDb += (targetDb - envelopeDb) * alpha;
+
+        if (! std::isfinite (envelopeDb))
+            envelopeDb = 0.0f;
+
+        envelopeDb = juce::jlimit (-60.0f, 0.0f, envelopeDb);
+        minEnvelopeThisBlock = juce::jmin (minEnvelopeThisBlock, envelopeDb);
+
+        const auto gain = juce::Decibels::decibelsToGain (envelopeDb + makeupDb);
+
+        for (int ch = 0; ch < numChannels; ++ch)
+            channels[ch][i] *= gain;
     }
+
+    gainReductionDb.store (minEnvelopeThisBlock, std::memory_order_relaxed);
 }
 
 void CompressorProcessor::reset()
 {
-    envelopeDb = -100.0f;
+    envelopeDb = 0.0f;
+    gainReductionDb.store (0.0f, std::memory_order_relaxed);
 }
 
 void CompressorProcessor::setInputGainDb (float db) noexcept
 {
-    inputGainDb.store (db);
+    inputGainDb.store (juce::jlimit (-24.0f, 24.0f, db), std::memory_order_relaxed);
 }
 
 void CompressorProcessor::setThresholdDb (float db) noexcept
 {
-    thresholdDb.store (juce::jlimit (-60.0f, 0.0f, db));
+    thresholdDb.store (juce::jlimit (-60.0f, 0.0f, db), std::memory_order_relaxed);
 }
 
 void CompressorProcessor::setRatio (float ratioValue) noexcept
 {
-    ratio.store (juce::jlimit (1.0f, 16.0f, ratioValue));
+    ratio.store (juce::jlimit (1.0f, 20.0f, ratioValue), std::memory_order_relaxed);
 }
 
 void CompressorProcessor::setAttackMs (float ms) noexcept
 {
-    attackMs.store (juce::jlimit (0.1f, 100.0f, ms));
-    updateCoefficients();
+    attackMs.store (juce::jlimit (0.1f, 200.0f, ms), std::memory_order_relaxed);
+    timingDirty.store (true, std::memory_order_relaxed);
 }
 
 void CompressorProcessor::setReleaseMs (float ms) noexcept
 {
-    releaseMs.store (juce::jlimit (10.0f, 1000.0f, ms));
-    updateCoefficients();
+    releaseMs.store (juce::jlimit (5.0f, 2000.0f, ms), std::memory_order_relaxed);
+    timingDirty.store (true, std::memory_order_relaxed);
 }
 
-void CompressorProcessor::setAutoMakeupGain (bool enabled) noexcept
+void CompressorProcessor::setAutoMakeupGain (bool shouldEnable) noexcept
 {
-    autoMakeupGain.store (enabled);
+    autoMakeupGain.store (shouldEnable, std::memory_order_relaxed);
 }
 
 void CompressorProcessor::setEnabled (bool shouldEnable) noexcept
 {
-    enabled.store (shouldEnable);
+    enabled.store (shouldEnable, std::memory_order_relaxed);
 }
 
 float CompressorProcessor::getInputGainDb() const noexcept
 {
-    return inputGainDb.load();
+    return inputGainDb.load (std::memory_order_relaxed);
 }
 
 float CompressorProcessor::getThresholdDb() const noexcept
 {
-    return thresholdDb.load();
+    return thresholdDb.load (std::memory_order_relaxed);
 }
 
 float CompressorProcessor::getRatio() const noexcept
 {
-    return ratio.load();
+    return ratio.load (std::memory_order_relaxed);
 }
 
 float CompressorProcessor::getAttackMs() const noexcept
 {
-    return attackMs.load();
+    return attackMs.load (std::memory_order_relaxed);
 }
 
 float CompressorProcessor::getReleaseMs() const noexcept
 {
-    return releaseMs.load();
+    return releaseMs.load (std::memory_order_relaxed);
 }
 
 bool CompressorProcessor::getAutoMakeupGain() const noexcept
 {
-    return autoMakeupGain.load();
+    return autoMakeupGain.load (std::memory_order_relaxed);
 }
 
 bool CompressorProcessor::isEnabled() const noexcept
 {
-    return enabled.load();
+    return enabled.load (std::memory_order_relaxed);
 }
 
-void CompressorProcessor::updateCoefficients()
+float CompressorProcessor::getGainReductionDb() const noexcept
 {
-    // Simple 1-pole low-pass for envelope following
-    alphaAttack = 2.0f / (attackMs.load() * (float)sampleRate / 1000.0f + 1.0f);
-    alphaRelease = 2.0f / (releaseMs.load() * (float)sampleRate / 1000.0f + 1.0f);
+    return gainReductionDb.load (std::memory_order_relaxed);
 }
 
 } // namespace milodikfx::dsp

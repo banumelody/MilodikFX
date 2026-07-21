@@ -1,187 +1,138 @@
-#include "PresetsHandler.h"
+#include "api/PresetsHandler.h"
 
-#include "../dsp/GainProcessor.h"
-#include "../dsp/OverdriveProcessor.h"
-#include "../dsp/EQProcessor.h"
-#include "../dsp/CompressorProcessor.h"
-#include "../dsp/ReverbProcessor.h"
-#include "../dsp/ToneStackProcessor.h"
+#include "api/ApiJson.h"
 
-HttpHandler::Response PresetsHandler::handleGet(
-    const std::string& path,
-    const std::string& query) const
+using namespace milodikfx::api;
+
+namespace
+{
+constexpr const char* kPrefix = "/api/presets";
+
+juce::var presetListVar (const juce::StringArray& names, const juce::String& selected)
+{
+    juce::Array<juce::var> array;
+
+    for (const auto& name : names)
+        array.add (name);
+
+    auto* root = new juce::DynamicObject();
+    root->setProperty ("presets", array);
+    root->setProperty ("selected", selected);
+
+    return juce::var (root);
+}
+} // namespace
+
+HttpHandler::Response PresetsHandler::handleGet (const std::string&, const std::string&) const
 {
     try
     {
-        // Use PresetManager to list presets
-        auto list = presetManager_.listPresets();
-        juce::StringArray arr = list;
-
-        std::string json = "{\n  \"presets\": [";
-        for (int i = 0; i < arr.size(); ++i)
-        {
-            json += "\"" + arr[i].toStdString() + "\"";
-            if (i < arr.size() - 1) json += ", ";
-        }
-        json += "]\n}";
-
-        return { 200, "application/json", json };
+        return jsonOk (presetListVar (presetManager.listPresets(), selectedName));
     }
     catch (const std::exception& e)
     {
-        return { 500, "application/json", std::string(R"({"error":"Exception: )") + e.what() + R"("})" };
+        return jsonError (500, juce::String ("Exception: ") + e.what());
     }
 }
 
-HttpHandler::Response PresetsHandler::handlePost(
-    const std::string& path,
-    const std::string& body)
+HttpHandler::Response PresetsHandler::deleteByName (const juce::String& name)
+{
+    if (! presetManager.deletePreset (name))
+        return jsonError (404, "Preset not found");
+
+    if (selectedName == milodikfx::preset::PresetManager::sanitisePresetName (name))
+    {
+        selectedName = {};
+
+        if (onSelectionChanged)
+            onSelectionChanged (selectedName);
+    }
+
+    return jsonOk (presetListVar (presetManager.listPresets(), selectedName));
+}
+
+HttpHandler::Response PresetsHandler::handleDelete (const std::string& path)
 {
     try
     {
-        // Parse JSON body using JUCE JSON parser
-        juce::var parsed;
-        try {
-            parsed = juce::JSON::parse(body);
-        } catch (...) {
-            return { 400, "application/json", R"({"error":"Invalid JSON body"})" };
-        }
+        const auto segments = pathSegmentsAfter (path, kPrefix);
 
-        if (!parsed.isObject())
-            return { 400, "application/json", R"({"error":"Expected JSON object in body"})" };
+        if (segments.size() != 1)
+            return jsonError (404, "Expected /api/presets/{name}");
 
-        juce::var nameVar = parsed.getProperty("name", juce::var());
-        if (nameVar.isVoid() || !nameVar.isString())
-            return { 400, "application/json", R"({"error":"Missing or invalid 'name' field"})" };
-
-        std::string presetName = nameVar.toString().toStdString();
-
-        // Save preset
-        if (path.find("/presets/save") != std::string::npos)
-        {
-            milodikfx::preset::PresetState state;
-            auto& chain = engine_.getChain();
-
-            if (auto* gp = chain.findProcessor<milodikfx::dsp::GainProcessor>())
-            {
-                state.cleanBoostEnabled = gp->isEnabled();
-                state.cleanBoostGainDb = gp->getGainDb();
-            }
-
-            if (auto* od = chain.findProcessor<milodikfx::dsp::OverdriveProcessor>())
-            {
-                state.overdriveEnabled = od->isEnabled();
-                state.overdriveDrivePct = od->getDrivePercent();
-                state.overdriveLevelPct = od->getLevelPercent();
-            }
-
-            if (auto* eq = chain.findProcessor<milodikfx::dsp::EQProcessor>())
-            {
-                state.eqEnabled = eq->isEnabled();
-                state.eqBassDb = eq->getBassDb();
-                state.eqMidDb = eq->getMidDb();
-                state.eqTrebleDb = eq->getTrebleDb();
-            }
-
-            if (auto* comp = chain.findProcessor<milodikfx::dsp::CompressorProcessor>())
-            {
-                state.compressorEnabled = comp->isEnabled();
-                state.compressorInputGainDb = comp->getInputGainDb();
-                state.compressorThresholdDb = comp->getThresholdDb();
-                state.compressorRatio = comp->getRatio();
-                state.compressorAttackMs = comp->getAttackMs();
-                state.compressorReleaseMs = comp->getReleaseMs();
-            }
-
-            if (auto* re = chain.findProcessor<milodikfx::dsp::ReverbProcessor>())
-            {
-                state.reverbEnabled = re->isEnabled();
-                state.reverbRoomSize = re->getRoomSize();
-                state.reverbDryWetMix = re->getDryWetMix();
-                state.reverbDecayTime = re->getDecayTime();
-                state.reverbWidth = re->getWidth();
-            }
-
-            if (auto* ts = chain.findProcessor<milodikfx::dsp::ToneStackProcessor>())
-            {
-                state.toneStackEnabled = ts->isEnabled();
-                state.toneStackBassDb = ts->getBassDb();
-                state.toneStackMidDb = ts->getMidDb();
-                state.toneStackTrebleDb = ts->getTrebleDb();
-            }
-
-            bool ok = presetManager_.savePreset (presetName, state);
-            if (!ok)
-                return { 500, "application/json", std::string("{\n  \"success\": false, \"message\": \"Failed to save preset\"\n}") };
-
-            return { 200, "application/json", "{\n  \"success\": true, \"message\": \"Preset saved\"\n}" };
-        }
-
-        // Load preset
-        if (path.find("/presets/load") != std::string::npos)
-        {
-            milodikfx::preset::PresetState state;
-            bool ok = presetManager_.loadPreset(presetName, state);
-            if (!ok)
-                return { 404, "application/json", std::string("{\n  \"success\": false, \"message\": \"Preset not found\"\n}") };
-
-            auto& chain = engine_.getChain();
-
-            if (auto* gp = chain.findProcessor<milodikfx::dsp::GainProcessor>())
-            {
-                gp->setEnabled(state.cleanBoostEnabled);
-                gp->setGainDb(state.cleanBoostGainDb);
-            }
-
-            if (auto* od = chain.findProcessor<milodikfx::dsp::OverdriveProcessor>())
-            {
-                od->setEnabled(state.overdriveEnabled);
-                od->setDrivePercent(state.overdriveDrivePct);
-                od->setLevelPercent(state.overdriveLevelPct);
-            }
-
-            if (auto* eq = chain.findProcessor<milodikfx::dsp::EQProcessor>())
-            {
-                eq->setEnabled(state.eqEnabled);
-                eq->setBassDb(state.eqBassDb);
-                eq->setMidDb(state.eqMidDb);
-                eq->setTrebleDb(state.eqTrebleDb);
-            }
-
-            if (auto* comp = chain.findProcessor<milodikfx::dsp::CompressorProcessor>())
-            {
-                comp->setEnabled(state.compressorEnabled);
-                comp->setInputGainDb(state.compressorInputGainDb);
-                comp->setThresholdDb(state.compressorThresholdDb);
-                comp->setRatio(state.compressorRatio);
-                comp->setAttackMs(state.compressorAttackMs);
-                comp->setReleaseMs(state.compressorReleaseMs);
-            }
-
-            if (auto* re = chain.findProcessor<milodikfx::dsp::ReverbProcessor>())
-            {
-                re->setEnabled(state.reverbEnabled);
-                re->setRoomSize(state.reverbRoomSize);
-                re->setDryWetMix(state.reverbDryWetMix);
-                re->setDecayTime(state.reverbDecayTime);
-                re->setWidth(state.reverbWidth);
-            }
-
-            if (auto* ts = chain.findProcessor<milodikfx::dsp::ToneStackProcessor>())
-            {
-                ts->setEnabled(state.toneStackEnabled);
-                ts->setBassDb(state.toneStackBassDb);
-                ts->setMidDb(state.toneStackMidDb);
-                ts->setTrebleDb(state.toneStackTrebleDb);
-            }
-
-            return { 200, "application/json", "{\n  \"success\": true, \"message\": \"Preset loaded\"\n}" };
-        }
-
-        return { 400, "application/json", R"({"error":"Unknown preset action"})" };
+        return deleteByName (juce::URL::removeEscapeChars (juce::String (segments[0])));
     }
     catch (const std::exception& e)
     {
-        return { 500, "application/json", std::string(R"({"error":"Exception: )") + e.what() + R"("})" };
+        return jsonError (500, juce::String ("Exception: ") + e.what());
+    }
+}
+
+HttpHandler::Response PresetsHandler::handlePost (const std::string& path, const std::string& body)
+{
+    try
+    {
+        const auto parsed = parseBody (body);
+
+        if (! parsed.isObject())
+            return jsonError (400, "Body must be a JSON object");
+
+        const auto rawName = parsed["name"].toString();
+        const auto name = milodikfx::preset::PresetManager::sanitisePresetName (rawName);
+
+        if (name.isEmpty())
+            return jsonError (400, "Missing or invalid 'name'");
+
+        const auto segments = pathSegmentsAfter (path, kPrefix);
+        const auto action = segments.empty() ? std::string ("save") : toLowerAscii (segments[0]);
+
+        if (action == "save")
+        {
+            if (! presetManager.savePreset (name, registry.captureState()))
+                return jsonError (500, "Failed to write the preset file");
+
+            selectedName = name;
+
+            if (onSelectionChanged)
+                onSelectionChanged (selectedName);
+
+            auto* root = new juce::DynamicObject();
+            root->setProperty ("success", true);
+            root->setProperty ("name", name);
+
+            return jsonOk (juce::var (root));
+        }
+
+        if (action == "load")
+        {
+            juce::var state;
+
+            if (! presetManager.loadPreset (name, state))
+                return jsonError (404, "Preset not found");
+
+            const auto applied = registry.applyState (state);
+
+            selectedName = name;
+
+            if (onSelectionChanged)
+                onSelectionChanged (selectedName);
+
+            auto* root = new juce::DynamicObject();
+            root->setProperty ("success", true);
+            root->setProperty ("name", name);
+            root->setProperty ("valuesApplied", applied);
+            root->setProperty ("effects", registry.toVar()["effects"]);
+
+            return jsonOk (juce::var (root));
+        }
+
+        if (action == "delete")
+            return deleteByName (name);
+
+        return jsonError (404, "Unknown preset action");
+    }
+    catch (const std::exception& e)
+    {
+        return jsonError (500, juce::String ("Exception: ") + e.what());
     }
 }

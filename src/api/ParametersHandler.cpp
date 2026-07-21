@@ -1,240 +1,127 @@
-#include "ParametersHandler.h"
+#include "api/ParametersHandler.h"
 
-#include "../dsp/GainProcessor.h"
-#include "../dsp/OverdriveProcessor.h"
-#include "../dsp/EQProcessor.h"
-#include "../dsp/CompressorProcessor.h"
-#include "../dsp/ReverbProcessor.h"
-#include "../dsp/ToneStackProcessor.h"
+#include "api/ApiJson.h"
 
-#include <algorithm>
-#include <cctype>
+using namespace milodikfx::api;
 
-static std::string buildMasterVolumeJson(float gainDb)
+namespace
 {
-    return std::string(R"({"masterVolume":)") + std::to_string(gainDb) + "}";
+constexpr const char* kPrefix = "/api/parameters";
+
+bool isMasterVolumePath (const std::string& path)
+{
+    return path == "/api/parameters/master-volume" || path == "/api/parameters/master-volume/";
+}
+} // namespace
+
+HttpHandler::Response ParametersHandler::handleMasterVolumeGet() const
+{
+    const auto* parameter = registry_.findParameter (masterEffectId_, masterParameterId_);
+
+    if (parameter == nullptr || ! parameter->get)
+        return jsonError (503, "Master volume is not available");
+
+    auto* object = new juce::DynamicObject();
+    object->setProperty ("masterVolume", parameter->get());
+    object->setProperty ("min", parameter->minValue);
+    object->setProperty ("max", parameter->maxValue);
+
+    return jsonOk (juce::var (object));
 }
 
-static std::string jsonKeyValue(const std::string& k, const std::string& v)
+HttpHandler::Response ParametersHandler::handleMasterVolumePut (const juce::var& body) const
 {
-    return "\"" + k + "\":" + v;
+    double value = 0.0;
+
+    if (! readNumber (body, "value", value))
+        return jsonError (400, "Body must contain a numeric 'value'");
+
+    float applied = 0.0f;
+
+    if (! registry_.setParameter (masterEffectId_, masterParameterId_, (float) value, applied))
+        return jsonError (503, "Master volume is not available");
+
+    auto* object = new juce::DynamicObject();
+    object->setProperty ("masterVolume", applied);
+
+    return jsonOk (juce::var (object));
 }
 
-static std::string toLower(std::string s)
-{
-    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c){ return std::tolower(c); });
-    return s;
-}
-
-HttpHandler::Response ParametersHandler::handleGet(
-    const std::string& path,
-    const std::string& query) const
+HttpHandler::Response ParametersHandler::handleGet (const std::string& path, const std::string&) const
 {
     try
     {
-        auto& chain = engine_.getChain();
+        if (isMasterVolumePath (path))
+            return handleMasterVolumeGet();
 
-        // GET /api/parameters/master-volume
-        if (path.find("/api/parameters/master-volume") != std::string::npos)
-        {
-            float masterVol = static_cast<float>(settings_.getDoubleValue("dsp.cleanBoost.gainDb", 0.0));
-            if (auto* gp = chain.findProcessor<milodikfx::dsp::GainProcessor>())
-                masterVol = gp->getGainDb();
+        if (path == kPrefix || path == "/api/parameters/")
+            return jsonOk (registry_.toVar());
 
-            return { 200, "application/json", buildMasterVolumeJson(masterVol) };
-        }
+        const auto segments = pathSegmentsAfter (path, kPrefix);
 
-        // GET /api/parameters -> return summary of common parameters
-        if (path == "/api/parameters" || path == "/api/parameters/")
-        {
-            std::string json = "{";
-            // master volume
-            float masterVol = static_cast<float>(settings_.getDoubleValue("dsp.cleanBoost.gainDb", 0.0));
-            if (auto* gp = chain.findProcessor<milodikfx::dsp::GainProcessor>())
-                masterVol = gp->getGainDb();
-            json += jsonKeyValue("masterVolume", std::to_string(masterVol));
+        if (segments.size() != 2)
+            return jsonError (404, "Expected /api/parameters/{effect}/{parameter}");
 
-            // overdrive
-            if (auto* od = chain.findProcessor<milodikfx::dsp::OverdriveProcessor>())
-            {
-                json += "," + jsonKeyValue("overdrive.drivePct", std::to_string(od->getDrivePercent()));
-                json += "," + jsonKeyValue("overdrive.levelPct", std::to_string(od->getLevelPercent()));
-                json += "," + jsonKeyValue("overdrive.enabled", od->isEnabled() ? "true" : "false");
-            }
+        const auto effectId = toLowerAscii (segments[0]);
+        const auto* parameter = registry_.findParameter (effectId, segments[1]);
 
-            // eq
-            if (auto* eq = chain.findProcessor<milodikfx::dsp::EQProcessor>())
-            {
-                json += "," + jsonKeyValue("eq.bassDb", std::to_string(eq->getBassDb()));
-                json += "," + jsonKeyValue("eq.midDb", std::to_string(eq->getMidDb()));
-                json += "," + jsonKeyValue("eq.trebleDb", std::to_string(eq->getTrebleDb()));
-                json += "," + jsonKeyValue("eq.enabled", eq->isEnabled() ? "true" : "false");
-            }
+        if (parameter == nullptr || ! parameter->get)
+            return jsonError (404, "Unknown parameter");
 
-            json += "}";
-            return { 200, "application/json", json };
-        }
+        auto* object = new juce::DynamicObject();
+        object->setProperty ("effect", juce::String (effectId));
+        object->setProperty ("parameter", juce::String (parameter->id));
+        object->setProperty ("value", parameter->get());
+        object->setProperty ("min", parameter->minValue);
+        object->setProperty ("max", parameter->maxValue);
+        object->setProperty ("unit", juce::String (parameter->unit));
 
-        // GET single /api/parameters/{effect}/{param}
-        if (path.find("/api/parameters/") == 0)
-        {
-            // e.g. /api/parameters/overdrive/drivePct
-            size_t base = std::string("/api/parameters/").length();
-            size_t slashPos = path.find('/', base);
-            if (slashPos == std::string::npos)
-                return { 400, "application/json", R"({"error":"Missing parameter name"})" };
-
-            std::string effect = toLower(path.substr(base, slashPos - base));
-            std::string param = path.substr(slashPos + 1);
-
-            if (effect == "overdrive")
-            {
-                if (auto* od = chain.findProcessor<milodikfx::dsp::OverdriveProcessor>())
-                {
-                    if (param == "drivePct") return {200, "application/json", std::string("{\"value\":") + std::to_string(od->getDrivePercent()) + "}"};
-                    if (param == "levelPct") return {200, "application/json", std::string("{\"value\":") + std::to_string(od->getLevelPercent()) + "}"};
-                    if (param == "enabled") return {200, "application/json", std::string("{\"value\":") + (od->isEnabled() ? "true" : "false") + "}"};
-                }
-            }
-
-            if (effect == "gain" || effect == "cleanboost")
-            {
-                if (auto* gp = chain.findProcessor<milodikfx::dsp::GainProcessor>())
-                {
-                    if (param == "gainDb") return {200, "application/json", std::string("{\"value\":") + std::to_string(gp->getGainDb()) + "}"};
-                    if (param == "enabled") return {200, "application/json", std::string("{\"value\":") + (gp->isEnabled() ? "true" : "false") + "}"};
-                }
-            }
-
-            if (effect == "eq")
-            {
-                if (auto* eq = chain.findProcessor<milodikfx::dsp::EQProcessor>())
-                {
-                    if (param == "bassDb") return {200, "application/json", std::string("{\"value\":") + std::to_string(eq->getBassDb()) + "}"};
-                    if (param == "midDb") return {200, "application/json", std::string("{\"value\":") + std::to_string(eq->getMidDb()) + "}"};
-                    if (param == "trebleDb") return {200, "application/json", std::string("{\"value\":") + std::to_string(eq->getTrebleDb()) + "}"};
-                    if (param == "enabled") return {200, "application/json", std::string("{\"value\":") + (eq->isEnabled() ? "true" : "false") + "}"};
-                }
-            }
-
-            return { 404, "application/json", R"({"error":"Parameter not found"})" };
-        }
-
-        return { 404, "application/json", R"({"error":"Parameter not found"})" };
+        return jsonOk (juce::var (object));
     }
     catch (const std::exception& e)
     {
-        return { 500, "application/json", std::string(R"({"error":"Exception: )") + e.what() + R"("})" };
+        return jsonError (500, juce::String ("Exception: ") + e.what());
     }
 }
 
-HttpHandler::Response ParametersHandler::handlePut(
-    const std::string& path,
-    const std::string& body)
+HttpHandler::Response ParametersHandler::handlePut (const std::string& path, const std::string& body)
 {
     try
     {
-        // Extract value from JSON body: {"value": 3.5}
-        size_t valuePos = body.find("\"value\"");
-        if (valuePos == std::string::npos)
-        {
-            return { 400, "application/json", R"({"error":"Missing 'value' field"})" };
-        }
+        const auto parsed = parseBody (body);
 
-        size_t colonPos = body.find(":", valuePos);
-        size_t numStart = body.find_first_of("-0123456789", colonPos);
-        size_t numEnd = body.find_first_not_of("-0123456789.", numStart);
+        if (! parsed.isObject())
+            return jsonError (400, "Body must be a JSON object");
 
-        if (numStart == std::string::npos || numEnd == std::string::npos)
-        {
-            return { 400, "application/json", R"({"error":"Invalid value format"})" };
-        }
+        if (isMasterVolumePath (path))
+            return handleMasterVolumePut (parsed);
 
-        std::string valueStr = body.substr(numStart, numEnd - numStart);
-        float value = std::stof(valueStr);
+        const auto segments = pathSegmentsAfter (path, kPrefix);
 
-        auto& chain = engine_.getChain();
+        if (segments.size() != 2)
+            return jsonError (404, "Expected /api/parameters/{effect}/{parameter}");
 
-        // Handle /api/parameters/master-volume
-        if (path.find("/api/parameters/master-volume") != std::string::npos)
-        {
-            // Apply to GainProcessor if present, else persist to settings
-            if (auto* gp = chain.findProcessor<milodikfx::dsp::GainProcessor>())
-            {
-                gp->setGainDb(value);
-            }
-            settings_.setValue("dsp.cleanBoost.gainDb", static_cast<double>(value));
-            settings_.saveIfNeeded();
+        const auto effectId = toLowerAscii (segments[0]);
 
-            return { 200, "application/json", buildMasterVolumeJson(value) };
-        }
+        double value = 0.0;
 
-        // Handle /api/parameters/{effect}/{param}
-        if (path.find("/api/parameters/") == 0)
-        {
-            size_t base = std::string("/api/parameters/").length();
-            size_t slashPos = path.find('/', base);
-            if (slashPos == std::string::npos)
-                return { 400, "application/json", R"({"error":"Missing parameter name"})" };
+        if (! readNumber (parsed, "value", value))
+            return jsonError (400, "Body must contain a numeric 'value'");
 
-            std::string effect = toLower(path.substr(base, slashPos - base));
-            std::string param = path.substr(slashPos + 1);
+        float applied = 0.0f;
 
-            if (effect == "overdrive")
-            {
-                if (auto* od = chain.findProcessor<milodikfx::dsp::OverdriveProcessor>())
-                {
-                    if (param == "drivePct") od->setDrivePercent(value);
-                    else if (param == "levelPct") od->setLevelPercent(value);
-                    else return { 400, "application/json", R"({"error":"Unknown param"})" };
+        if (! registry_.setParameter (effectId, segments[1], (float) value, applied))
+            return jsonError (404, "Unknown parameter");
 
-                    return { 200, "application/json", std::string("{\"effect\": \"") + effect + "\", \"param\": \"" + param + "\", \"value\": " + valueStr + " }" };
-                }
-                else
-                {
-                    return { 404, "application/json", R"({"error":"Effect not present"})" };
-                }
-            }
+        auto* object = new juce::DynamicObject();
+        object->setProperty ("effect", juce::String (effectId));
+        object->setProperty ("parameter", juce::String (segments[1]));
+        object->setProperty ("value", applied);
 
-            if (effect == "gain" || effect == "cleanboost")
-            {
-                if (auto* gp = chain.findProcessor<milodikfx::dsp::GainProcessor>())
-                {
-                    if (param == "gainDb") gp->setGainDb(value);
-                    else return { 400, "application/json", R"({"error":"Unknown param"})" };
-
-                    return { 200, "application/json", std::string("{\"effect\": \"") + effect + "\", \"param\": \"" + param + "\", \"value\": " + valueStr + " }" };
-                }
-                else
-                {
-                    return { 404, "application/json", R"({"error":"Effect not present"})" };
-                }
-            }
-
-            if (effect == "eq")
-            {
-                if (auto* eq = chain.findProcessor<milodikfx::dsp::EQProcessor>())
-                {
-                    if (param == "bassDb") eq->setBassDb(value);
-                    else if (param == "midDb") eq->setMidDb(value);
-                    else if (param == "trebleDb") eq->setTrebleDb(value);
-                    else return { 400, "application/json", R"({"error":"Unknown param"})" };
-
-                    return { 200, "application/json", std::string("{\"effect\": \"") + effect + "\", \"param\": \"" + param + "\", \"value\": " + valueStr + " }" };
-                }
-                else
-                {
-                    return { 404, "application/json", R"({"error":"Effect not present"})" };
-                }
-            }
-
-            return { 404, "application/json", R"({"error":"Effect not found"})" };
-        }
-
-        return { 404, "application/json", R"({"error":"Parameter endpoint not found"})" };
+        return jsonOk (juce::var (object));
     }
     catch (const std::exception& e)
     {
-        return { 500, "application/json", std::string(R"({"error":"Exception: )") + e.what() + R"("})" };
+        return jsonError (500, juce::String ("Exception: ") + e.what());
     }
 }

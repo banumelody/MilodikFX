@@ -3,9 +3,11 @@
 #include <JuceHeader.h>
 
 #include "dsp/AudioProcessorBase.h"
+#include "dsp/Biquad.h"
 
 namespace milodikfx::dsp
 {
+/** Clean boost: 0..+24 dB, smoothed so REST-driven changes do not zipper. */
 class GainProcessor final : public AudioProcessorBase
 {
 public:
@@ -24,5 +26,7 @@ private:
     std::atomic<float> gainLinear { 1.0f };
     std::atomic<bool> enabled { true };
     bool prepared = false;
+
+    SmoothedParam smoothedGain;
 };
 } // namespace milodikfx::dsp

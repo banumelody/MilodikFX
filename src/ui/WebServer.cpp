@@ -1,41 +1,64 @@
 #include "WebServer.h"
-#include <sstream>
+
 #include <algorithm>
 #include <chrono>
+#include <sstream>
 #include <thread>
 
-// Global Winsock initialization (one-time only)
-static bool initWinsock()
+namespace
 {
-    static bool initialized = false;
-    static WSADATA wsaData;
-    
-    if (!initialized)
-    {
-        int result = WSAStartup(MAKEWORD(2, 2), &wsaData);
-        initialized = (result == 0);
-        if (!initialized)
-        {
-            juce::Logger::getCurrentLogger()->writeToLog(
-                "CRITICAL: WSAStartup failed with error: " + juce::String(result));
-        }
-        else
-        {
-            juce::Logger::getCurrentLogger()->writeToLog(
-                "Winsock2 initialized (version " + juce::String(MAKEWORD(2, 2)) + ")");
-        }
-    }
-    return initialized;
+void log (const juce::String& message)
+{
+    // The logger is installed and removed by the application, so a connection
+    // thread finishing during shutdown can legitimately find none.
+    if (auto* logger = juce::Logger::getCurrentLogger())
+        logger->writeToLog (message);
 }
 
-WebServer::WebServer(int port)
-    : juce::Thread("WebServerThread"),
-      port_(port),
-      running_(false),
-      serverSocket_(INVALID_SOCKET)
+bool initWinsock()
 {
-    juce::Logger::getCurrentLogger()->writeToLog(
-        "WebServer: Created instance on port " + juce::String(port));
+    static bool initialised = []
+    {
+        WSADATA data {};
+        const auto result = WSAStartup (MAKEWORD (2, 2), &data);
+
+        if (result != 0)
+            log ("CRITICAL: WSAStartup failed with error " + juce::String (result));
+
+        return result == 0;
+    }();
+
+    return initialised;
+}
+
+std::string toLower (std::string s)
+{
+    std::transform (s.begin(), s.end(), s.begin(), [] (unsigned char c) { return (char) std::tolower (c); });
+    return s;
+}
+
+const char* statusText (int code)
+{
+    switch (code)
+    {
+        case 200: return "200 OK";
+        case 204: return "204 No Content";
+        case 400: return "400 Bad Request";
+        case 403: return "403 Forbidden";
+        case 404: return "404 Not Found";
+        case 405: return "405 Method Not Allowed";
+        case 413: return "413 Payload Too Large";
+        case 500: return "500 Internal Server Error";
+        case 503: return "503 Service Unavailable";
+        default: return "200 OK";
+    }
+}
+} // namespace
+
+WebServer::WebServer (int port)
+    : juce::Thread ("MilodikFX WebServer"),
+      port_ (port)
+{
     initWinsock();
 }
 
@@ -44,149 +67,85 @@ WebServer::~WebServer()
     stop();
 }
 
-bool WebServer::setSocketNonBlocking(SOCKET sock, bool nonBlocking)
+bool WebServer::setSocketNonBlocking (SOCKET sock, bool nonBlocking)
 {
     unsigned long mode = nonBlocking ? 1 : 0;
-    if (ioctlsocket(sock, FIONBIO, &mode) == SOCKET_ERROR)
-    {
-        int err = WSAGetLastError();
-        juce::Logger::getCurrentLogger()->writeToLog(
-            "WARN: ioctlsocket FIONBIO failed, error: " + juce::String(err));
-        return false;
-    }
-    return true;
+    return ioctlsocket (sock, FIONBIO, &mode) != SOCKET_ERROR;
 }
 
 bool WebServer::start()
 {
-    juce::Logger::getCurrentLogger()->writeToLog(
-        "WebServer::start() - Attempting to start server on port " + juce::String(port_));
-    
     if (running_.load())
-    {
-        juce::Logger::getCurrentLogger()->writeToLog("WebServer already running");
         return true;
-    }
 
-    if (!initWinsock())
-    {
-        juce::Logger::getCurrentLogger()->writeToLog("CRITICAL: Winsock initialization failed");
+    if (! initWinsock())
         return false;
-    }
 
-    // Create server socket
-    serverSocket_ = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    serverSocket_ = socket (AF_INET, SOCK_STREAM, IPPROTO_TCP);
+
     if (serverSocket_ == INVALID_SOCKET)
     {
-        int err = WSAGetLastError();
-        juce::Logger::getCurrentLogger()->writeToLog(
-            "ERROR: socket() creation failed, error: " + juce::String(err));
+        log ("WebServer: socket() failed, error " + juce::String (WSAGetLastError()));
         return false;
     }
-    
-    juce::Logger::getCurrentLogger()->writeToLog(
-        "WebServer: Socket created (handle: " + juce::String((intptr_t)serverSocket_) + ")");
 
-    // Enable SO_REUSEADDR to allow rapid rebinding after restart
-    BOOL reuseAddr = TRUE;
-    if (setsockopt(serverSocket_, SOL_SOCKET, SO_REUSEADDR, 
-                   (const char*)&reuseAddr, sizeof(reuseAddr)) == SOCKET_ERROR)
-    {
-        int err = WSAGetLastError();
-        juce::Logger::getCurrentLogger()->writeToLog(
-            "WARN: SO_REUSEADDR failed, error: " + juce::String(err));
-    }
-    else
-    {
-        juce::Logger::getCurrentLogger()->writeToLog("WebServer: SO_REUSEADDR enabled");
-    }
+    // Deliberately NOT SO_REUSEADDR: on Windows that lets two processes bind
+    // the same port, which would silently split requests between two engines.
+    if (! setSocketNonBlocking (serverSocket_, true))
+        log ("WebServer: could not set non-blocking mode");
 
-    // Set socket to non-blocking for accept() with timeout
-    if (!setSocketNonBlocking(serverSocket_, true))
-    {
-        juce::Logger::getCurrentLogger()->writeToLog("WARN: Non-blocking mode failed");
-    }
-    else
-    {
-        juce::Logger::getCurrentLogger()->writeToLog("WebServer: Non-blocking mode enabled");
-    }
+    sockaddr_in address {};
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl (INADDR_LOOPBACK);
+    address.sin_port = htons ((u_short) port_);
 
-    // Bind socket to port
-    sockaddr_in serverAddr = {};
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);  // Listen on all interfaces
-    serverAddr.sin_port = htons(static_cast<u_short>(port_));
-
-    if (bind(serverSocket_, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR)
+    if (bind (serverSocket_, (sockaddr*) &address, sizeof (address)) == SOCKET_ERROR)
     {
-        int err = WSAGetLastError();
-        juce::Logger::getCurrentLogger()->writeToLog(
-            "ERROR: bind() failed on port " + juce::String(port_) + 
-            ", error: " + juce::String(err));
-        closesocket(serverSocket_);
+        closesocket (serverSocket_);
         serverSocket_ = INVALID_SOCKET;
         return false;
     }
-    
-    juce::Logger::getCurrentLogger()->writeToLog(
-        "WebServer: Socket successfully bound to 0.0.0.0:" + juce::String(port_));
 
-    // Listen for connections - use high backlog
-    if (listen(serverSocket_, SOMAXCONN) == SOCKET_ERROR)
+    if (listen (serverSocket_, SOMAXCONN) == SOCKET_ERROR)
     {
-        int err = WSAGetLastError();
-        juce::Logger::getCurrentLogger()->writeToLog(
-            "ERROR: listen() failed, error: " + juce::String(err));
-        closesocket(serverSocket_);
+        log ("WebServer: listen() failed, error " + juce::String (WSAGetLastError()));
+        closesocket (serverSocket_);
         serverSocket_ = INVALID_SOCKET;
         return false;
     }
-    
-    juce::Logger::getCurrentLogger()->writeToLog(
-        "WebServer: Socket in LISTEN state, backlog=SOMAXCONN");
-    
-    running_.store(true);
+
+    running_.store (true);
     startThread();
-    
-    juce::Logger::getCurrentLogger()->writeToLog(
-        "WebServer: Thread started, ready to accept connections on localhost:" + juce::String(port_));
-    
+
+    log ("WebServer: listening on 127.0.0.1:" + juce::String (port_));
     return true;
 }
 
 void WebServer::stop()
 {
-    juce::Logger::getCurrentLogger()->writeToLog("WebServer::stop() - Shutting down");
-    
-    running_.store(false);
-    
-    // Close the listening socket to interrupt accept()
+    if (! running_.exchange (false) && serverSocket_ == INVALID_SOCKET)
+        return;
+
     if (serverSocket_ != INVALID_SOCKET)
     {
-        int result = closesocket(serverSocket_);
-        if (result == SOCKET_ERROR)
-        {
-            int err = WSAGetLastError();
-            juce::Logger::getCurrentLogger()->writeToLog(
-                "WARN: closesocket() error: " + juce::String(err));
-        }
-        else
-        {
-            juce::Logger::getCurrentLogger()->writeToLog("WebServer: Listening socket closed");
-        }
+        closesocket (serverSocket_);
         serverSocket_ = INVALID_SOCKET;
     }
-    
-    // Wait for thread to exit
+
     if (isThreadRunning())
-    {
-        stopThread(5000);
-    }
-    
-    // Detached connection threads are not tracked; allow them to finish.
-    connectionThreads_.clear();
-    
-    juce::Logger::getCurrentLogger()->writeToLog("WebServer: Shutdown complete");
+        stopThread (5000);
+
+    // Connection threads hold raw references to the handlers, which the owner
+    // destroys right after this returns, so wait them out rather than hoping.
+    const auto deadline = juce::Time::getMillisecondCounter() + 5000;
+
+    while (activeConnections_.load() > 0 && juce::Time::getMillisecondCounter() < deadline)
+        std::this_thread::sleep_for (std::chrono::milliseconds (5));
+
+    if (const auto remaining = activeConnections_.load(); remaining > 0)
+        log ("WebServer: " + juce::String (remaining) + " connection(s) still active at shutdown");
+
+    log ("WebServer: stopped");
 }
 
 bool WebServer::isRunning() const
@@ -194,350 +153,328 @@ bool WebServer::isRunning() const
     return running_.load();
 }
 
-std::string WebServer::getMimeType(const std::string& filePath) const
+std::string WebServer::getMimeType (const std::string& filePath) const
 {
-    if (filePath.find(".html") != std::string::npos)
-        return "text/html; charset=utf-8";
-    else if (filePath.find(".js") != std::string::npos)
-        return "application/javascript; charset=utf-8";
-    else if (filePath.find(".css") != std::string::npos)
-        return "text/css; charset=utf-8";
-    else if (filePath.find(".json") != std::string::npos)
-        return "application/json; charset=utf-8";
-    else if (filePath.find(".svg") != std::string::npos)
-        return "image/svg+xml";
-    else if (filePath.find(".png") != std::string::npos)
-        return "image/png";
-    else if (filePath.find(".jpg") != std::string::npos || filePath.find(".jpeg") != std::string::npos)
-        return "image/jpeg";
-    else if (filePath.find(".gif") != std::string::npos)
-        return "image/gif";
-    else if (filePath.find(".woff2") != std::string::npos)
-        return "font/woff2";
-    
+    const auto path = toLower (filePath);
+
+    auto endsWith = [&path] (const char* suffix)
+    {
+        const std::string s (suffix);
+        return path.size() >= s.size() && path.compare (path.size() - s.size(), s.size(), s) == 0;
+    };
+
+    if (endsWith (".html") || endsWith (".htm")) return "text/html; charset=utf-8";
+    if (endsWith (".js") || endsWith (".mjs"))   return "application/javascript; charset=utf-8";
+    if (endsWith (".css"))                       return "text/css; charset=utf-8";
+    if (endsWith (".json"))                      return "application/json; charset=utf-8";
+    if (endsWith (".svg"))                       return "image/svg+xml";
+    if (endsWith (".png"))                       return "image/png";
+    if (endsWith (".jpg") || endsWith (".jpeg")) return "image/jpeg";
+    if (endsWith (".gif"))                       return "image/gif";
+    if (endsWith (".webp"))                      return "image/webp";
+    if (endsWith (".ico"))                       return "image/x-icon";
+    if (endsWith (".woff2"))                     return "font/woff2";
+    if (endsWith (".woff"))                      return "font/woff";
+    if (endsWith (".ttf"))                       return "font/ttf";
+    if (endsWith (".map"))                       return "application/json; charset=utf-8";
+
     return "application/octet-stream";
 }
 
-std::string WebServer::getResourceDirectory() const
+juce::File WebServer::getWebRoot() const
 {
-    auto exePath = juce::File::getSpecialLocation(juce::File::currentExecutableFile);
-    auto resourceDir = exePath.getParentDirectory().getChildFile("resources");
-    auto fullPath = resourceDir.getFullPathName();
-    
-    juce::Logger::getCurrentLogger()->writeToLog(
-        "WebServer: Resource directory = " + fullPath);
-    
-    return fullPath.toStdString();
+    return juce::File::getSpecialLocation (juce::File::currentExecutableFile)
+        .getParentDirectory()
+        .getChildFile ("resources")
+        .getChildFile ("ui")
+        .getChildFile ("web");
 }
 
-bool WebServer::serveFile(const std::string& filePath, std::string& contentType, std::string& body) const
+bool WebServer::serveFile (const std::string& filePath, std::string& contentType, std::string& body) const
 {
-    std::string sanitizedPath = filePath;
-    
-    // Security: prevent directory traversal
-    if (sanitizedPath.find("..") != std::string::npos)
+    auto requested = filePath;
+
+    if (requested.empty() || requested == "/")
+        requested = "/index.html";
+
+    // Reject anything that could address a location rather than a relative name:
+    // "..", a drive letter, a UNC prefix, or a NUL splice.
+    if (requested.find ("..") != std::string::npos
+        || requested.find (':') != std::string::npos
+        || requested.find ('\\') != std::string::npos
+        || requested.find ('\0') != std::string::npos)
         return false;
-    
-    // Default to index.html for root
-    if (sanitizedPath == "/" || sanitizedPath.empty())
-        sanitizedPath = "/index.html";
-    
-    // Remove leading slash for file lookup
-    if (sanitizedPath[0] == '/')
-        sanitizedPath = sanitizedPath.substr(1);
-    
-    auto resourceDir = getResourceDirectory();
-    juce::File resourceFile(resourceDir);
-    // Navigate to ui/web subdirectory
-    auto webDir = resourceFile.getChildFile("ui").getChildFile("web");
-    auto targetFile = webDir.getChildFile(juce::String(sanitizedPath));
-    
-    if (!targetFile.existsAsFile())
-    {
-        juce::Logger::getCurrentLogger()->writeToLog(
-            "WebServer: File not found: " + juce::String(sanitizedPath) + 
-            " (searched in " + webDir.getFullPathName() + ")");
+
+    while (! requested.empty() && requested.front() == '/')
+        requested.erase (requested.begin());
+
+    if (requested.empty())
         return false;
-    }
-    
-    body = targetFile.loadFileAsString().toStdString();
-    // Use sanitizedPath (resolved filename) when detecting MIME type so that
-    // requests to "/" correctly map to index.html and return text/html.
-    contentType = getMimeType(sanitizedPath);
+
+    const auto webRoot = getWebRoot();
+    const auto target = webRoot.getChildFile (juce::String (requested));
+
+    // Belt and braces: even if the checks above missed something, the resolved
+    // path must still sit inside the web root.
+    if (! target.isAChildOf (webRoot) || ! target.existsAsFile())
+        return false;
+
+    juce::MemoryBlock contents;
+
+    if (! target.loadFileAsData (contents))
+        return false;
+
+    // Read as bytes, not as text: a font or image would be mangled by any
+    // encoding conversion on the way through.
+    body.assign (static_cast<const char*> (contents.getData()), contents.getSize());
+    contentType = getMimeType (requested);
 
     return true;
 }
 
-std::string WebServer::parseHttpRequest(const std::string& request, std::string& path, std::string& method) const
+std::string WebServer::buildFallbackPage() const
 {
-    std::istringstream stream(request);
+    return "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>MilodikFX</title>"
+           "<style>body{background:#0d0f14;color:#e6e9f0;font:15px/1.6 Segoe UI,system-ui,sans-serif;"
+           "display:flex;align-items:center;justify-content:center;height:100vh;margin:0}"
+           "div{max-width:560px;padding:32px}h1{font-size:20px;margin:0 0 12px}"
+           "code{background:#1b1f2a;padding:2px 6px;border-radius:4px}</style></head><body><div>"
+           "<h1>UI belum ter-build</h1>"
+           "<p>Engine audio berjalan, tetapi berkas antarmuka tidak ditemukan di "
+           "<code>resources/ui/web</code>.</p>"
+           "<p>Build frontend lalu jalankan ulang:</p>"
+           "<p><code>cd frontend &amp;&amp; npm ci &amp;&amp; npm run build</code></p>"
+           "</div></body></html>";
+}
+
+std::string WebServer::parseHttpRequest (const std::string& request, std::string& path, std::string& method) const
+{
+    std::istringstream stream (request);
     std::string requestPath, httpVersion;
-    
+
     stream >> method >> requestPath >> httpVersion;
-    
-    // Parse path and query string
-    size_t questionMarkPos = requestPath.find('?');
-    if (questionMarkPos != std::string::npos)
+
+    const auto questionMark = requestPath.find ('?');
+
+    if (questionMark != std::string::npos)
     {
-        path = requestPath.substr(0, questionMarkPos);
-        return requestPath.substr(questionMarkPos + 1); // query string
+        path = requestPath.substr (0, questionMark);
+        return requestPath.substr (questionMark + 1);
     }
-    else
-    {
-        path = requestPath;
-        return ""; // no query string
-    }
+
+    path = requestPath;
+    return {};
 }
 
-void WebServer::handleConnectionAsync(SOCKET clientSocket)
+void WebServer::sendAll (SOCKET sock, const std::string& payload)
 {
-    // Run connection handling in a detached thread to keep accept() responsive.
-    std::thread([this, clientSocket]()
-    {
-        handleConnection(clientSocket);
-    }).detach();
+    int sent = 0;
+    const auto total = (int) payload.size();
 
-    // Detached connection threads are not tracked here; they will finish on their own.
+    while (sent < total)
+    {
+        const auto n = send (sock, payload.data() + sent, total - sent, 0);
+
+        if (n == SOCKET_ERROR || n <= 0)
+            return;
+
+        sent += n;
+    }
 }
 
-void WebServer::handleConnection(SOCKET clientSocket)
+void WebServer::handleConnection (SOCKET clientSocket)
 {
     if (clientSocket == INVALID_SOCKET)
         return;
 
-    // Ensure client socket is in blocking mode so recv() honors SO_RCVTIMEO
-    if (!setSocketNonBlocking(clientSocket, false))
+    setSocketNonBlocking (clientSocket, false);
+
+    int timeoutMs = 5000;
+    setsockopt (clientSocket, SOL_SOCKET, SO_RCVTIMEO, (const char*) &timeoutMs, sizeof (timeoutMs));
+    setsockopt (clientSocket, SOL_SOCKET, SO_SNDTIMEO, (const char*) &timeoutMs, sizeof (timeoutMs));
+
+    constexpr int bufferSize = 8192;
+    char buffer[bufferSize] {};
+
+    std::string request;
+    size_t headerEnd = std::string::npos;
+
+    while ((int) request.size() < kMaxHeaderBytes)
     {
-        juce::Logger::getCurrentLogger()->writeToLog("WARN: Failed to set client socket to blocking mode");
+        const auto received = recv (clientSocket, buffer, bufferSize, 0);
+
+        if (received <= 0)
+            break;
+
+        request.append (buffer, (size_t) received);
+        headerEnd = request.find ("\r\n\r\n");
+
+        if (headerEnd != std::string::npos)
+            break;
     }
 
-    const int bufferSize = 8192;
-    char buffer[bufferSize] = {};
-    
-    // Set a receive timeout (5 seconds)
-    int timeoutMs = 5000;
-    setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO, 
-               (const char*)&timeoutMs, sizeof(timeoutMs));
-    
-    // Read initial data
-    int bytesReceived = recv(clientSocket, buffer, bufferSize - 1, 0);
-    
-    if (bytesReceived <= 0)
-    {
-        int err = WSAGetLastError();
-        if (err != WSAETIMEDOUT && err != 0)
-        {
-            juce::Logger::getCurrentLogger()->writeToLog(
-                "WARN: recv() failed, error: " + juce::String(err));
-        }
-        closesocket(clientSocket);
-        return;
-    }
-    
-    std::string requestStr(buffer, bytesReceived);
-    
-    // Parse initial request line (may contain partial headers)
-    std::string filePath, method;
-    std::string query = parseHttpRequest(requestStr, filePath, method);
-    
-    juce::Logger::getCurrentLogger()->writeToLog(
-        "WebServer: HTTP " + juce::String(method) + " " + juce::String(filePath));
-    
-    // Ensure headers are fully read (look for CRLFCRLF). If not present, read until found or until a reasonable header limit.
-    size_t headerEnd = requestStr.find("\r\n\r\n");
     if (headerEnd == std::string::npos)
     {
-        const size_t headerLimit = 64 * 1024; // 64KB max headers
-        while (requestStr.find("\r\n\r\n") == std::string::npos && requestStr.size() < headerLimit)
+        closesocket (clientSocket);
+        return;
+    }
+
+    std::string path, method;
+    const auto query = parseHttpRequest (request, path, method);
+
+    const auto headers = toLower (request.substr (0, headerEnd));
+
+    long long contentLength = 0;
+
+    if (const auto pos = headers.find ("content-length:"); pos != std::string::npos)
+    {
+        const auto valueStart = pos + std::string ("content-length:").size();
+        const auto lineEnd = headers.find ("\r\n", valueStart);
+        const auto text = headers.substr (valueStart, lineEnd == std::string::npos ? std::string::npos
+                                                                                  : lineEnd - valueStart);
+        try
         {
-            int b = recv(clientSocket, buffer, bufferSize - 1, 0);
-            if (b <= 0) break;
-            requestStr.append(buffer, b);
+            contentLength = std::stoll (text);
         }
-        headerEnd = requestStr.find("\r\n\r\n");
-    }
-    
-    std::string requestBody;
-    if (headerEnd != std::string::npos)
-    {
-        requestBody = requestStr.substr(headerEnd + 4);
-    }
-    
-    // Parse Content-Length (case-insensitive)
-    int contentLength = 0;
-    std::string lowerHeaders = (headerEnd == std::string::npos) ? std::string() : requestStr.substr(0, headerEnd);
-    std::transform(lowerHeaders.begin(), lowerHeaders.end(), lowerHeaders.begin(), [](unsigned char c){ return std::tolower(c); });
-    std::string clKey = "content-length:";
-    size_t clPos = lowerHeaders.find(clKey);
-    if (clPos != std::string::npos)
-    {
-        size_t lineEnd = lowerHeaders.find("\r\n", clPos);
-        std::string clVal;
-        if (lineEnd != std::string::npos)
-            clVal = lowerHeaders.substr(clPos + clKey.size(), lineEnd - (clPos + clKey.size()));
-        else
-            clVal = lowerHeaders.substr(clPos + clKey.size());
-        try { contentLength = std::stoi(clVal); } catch (...) { contentLength = 0; }
-    }
-    
-    // If more body is expected, read until contentLength bytes are accumulated or a timeout/error occurs
-    while (contentLength > 0 && (int)requestBody.size() < contentLength)
-    {
-        int need = std::min<int>(bufferSize - 1, contentLength - (int)requestBody.size());
-        int b = recv(clientSocket, buffer, need, 0);
-        if (b <= 0)
+        catch (...)
         {
-            int err = WSAGetLastError();
-            if (err != WSAETIMEDOUT && err != 0)
-            {
-                juce::Logger::getCurrentLogger()->writeToLog(
-                    "WARN: recv() while reading body failed, error: " + juce::String(err));
-            }
-            break;
+            contentLength = 0;
         }
-        requestBody.append(buffer, b);
     }
-    
-    juce::Logger::getCurrentLogger()->writeToLog(
-        "WebServer: Received request body length=" + juce::String((int)requestBody.size()));
-    
-    // Build HTTP response
-    std::ostringstream response;
+
+    int responseStatus = 200;
+    std::string responseContentType = "application/json";
     std::string responseBody;
-    std::string responseContentType = "text/html";
-    int responseStatusCode = 200;
-    
-    // Check if this is a REST API request
-    if (filePath.find("/api/") == 0)
+    std::string extraHeaders;
+
+    if (contentLength < 0 || contentLength > kMaxRequestBodyBytes)
     {
-        juce::Logger::getCurrentLogger()->writeToLog(
-            "WebServer: Routing REST API request: " + juce::String(method) + " " + juce::String(filePath));
-        
-        // Dispatch to REST API handler
-        auto apiResponse = dispatcher_.dispatch(method, filePath, query, requestBody);
-        responseStatusCode = apiResponse.statusCode;
-        responseContentType = apiResponse.contentType;
-        responseBody = apiResponse.body;
+        // Refuse before allocating: an attacker-chosen Content-Length used to be
+        // enough to make the server grow a string without bound.
+        responseStatus = 413;
+        responseBody = R"({"error":"Request body too large"})";
     }
     else
     {
-        // Serve static file
-        std::string contentType;
-        bool fileFound = serveFile(filePath, contentType, responseBody);
-        
-        if (fileFound)
+        auto body = request.substr (headerEnd + 4);
+        body.reserve ((size_t) contentLength);
+
+        while ((long long) body.size() < contentLength)
         {
-            responseStatusCode = 200;
-            responseContentType = contentType;
+            const auto want = (int) std::min<long long> (bufferSize, contentLength - (long long) body.size());
+            const auto received = recv (clientSocket, buffer, want, 0);
+
+            if (received <= 0)
+                break;
+
+            body.append (buffer, (size_t) received);
+        }
+
+        if (method == "OPTIONS")
+        {
+            // Preflight used to fall through to 405, which broke every
+            // cross-origin request the browser tried to make.
+            responseStatus = 204;
+            responseContentType = "text/plain";
+        }
+        else if (path.rfind ("/api/", 0) == 0)
+        {
+            const auto apiResponse = dispatcher_.dispatch (method, path, query, body);
+            responseStatus = apiResponse.statusCode;
+            responseContentType = apiResponse.contentType;
+            responseBody = apiResponse.body;
+        }
+        else if (method != "GET" && method != "HEAD")
+        {
+            responseStatus = 405;
+            responseBody = R"({"error":"Method Not Allowed"})";
         }
         else
         {
-            responseStatusCode = 404;
-            responseContentType = "text/html";
-            responseBody = "<!DOCTYPE html><html><body><h1>404 - File Not Found</h1>"
-                          "<p>The requested file was not found.</p></body></html>";
-            juce::Logger::getCurrentLogger()->writeToLog(
-                "WebServer: File not found: " + juce::String(filePath));
+            std::string contentType;
+
+            if (serveFile (path, contentType, responseBody))
+            {
+                responseContentType = contentType;
+            }
+            else if (path == "/" || path == "/index.html")
+            {
+                responseStatus = 200;
+                responseContentType = "text/html; charset=utf-8";
+                responseBody = buildFallbackPage();
+            }
+            else
+            {
+                responseStatus = 404;
+                responseContentType = "text/plain; charset=utf-8";
+                responseBody = "Not found";
+            }
         }
     }
-    
-    // Build HTTP response header
-    std::string statusLine;
-    switch (responseStatusCode)
-    {
-        case 200: statusLine = "HTTP/1.1 200 OK"; break;
-        case 400: statusLine = "HTTP/1.1 400 Bad Request"; break;
-        case 404: statusLine = "HTTP/1.1 404 Not Found"; break;
-        case 405: statusLine = "HTTP/1.1 405 Method Not Allowed"; break;
-        case 500: statusLine = "HTTP/1.1 500 Internal Server Error"; break;
-        default: statusLine = "HTTP/1.1 200 OK"; break;
-    }
-    
-    response << statusLine << "\r\n";
-    response << "Content-Type: " << responseContentType << "\r\n";
-    response << "Content-Length: " << responseBody.length() << "\r\n";
-    response << "Access-Control-Allow-Origin: *\r\n";
-    response << "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n";
-    response << "Access-Control-Allow-Headers: Content-Type\r\n";
-    response << "Cache-Control: no-cache\r\n";
-    response << "Connection: close\r\n";
-    response << "\r\n";
-    response << responseBody;
-    
-    std::string responseStr = response.str();
-    const char* data = responseStr.c_str();
-    int totalSize = (int)responseStr.length();
-    int bytesSent = 0;
-    
-    // Send all response data
-    while (bytesSent < totalSize && running_.load())
-    {
-        int sent = send(clientSocket, data + bytesSent, totalSize - bytesSent, 0);
-        if (sent == SOCKET_ERROR)
-        {
-            int err = WSAGetLastError();
-            juce::Logger::getCurrentLogger()->writeToLog(
-                "WARN: send() error: " + juce::String(err));
-            break;
-        }
-        bytesSent += sent;
-    }
-    
-    // Graceful shutdown
-    shutdown(clientSocket, SD_SEND);
-    closesocket(clientSocket);
+
+    std::ostringstream response;
+
+    response << "HTTP/1.1 " << statusText (responseStatus) << "\r\n"
+             << "Content-Type: " << responseContentType << "\r\n"
+             << "Content-Length: " << responseBody.size() << "\r\n"
+             << "Access-Control-Allow-Origin: *\r\n"
+             << "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n"
+             << "Access-Control-Allow-Headers: Content-Type\r\n"
+             << "X-Content-Type-Options: nosniff\r\n"
+             << "Cache-Control: no-store\r\n"
+             << "Connection: close\r\n"
+             << extraHeaders
+             << "\r\n";
+
+    if (method != "HEAD")
+        response << responseBody;
+
+    sendAll (clientSocket, response.str());
+
+    shutdown (clientSocket, SD_SEND);
+    closesocket (clientSocket);
 }
 
 void WebServer::run()
 {
-    juce::Logger::getCurrentLogger()->writeToLog(
-        "WebServer: Accept loop started on port " + juce::String(port_));
-    
     while (running_.load() && serverSocket_ != INVALID_SOCKET)
     {
-        sockaddr_in clientAddr = {};
-        int clientAddrLen = sizeof(clientAddr);
-        
-        // Accept with non-blocking socket (times out and returns INVALID_SOCKET)
-        SOCKET clientSocket = accept(serverSocket_, (sockaddr*)&clientAddr, &clientAddrLen);
-        
+        sockaddr_in clientAddr {};
+        int clientAddrLen = sizeof (clientAddr);
+
+        const auto clientSocket = accept (serverSocket_, (sockaddr*) &clientAddr, &clientAddrLen);
+
         if (clientSocket == INVALID_SOCKET)
         {
-            int err = WSAGetLastError();
-            
-            // WSAEWOULDBLOCK is normal for non-blocking socket when no connection is waiting
-            if (err == WSAEWOULDBLOCK)
+            const auto error = WSAGetLastError();
+
+            if (error == WSAEWOULDBLOCK)
             {
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                std::this_thread::sleep_for (std::chrono::milliseconds (5));
                 continue;
             }
-            
-            // WSAEINTR occurs when the socket is being shut down
-            if (err == WSAEINTR)
-            {
+
+            if (error == WSAEINTR || error == WSAENOTSOCK || ! running_.load())
                 break;
-            }
-            
-            if (running_.load())
-            {
-                juce::Logger::getCurrentLogger()->writeToLog(
-                    "WARN: accept() error: " + juce::String(err));
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            }
+
+            std::this_thread::sleep_for (std::chrono::milliseconds (50));
             continue;
         }
-        
-        // Get client IP for logging
-        char clientIP[INET_ADDRSTRLEN] = {};
-        inet_ntop(AF_INET, &clientAddr.sin_addr, clientIP, INET_ADDRSTRLEN);
-        juce::Logger::getCurrentLogger()->writeToLog(
-            "WebServer: Connection accepted from " + juce::String(clientIP) + 
-            ":" + juce::String(ntohs(clientAddr.sin_port)));
-        
-        // Handle connection asynchronously to keep accept() loop responsive
-        handleConnectionAsync(clientSocket);
-    }
-    
-    juce::Logger::getCurrentLogger()->writeToLog("WebServer: Accept loop exited");
-}
 
+        if (! running_.load())
+        {
+            closesocket (clientSocket);
+            break;
+        }
+
+        // Counted before the thread starts, so stop() can never observe zero
+        // while a handler is about to begin.
+        activeConnections_.fetch_add (1);
+
+        std::thread ([this, clientSocket]
+        {
+            handleConnection (clientSocket);
+            activeConnections_.fetch_sub (1);
+        }).detach();
+    }
+}

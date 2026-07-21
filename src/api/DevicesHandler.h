@@ -1,24 +1,32 @@
 #pragma once
 
-#include "HttpHandler.h"
 #include <JuceHeader.h>
 
+#include "api/HttpHandler.h"
+#include "audio/AudioDeviceController.h"
+
 /**
- * Handles /api/devices endpoint for device enumeration and selection.
- * GET: Returns list of available input/output devices
- * POST: Sets selected input/output devices
+ * /api/devices
+ *
+ *   GET  /api/devices          current device plus everything available
+ *   POST /api/devices          { type?, inputDevice?, outputDevice?, sampleRate?, bufferSize? }
+ *   POST /api/devices/select   legacy alias for the above
+ *
+ * All work is delegated to AudioDeviceController, which marshals onto the
+ * message thread -- this handler runs on a Winsock connection thread and must
+ * never touch the device manager itself.
  */
 class DevicesHandler final : public HttpHandler
 {
 public:
-    explicit DevicesHandler(juce::AudioDeviceManager& deviceManager)
-        : deviceManager_(deviceManager)
+    explicit DevicesHandler (milodikfx::audio::AudioDeviceController& controllerToUse)
+        : controller (controllerToUse)
     {
     }
 
-    Response handleGet(const std::string& path, const std::string& query) const override;
-    Response handlePost(const std::string& path, const std::string& body) override;
+    Response handleGet (const std::string& path, const std::string& query) const override;
+    Response handlePost (const std::string& path, const std::string& body) override;
 
 private:
-    juce::AudioDeviceManager& deviceManager_;
+    milodikfx::audio::AudioDeviceController& controller;
 };

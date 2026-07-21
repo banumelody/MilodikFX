@@ -6,13 +6,17 @@
 namespace milodikfx::dsp {
 
 /**
- * @brief Dynamic range compressor with adjustable ratio, threshold, attack/release.
+ * @brief Stereo-linked feed-forward compressor with a dB-domain gain computer.
+ *
+ * The detector is shared across channels so the stereo image does not shift,
+ * and the envelope is clamped//guarded so a bad parameter combination can never
+ * latch a non-finite value into the signal path.
  */
 class CompressorProcessor final : public AudioProcessorBase
 {
 public:
     CompressorProcessor() = default;
-    
+
     void prepareToPlay (double sampleRate, int samplesPerBlock, int numChannels) override;
     void processBlock (juce::AudioBuffer<float>& buffer) override;
     void reset() override;
@@ -35,7 +39,14 @@ public:
     bool getAutoMakeupGain() const noexcept;
     bool isEnabled() const noexcept;
 
+    /** Most recent gain reduction in dB (<= 0). Safe to read from any thread. */
+    float getGainReductionDb() const noexcept;
+
 private:
+    // Envelope floor: the detector never reports quieter than this, which keeps
+    // log10 away from zero without needing an epsilon fudge in the signal.
+    static constexpr float kDetectorFloorDb = -120.0f;
+
     double sampleRate = 44100.0;
     std::atomic<float> inputGainDb { 0.0f };
     std::atomic<float> thresholdDb { -24.0f };
@@ -44,12 +55,17 @@ private:
     std::atomic<float> releaseMs { 100.0f };
     std::atomic<bool> autoMakeupGain { true };
     std::atomic<bool> enabled { true };
+    std::atomic<bool> timingDirty { true };
+    std::atomic<float> gainReductionDb { 0.0f };
 
-    float envelopeDb = -100.0f;
-    float alphaAttack = 0.0f;
-    float alphaRelease = 0.0f;
+    // Audio-thread-owned state.
+    float envelopeDb = 0.0f;
+    float alphaAttack = 1.0f;
+    float alphaRelease = 1.0f;
+    float lastAttackMs = -1.0f;
+    float lastReleaseMs = -1.0f;
 
-    void updateCoefficients();
+    void updateCoefficientsIfNeeded() noexcept;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CompressorProcessor)
 };

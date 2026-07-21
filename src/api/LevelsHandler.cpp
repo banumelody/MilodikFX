@@ -1,28 +1,23 @@
-#include "LevelsHandler.h"
+#include "api/LevelsHandler.h"
 
-HttpHandler::Response LevelsHandler::handleGet(
-    const std::string& path,
-    const std::string& query) const
+#include "api/ApiJson.h"
+
+using namespace milodikfx::api;
+
+HttpHandler::Response LevelsHandler::handleGet (const std::string&, const std::string&) const
 {
-    try
-    {
-        float inLevel = inputLevel_.load(std::memory_order_relaxed);
-        float outLevel = outputLevel_.load(std::memory_order_relaxed);
-        
-        // Build JSON response
-        std::string json = "{\n";
-        json += "  \"inputLevel\": " + std::to_string(inLevel) + ",\n";
-        json += "  \"outputLevel\": " + std::to_string(outLevel) + "\n";
-        json += "}";
-        
-        return { 200, "application/json", json };
-    }
-    catch (const std::exception& e)
-    {
-        return {
-            500,
-            "application/json",
-            std::string(R"({"error":"Exception: )") + e.what() + R"("})"
-        };
-    }
+    auto* object = new juce::DynamicObject();
+
+    object->setProperty ("inputLevel", inputLevel.load (std::memory_order_relaxed));
+    object->setProperty ("outputLevel", outputLevel.load (std::memory_order_relaxed));
+    object->setProperty ("gateGain", gateGain.load (std::memory_order_relaxed));
+    object->setProperty ("compressorReductionDb", compressorReductionDb.load (std::memory_order_relaxed));
+    object->setProperty ("limiterReductionDb", limiterReductionDb.load (std::memory_order_relaxed));
+    object->setProperty ("cpuPercent", cpuLoadPercent.load (std::memory_order_relaxed));
+    object->setProperty ("sampleRate", currentSampleRate.load (std::memory_order_relaxed));
+    object->setProperty ("bufferSize", currentBufferSize.load (std::memory_order_relaxed));
+    object->setProperty ("audioRunning", audioRunning.load (std::memory_order_relaxed));
+    object->setProperty ("floorDb", kFloorDb);
+
+    return jsonOk (juce::var (object));
 }
