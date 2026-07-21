@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { ChainStrip } from './components/ChainStrip';
 import { DeviceSettings } from './components/DeviceSettings';
 import { EffectRack, EFFECT_ACCENTS } from './components/EffectRack';
 import { Knob } from './components/Knob';
 import { LevelMeter, ReductionMeter } from './components/LevelMeter';
 import { PresetControls } from './components/PresetControls';
+import { Sparkline } from './components/Sparkline';
 import {
   deletePreset,
   getDevices,
@@ -12,6 +14,7 @@ import {
   getPresets,
   loadPreset,
   optimiseDevice,
+  revealIrFolder,
   savePreset,
   setDevice,
   setEffectEnabled,
@@ -29,6 +32,9 @@ type Connection = 'connecting' | 'online' | 'offline';
 
 /** Coalescing window for parameter writes, in ms. */
 const WRITE_INTERVAL_MS = 40;
+
+/** How many CPU samples the history plot keeps (~60 s at 100 ms polling). */
+const CPU_HISTORY_LENGTH = 600;
 
 const IDLE_LEVELS: Levels = {
   inputLevel: -100,
@@ -51,6 +57,7 @@ function describeError(error: unknown) {
 export function App() {
   const [effects, setEffects] = useState<EffectDescriptor[]>([]);
   const [levels, setLevels] = useState<Levels>(IDLE_LEVELS);
+  const [cpuHistory, setCpuHistory] = useState<number[]>([]);
   const [devices, setDevices] = useState<DevicesResponse | null>(null);
   const [presets, setPresets] = useState<string[]>([]);
   const [selectedPreset, setSelectedPreset] = useState('');
@@ -61,7 +68,9 @@ export function App() {
 
   // Writes are coalesced per parameter: dragging a knob fires a pointermove per
   // frame, and the engine runs one thread per connection.
-  const pendingWrites = useRef(new Map<string, { effect: string; parameter: string; value: number }>());
+  const pendingWrites = useRef(
+    new Map<string, { effect: string; parameter: string; value: number | string }>(),
+  );
   const flushTimer = useRef<number | null>(null);
 
   const refreshEffects = useCallback(async () => {
@@ -110,6 +119,12 @@ export function App() {
       (next) => {
         setLevels(next);
         setConnection('online');
+        setCpuHistory((history) => {
+          const appended = [...history, next.cpuPercent];
+          return appended.length > CPU_HISTORY_LENGTH
+            ? appended.slice(appended.length - CPU_HISTORY_LENGTH)
+            : appended;
+        });
       },
       () => setConnection('offline'),
     );
@@ -138,7 +153,7 @@ export function App() {
   }, []);
 
   const handleParameterChange = useCallback(
-    (effectId: string, parameterId: string, value: number) => {
+    (effectId: string, parameterId: string, value: number | string) => {
       // Update locally first so the knob tracks the pointer even if the engine
       // is momentarily slow; the value is authoritative on the next refresh.
       setEffects((current) =>
@@ -216,18 +231,15 @@ export function App() {
     }
   }, [refreshDevices]);
 
-  const withMessage = useCallback(
-    async (action: () => Promise<void>, success: string) => {
-      try {
-        await action();
-        setMessage(success);
-        window.setTimeout(() => setMessage(null), 2500);
-      } catch (error) {
-        setMessage(describeError(error));
-      }
-    },
-    [],
-  );
+  const withMessage = useCallback(async (action: () => Promise<void>, success: string) => {
+    try {
+      await action();
+      setMessage(success);
+      window.setTimeout(() => setMessage(null), 2500);
+    } catch (error) {
+      setMessage(describeError(error));
+    }
+  }, []);
 
   const handlePresetLoad = useCallback(
     (name: string) =>
@@ -257,10 +269,69 @@ export function App() {
     [refreshPresets, withMessage],
   );
 
+  const handleRevealIr = useCallback(
+    () =>
+      void withMessage(async () => {
+        await revealIrFolder('cabinet');
+        // The folder is open; a refresh picks up whatever was dropped into it.
+        window.setTimeout(() => void refreshEffects(), 1500);
+      }, 'Folder impulse response dibuka'),
+    [refreshEffects, withMessage],
+  );
+
   const master = useMemo(() => effects.find((effect) => effect.id === 'master'), [effects]);
   const masterVolume = master?.parameters.find((parameter) => parameter.id === 'volumeDb');
+  const masterMuted = master?.parameters.find((parameter) => parameter.id === 'muted');
+
+  const global = useMemo(() => effects.find((effect) => effect.id === 'global'), [effects]);
+  const bypass = global?.parameters.find((parameter) => parameter.id === 'bypass');
 
   const offline = connection === 'offline';
+  const isMuted = Number(masterMuted?.value ?? 0) >= 0.5;
+  const isBypassed = Number(bypass?.value ?? 0) >= 0.5;
+
+  const toggleMute = useCallback(() => {
+    if (offline || !masterMuted) return;
+    handleParameterChange('master', 'muted', isMuted ? 0 : 1);
+  }, [offline, masterMuted, isMuted, handleParameterChange]);
+
+  const toggleBypass = useCallback(() => {
+    if (offline || !bypass) return;
+    handleParameterChange('global', 'bypass', isBypassed ? 0 : 1);
+  }, [offline, bypass, isBypassed, handleParameterChange]);
+
+  // Panic controls have to be reachable without hunting for a card. Escape mutes
+  // and B compares against the dry signal; both are ignored while typing.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing =
+        target != null &&
+        (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.isContentEditable);
+
+      if (typing || event.ctrlKey || event.altKey || event.metaKey) return;
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        toggleMute();
+      } else if (event.key === 'b' || event.key === 'B') {
+        event.preventDefault();
+        toggleBypass();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [toggleMute, toggleBypass]);
+
+  const scrollToEffect = useCallback((effectId: string) => {
+    document.getElementById(`rack-${effectId}`)?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+    });
+  }, []);
+
+  const rackEffects = useMemo(() => effects.filter((effect) => effect.id !== 'global'), [effects]);
 
   return (
     <div className="app">
@@ -274,16 +345,43 @@ export function App() {
         </div>
 
         <div className="topbar__meters">
-          <LevelMeter label="Input" db={levels.inputLevel} floorDb={levels.floorDb} />
-          <LevelMeter label="Output" db={levels.outputLevel} floorDb={levels.floorDb} />
+          <LevelMeter label="Input" db={levels.inputLevel} />
+          <LevelMeter label="Output" db={levels.outputLevel} />
           <ReductionMeter label="Comp" db={levels.compressorReductionDb} />
           <ReductionMeter label="Limiter" db={levels.limiterReductionDb} />
+        </div>
+
+        <div className="topbar__actions">
+          {bypass ? (
+            <button
+              type="button"
+              className={`pill-btn${isBypassed ? ' pill-btn--active' : ''}`}
+              disabled={offline}
+              onClick={toggleBypass}
+              title="Bandingkan dengan sinyal kering (B)"
+              aria-pressed={isBypassed}
+            >
+              Bypass
+            </button>
+          ) : null}
+          {masterMuted ? (
+            <button
+              type="button"
+              className={`pill-btn${isMuted ? ' pill-btn--danger' : ''}`}
+              disabled={offline}
+              onClick={toggleMute}
+              title="Bisukan keluaran (Esc)"
+              aria-pressed={isMuted}
+            >
+              {isMuted ? 'Bisu' : 'Mute'}
+            </button>
+          ) : null}
         </div>
 
         <div className="topbar__master">
           {masterVolume ? (
             <Knob
-              value={masterVolume.value}
+              value={Number(masterVolume.value)}
               min={masterVolume.min}
               max={masterVolume.max}
               step={masterVolume.step}
@@ -317,11 +415,24 @@ export function App() {
         </div>
       ) : null}
 
+      {isBypassed ? (
+        <div className="banner banner--warn" role="status">
+          Global bypass aktif — kamu mendengar sinyal kering tanpa efek.
+        </div>
+      ) : null}
+
       {message ? (
         <div className="banner" role="status">
           {message}
         </div>
       ) : null}
+
+      <ChainStrip
+        effects={effects}
+        disabled={offline}
+        onSelect={scrollToEffect}
+        onToggle={(id, enabled) => void handleEnabledChange(id, enabled)}
+      />
 
       <main className="layout">
         <div className="layout__chain">
@@ -329,10 +440,12 @@ export function App() {
             <p className="layout__empty">Memuat rantai efek...</p>
           ) : null}
 
-          {effects.map((effect) => (
+          {rackEffects.map((effect, index) => (
             <EffectRack
               key={effect.id}
               effect={effect}
+              index={index + 1}
+              total={rackEffects.length}
               disabled={offline}
               onParameterChange={handleParameterChange}
               onEnabledChange={(id, enabled) => void handleEnabledChange(id, enabled)}
@@ -359,10 +472,26 @@ export function App() {
             onDelete={handlePresetDelete}
           />
 
+          <section className="panel" aria-label="Impulse response">
+            <header className="panel__head">
+              <h2 className="panel__title">Impulse Response</h2>
+              <button type="button" className="btn btn--ghost" disabled={offline} onClick={handleRevealIr}>
+                Buka folder
+              </button>
+            </header>
+            <p className="panel__hint">
+              Letakkan berkas WAV di folder <code>Cabinets</code> atau <code>Reverbs</code>, lalu
+              pilih pada kartu Cabinet / Reverb. Tanpa berkas, keduanya memakai algoritma bawaan.
+            </p>
+          </section>
+
           <section className="panel" aria-label="Performa">
             <header className="panel__head">
               <h2 className="panel__title">Performa</h2>
             </header>
+
+            <Sparkline values={cpuHistory} max={100} label="Riwayat beban DSP" />
+
             <dl className="stats">
               <div>
                 <dt>Beban DSP</dt>
@@ -384,7 +513,13 @@ export function App() {
               </div>
               <div>
                 <dt>Gate</dt>
-                <dd>{levels.gateGain > 0.99 ? 'Terbuka' : levels.gateGain < 0.01 ? 'Tertutup' : 'Menutup'}</dd>
+                <dd>
+                  {levels.gateGain > 0.99
+                    ? 'Terbuka'
+                    : levels.gateGain < 0.01
+                      ? 'Tertutup'
+                      : 'Menutup'}
+                </dd>
               </div>
             </dl>
           </section>

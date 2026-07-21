@@ -9,6 +9,7 @@
 
 #include "dsp/AudioProcessorBase.h"
 #include "dsp/Biquad.h"
+#include "dsp/IrEngine.h"
 
 namespace milodikfx::dsp
 {
@@ -38,6 +39,13 @@ public:
     void setEnabled (bool shouldEnable) noexcept;
     bool isEnabled() const noexcept;
 
+    /** false = analytic filter chain, true = convolution with a loaded IR. */
+    void setUseImpulseResponse (bool shouldUseIr) noexcept;
+    bool isUsingImpulseResponse() const noexcept;
+
+    /** The shared convolution front-end; owned here, driven by the API layer. */
+    IrEngine& getIrEngine() noexcept { return irEngine; }
+
 private:
     static constexpr int kNumStages = 6;
 
@@ -53,6 +61,9 @@ private:
     std::atomic<float> presenceDb { 0.0f };
     std::atomic<float> toneHz { 5500.0f };
     std::atomic<bool> enabled { true };
+    std::atomic<bool> useImpulseResponse { false };
+
+    IrEngine irEngine;
 
     // Audio-thread-owned.
     std::array<BiquadCoeffs, kNumStages> coeffs;

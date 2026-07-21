@@ -4,6 +4,7 @@ import type { EffectDescriptor, ParameterDescriptor } from '../services/api';
 
 /** Accent per effect, so the rack reads as a signal chain rather than a list. */
 export const EFFECT_ACCENTS: Record<string, string> = {
+  global: '#8b95a7',
   input: '#8b95a7',
   noiseGate: '#5ac8fa',
   cleanBoost: '#4da3ff',
@@ -23,11 +24,14 @@ export const EFFECT_ACCENTS: Record<string, string> = {
  */
 const ENUM_OPTIONS: Record<string, string[]> = {
   'input.mode': ['Mono - Input 1', 'Mono - Input 2', 'Mono - Sum both', 'Stereo'],
+  'overdrive.oversampling': ['Mati', '2x', '4x', '8x'],
 };
 
 export interface EffectRackProps {
   effect: EffectDescriptor;
-  onParameterChange: (effectId: string, parameterId: string, value: number) => void;
+  index?: number;
+  total?: number;
+  onParameterChange: (effectId: string, parameterId: string, value: number | string) => void;
   onEnabledChange: (effectId: string, enabled: boolean) => void;
   disabled?: boolean;
 }
@@ -41,6 +45,8 @@ function formatValue(parameter: ParameterDescriptor, value: number) {
 
 export function EffectRack({
   effect,
+  index,
+  total,
   onParameterChange,
   onEnabledChange,
   disabled = false,
@@ -49,11 +55,22 @@ export function EffectRack({
   const inactive = disabled || !effect.enabled;
 
   return (
-    <section className={`rack${effect.enabled ? '' : ' rack--off'}`} aria-label={effect.label}>
+    <section
+      className={`rack${effect.enabled ? '' : ' rack--off'}`}
+      aria-label={effect.label}
+      id={`rack-${effect.id}`}
+      style={{ '--accent': accent } as React.CSSProperties}
+    >
       <header className="rack__head">
-        <span className="rack__dot" style={{ backgroundColor: accent }} aria-hidden="true" />
         <div className="rack__titles">
-          <h2 className="rack__title">{effect.label}</h2>
+          <h2 className="rack__title">
+            {index !== undefined && total !== undefined ? (
+              <span className="rack__index">
+                {index}/{total}
+              </span>
+            ) : null}
+            {effect.label}
+          </h2>
           <p className="rack__subtitle">{effect.description}</p>
         </div>
         {/* The input router and the master output are always in the path. A
@@ -74,19 +91,47 @@ export function EffectRack({
           const enumKey = `${effect.id}.${parameter.id}`;
           const options = ENUM_OPTIONS[enumKey];
 
+          // A text parameter (an impulse response, say) picks from whatever the
+          // engine reports is on disk, so the list is never hardcoded here.
+          if (parameter.type === 'text') {
+            const choices = parameter.options ?? [];
+
+            return (
+              <label key={parameter.id} className="rack__select">
+                <span className="rack__select-label">{parameter.label}</span>
+                <select
+                  value={String(parameter.value ?? '')}
+                  disabled={inactive}
+                  onChange={(event) =>
+                    onParameterChange(effect.id, parameter.id, event.target.value)
+                  }
+                >
+                  <option value="">
+                    {choices.length === 0 ? 'Belum ada berkas' : 'Tidak dipakai'}
+                  </option>
+                  {choices.map((choice) => (
+                    <option key={choice} value={choice}>
+                      {choice}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            );
+          }
+
           if (options) {
             return (
               <label key={parameter.id} className="rack__select">
                 <span className="rack__select-label">{parameter.label}</span>
                 <select
-                  value={String(Math.round(parameter.value))}
+                  value={String(Math.round(Number(parameter.value)))}
                   disabled={inactive}
                   onChange={(event) =>
                     onParameterChange(effect.id, parameter.id, Number(event.target.value))
                   }
                 >
-                  {options.map((option, index) => (
-                    <option key={option} value={index}>
+                  {options.map((option, optionIndex) => (
+                    <option key={option} value={optionIndex}>
                       {option}
                     </option>
                   ))}
@@ -99,7 +144,7 @@ export function EffectRack({
             return (
               <div key={parameter.id} className="rack__switch">
                 <Toggle
-                  checked={parameter.value >= 0.5}
+                  checked={Number(parameter.value) >= 0.5}
                   accent={accent}
                   label={parameter.label}
                   disabled={inactive}
@@ -113,7 +158,7 @@ export function EffectRack({
           return (
             <Knob
               key={parameter.id}
-              value={parameter.value}
+              value={Number(parameter.value)}
               min={parameter.min}
               max={parameter.max}
               step={parameter.step}

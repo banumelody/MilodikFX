@@ -6,6 +6,7 @@
 
 #include "api/DevicesHandler.h"
 #include "api/EffectsHandler.h"
+#include "api/IrHandler.h"
 #include "api/LevelsHandler.h"
 #include "api/ParameterRegistry.h"
 #include "api/ParametersHandler.h"
@@ -13,6 +14,7 @@
 #include "audio/AudioDeviceController.h"
 #include "audio/AudioEngine.h"
 #include "dsp/ChainFactory.h"
+#include "preset/IrLibrary.h"
 #include "preset/PresetManager.h"
 #include "ui/WebServer.h"
 
@@ -93,6 +95,7 @@ private:
 
     juce::PropertiesFile& settingsFile;
     milodikfx::preset::PresetManager presetManager;
+    milodikfx::preset::IrLibrary irLibrary;
     milodikfx::api::ParameterRegistry registry;
 
     juce::AudioDeviceManager deviceManager;

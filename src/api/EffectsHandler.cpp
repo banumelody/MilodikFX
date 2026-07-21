@@ -43,13 +43,19 @@ HttpHandler::Response EffectsHandler::handleGet (const std::string& path, const 
         {
             const auto* parameter = registry_.findParameter (effectId, segments[1]);
 
-            if (parameter == nullptr || ! parameter->get)
+            if (parameter == nullptr)
                 return jsonError (404, "Unknown parameter");
 
             auto* object = new juce::DynamicObject();
             object->setProperty ("effect", juce::String (effectId));
             object->setProperty ("parameter", juce::String (parameter->id));
-            object->setProperty ("value", parameter->get());
+
+            if (parameter->isText)
+                object->setProperty ("value", parameter->getText ? parameter->getText() : juce::String());
+            else if (parameter->get)
+                object->setProperty ("value", parameter->get());
+            else
+                return jsonError (404, "Unknown parameter");
 
             return jsonOk (juce::var (object));
         }
@@ -126,6 +132,30 @@ HttpHandler::Response EffectsHandler::handlePut (const std::string& path, const 
             auto* object = new juce::DynamicObject();
             object->setProperty ("effect", juce::String (effectId));
             object->setProperty ("enabled", enabled);
+
+            return jsonOk (juce::var (object));
+        }
+
+        // Text-valued parameters (an impulse-response choice, say) carry a
+        // string; everything else carries a number.
+        const auto* descriptor = registry_.findParameter (effectId, segments[1]);
+
+        if (descriptor != nullptr && descriptor->isText)
+        {
+            const auto requested = parsed["value"];
+
+            if (! requested.isString())
+                return jsonError (400, "Body must contain a string 'value'");
+
+            juce::String appliedText;
+
+            if (! registry_.setTextParameter (effectId, segments[1], requested.toString(), appliedText))
+                return jsonError (404, "Unknown effect or parameter");
+
+            auto* object = new juce::DynamicObject();
+            object->setProperty ("effect", juce::String (effectId));
+            object->setProperty ("parameter", juce::String (segments[1]));
+            object->setProperty ("value", appliedText);
 
             return jsonOk (juce::var (object));
         }

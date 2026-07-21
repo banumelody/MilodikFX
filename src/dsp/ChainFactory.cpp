@@ -56,6 +56,45 @@ ProcessorType* add (DSPChainManager& chain)
 {
     return dynamic_cast<ProcessorType*> (chain.addProcessor (std::make_unique<ProcessorType>()));
 }
+
+/**
+ * Builds the "which impulse response" control for a processor that owns an
+ * IrEngine. Selecting a name loads it immediately; an unknown or unreadable
+ * name clears the engine, which makes the processor fall back to its own
+ * algorithm rather than going silent.
+ */
+template <typename ProcessorType>
+ParameterDescriptor makeIrFileParam (ProcessorType* processor,
+                                     milodikfx::preset::IrLibrary& library,
+                                     milodikfx::preset::IrLibrary::Category category)
+{
+    ParameterDescriptor p;
+    p.id = "irFile";
+    p.label = "Impulse Response";
+    p.isText = true;
+
+    p.getText = [processor] { return processor->getIrEngine().getLoadedName(); };
+
+    p.setText = [processor, &library, category] (const juce::String& name)
+    {
+        auto& engine = processor->getIrEngine();
+
+        if (name.isEmpty())
+        {
+            engine.clear();
+            return;
+        }
+
+        const auto file = library.resolve (category, name);
+
+        if (! engine.loadFromFile (file))
+            engine.clear();
+    };
+
+    p.getOptions = [&library, category] { return library.list (category); };
+
+    return p;
+}
 } // namespace
 
 GuitarChain buildGuitarChain (DSPChainManager& chain)
@@ -82,9 +121,11 @@ GuitarChain buildGuitarChain (DSPChainManager& chain)
 void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
                               const GuitarChain& chain,
                               DSPChainManager& manager,
-                              std::function<float()> getInputMode,
-                              std::function<void (float)> setInputMode)
+                              ChainExtras extras)
 {
+    auto getInputMode = std::move (extras.getInputMode);
+    auto setInputMode = std::move (extras.setInputMode);
+
     // Global controls that belong to the chain as a whole rather than to any one
     // effect. Always in the path, so never toggleable as a unit.
     {
@@ -263,6 +304,16 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         e.parameters.push_back (makeParam ("toneHz", "Tone", "Hz", 2000.0f, 8000.0f, 50.0f, 5500.0f,
                                            [p] { return p->getToneHz(); },
                                            [p] (float v) { p->setToneHz (v); }));
+
+        if (extras.irLibrary != nullptr)
+        {
+            e.parameters.push_back (makeToggle ("irEnabled", "Pakai IR", false,
+                                                [p] { return p->isUsingImpulseResponse(); },
+                                                [p] (bool v) { p->setUseImpulseResponse (v); }));
+            e.parameters.push_back (makeIrFileParam (p, *extras.irLibrary,
+                                                     milodikfx::preset::IrLibrary::Category::cabinet));
+        }
+
         registry.addEffect (std::move (e));
     }
 
@@ -312,6 +363,16 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         e.parameters.push_back (makeParam ("dryWetMix", "Mix", "", 0.0f, 1.0f, 0.01f, 0.25f,
                                            [p] { return p->getDryWetMix(); },
                                            [p] (float v) { p->setDryWetMix (v); }));
+
+        if (extras.irLibrary != nullptr)
+        {
+            e.parameters.push_back (makeToggle ("irEnabled", "Pakai IR", false,
+                                                [p] { return p->isUsingImpulseResponse(); },
+                                                [p] (bool v) { p->setUseImpulseResponse (v); }));
+            e.parameters.push_back (makeIrFileParam (p, *extras.irLibrary,
+                                                     milodikfx::preset::IrLibrary::Category::reverb));
+        }
+
         registry.addEffect (std::move (e));
     }
 

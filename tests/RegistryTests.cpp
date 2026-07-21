@@ -295,8 +295,11 @@ public:
         milodikfx::dsp::registerChainParameters (pluginRegistry, chain, manager);
 
         milodikfx::api::ParameterRegistry appRegistry;
-        milodikfx::dsp::registerChainParameters (
-            appRegistry, chain, manager, [] { return 0.0f; }, [] (float) {});
+        milodikfx::dsp::ChainExtras appExtras;
+        appExtras.getInputMode = [] { return 0.0f; };
+        appExtras.setInputMode = [] (float) {};
+
+        milodikfx::dsp::registerChainParameters (appRegistry, chain, manager, std::move (appExtras));
 
         expectEquals ((int) pluginRegistry.getEffects().size(), 11);
         expectEquals ((int) appRegistry.getEffects().size(), 12);

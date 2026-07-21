@@ -12,7 +12,11 @@ describe('MilodikFX UI against a live engine', () => {
 
   it('renders the signal chain the engine reports', () => {
     cy.request('/api/effects').then(({ body }) => {
-      const labels: string[] = body.effects.map((effect: { label: string }) => effect.label);
+      // "global" holds chain-wide controls rather than a stage, so it is
+      // surfaced in the top bar instead of as a card in the rack.
+      const labels: string[] = body.effects
+        .filter((effect: { id: string }) => effect.id !== 'global')
+        .map((effect: { label: string }) => effect.label);
 
       expect(labels.length).to.be.greaterThan(5);
 
@@ -118,6 +122,89 @@ describe('MilodikFX UI against a live engine', () => {
     });
 
     cy.request('POST', '/api/presets/delete', { name });
+  });
+
+  it('draws the signal chain in order, from input to output', () => {
+    cy.get('nav[aria-label="Rantai sinyal"]').should('exist');
+    cy.contains('nav[aria-label="Rantai sinyal"] span', 'IN').should('be.visible');
+    cy.contains('nav[aria-label="Rantai sinyal"] span', 'OUT').should('be.visible');
+
+    cy.request('/api/effects').then(({ body }) => {
+      const stages = body.effects
+        .filter((e: { id: string }) => e.id !== 'input' && e.id !== 'global')
+        .map((e: { label: string }) => e.label);
+
+      cy.get('nav[aria-label="Rantai sinyal"] button').should('have.length', stages.length);
+
+      cy.get('nav[aria-label="Rantai sinyal"] button').then(($buttons) => {
+        const rendered = [...$buttons].map((b) => b.textContent);
+        expect(rendered).to.deep.equal(stages);
+      });
+    });
+  });
+
+  it('toggles global bypass from the top bar', () => {
+    cy.request('PUT', '/api/effects/global/bypass', { value: 0 });
+    cy.reload();
+
+    cy.contains('button', 'Bypass').click();
+    cy.wait(300);
+
+    cy.request('/api/effects/global/bypass').then(({ body }) => {
+      expect(Number(body.value)).to.eq(1);
+    });
+
+    cy.contains('Global bypass aktif').should('be.visible');
+
+    cy.contains('button', 'Bypass').click();
+    cy.wait(300);
+
+    cy.request('/api/effects/global/bypass').then(({ body }) => {
+      expect(Number(body.value)).to.eq(0);
+    });
+  });
+
+  it('mutes with the Escape key', () => {
+    cy.request('PUT', '/api/effects/master/muted', { value: 0 });
+    cy.reload();
+
+    // The shortcut does nothing until the effect list has arrived, so wait for
+    // the control it drives rather than racing the first fetch.
+    cy.contains('button', 'Mute').should('be.visible');
+
+    cy.get('body').type('{esc}');
+    cy.wait(300);
+
+    cy.request('/api/effects/master/muted').then(({ body }) => {
+      expect(Number(body.value)).to.eq(1);
+    });
+
+    cy.get('body').type('{esc}');
+    cy.wait(300);
+
+    cy.request('/api/effects/master/muted').then(({ body }) => {
+      expect(Number(body.value)).to.eq(0);
+    });
+  });
+
+  it('offers the impulse responses the engine reports', () => {
+    cy.request('/api/ir').then(({ body }) => {
+      expect(body).to.have.property('cabinetDirectory');
+      expect(body).to.have.property('cabinets');
+
+      cy.request('/api/effects/cabinet').then((response) => {
+        const irFile = response.body.parameters.find(
+          (p: { id: string }) => p.id === 'irFile',
+        );
+
+        expect(irFile, 'cabinet exposes an irFile parameter').to.not.be.undefined;
+        expect(irFile.type).to.eq('text');
+        // Whatever is on disk is exactly what the UI must offer.
+        expect(irFile.options).to.deep.equal(body.cabinets);
+      });
+    });
+
+    cy.get('section[aria-label="Cabinet"] select').should('exist');
   });
 
   it('exposes the device panel with a latency readout', () => {

@@ -72,7 +72,9 @@ private:
 MainComponent::MainComponent (juce::PropertiesFile& settingsFileToUse)
     : settingsFile (settingsFileToUse),
       presetManager (juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
-                         .getChildFile ("MilodikFX/Presets"))
+                         .getChildFile ("MilodikFX/Presets")),
+      irLibrary (juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
+                     .getChildFile ("MilodikFX/ImpulseResponses"))
 {
     log ("=== MainComponent constructor starting ===");
 
@@ -171,15 +173,16 @@ void MainComponent::buildRegistry()
     // The input stage belongs to the standalone app: it decides how the
     // interface's channels map into the chain. A plugin has no say in that, so
     // the shared factory only adds it when these accessors are supplied.
-    milodikfx::dsp::registerChainParameters (
-        registry,
-        chainProcessors,
-        audioEngine.getChain(),
-        [this] { return (float) inputMode.load (std::memory_order_relaxed); },
-        [this] (float v)
-        {
-            inputMode.store (juce::jlimit (0, 3, (int) std::lround (v)), std::memory_order_relaxed);
-        });
+    milodikfx::dsp::ChainExtras extras;
+    extras.irLibrary = &irLibrary;
+    extras.getInputMode = [this] { return (float) inputMode.load (std::memory_order_relaxed); };
+    extras.setInputMode = [this] (float v)
+    {
+        inputMode.store (juce::jlimit (0, 3, (int) std::lround (v)), std::memory_order_relaxed);
+    };
+
+    milodikfx::dsp::registerChainParameters (registry, chainProcessors, audioEngine.getChain(),
+                                             std::move (extras));
 
     registry.onChanged = [this] { markSettingsDirty(); };
 
@@ -303,6 +306,7 @@ void MainComponent::startServer()
     webServer->registerApiHandler ("/api/parameters",
                                    std::make_shared<ParametersHandler> (registry, "master", "volumeDb"));
     webServer->registerApiHandler ("/api/effects", std::make_shared<EffectsHandler> (registry));
+    webServer->registerApiHandler ("/api/ir", std::make_shared<IrHandler> (irLibrary));
     webServer->registerApiHandler ("/api/levels", levelsHandler);
     webServer->registerApiHandler ("/api/presets", presetsHandler);
     webServer->registerApiHandler ("/api/health", std::make_shared<HealthHandler>());

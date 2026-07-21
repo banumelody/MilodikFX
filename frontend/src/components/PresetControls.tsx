@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 export interface PresetControlsProps {
   presets: string[];
@@ -18,25 +18,50 @@ export function PresetControls({
   onDelete,
 }: PresetControlsProps) {
   const [draftName, setDraftName] = useState('');
+  const [search, setSearch] = useState('');
 
   const nameToSave = draftName.trim() || selected;
+
+  // Filtering happens here rather than server-side: the whole list already
+  // arrived with GET /api/presets, so a round trip per keystroke buys nothing.
+  const visible = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return presets;
+    return presets.filter((name) => name.toLowerCase().includes(needle));
+  }, [presets, search]);
 
   return (
     <section className="panel" aria-label="Preset">
       <header className="panel__head">
         <h2 className="panel__title">Preset</h2>
+        <span className="panel__count">{presets.length}</span>
       </header>
 
       <div className="preset">
+        {presets.length > 4 ? (
+          <input
+            className="preset__input"
+            type="search"
+            placeholder="Cari preset"
+            value={search}
+            disabled={busy}
+            onChange={(event) => setSearch(event.target.value)}
+            aria-label="Cari preset"
+          />
+        ) : null}
+
         <select
           className="preset__select"
+          size={Math.min(6, Math.max(2, visible.length))}
           value={selected}
-          disabled={busy || presets.length === 0}
+          disabled={busy || visible.length === 0}
           onChange={(event) => onLoad(event.target.value)}
           aria-label="Pilih preset"
         >
-          {presets.length === 0 ? <option value="">Belum ada preset</option> : null}
-          {presets.map((name) => (
+          {visible.length === 0 ? (
+            <option value="">{presets.length === 0 ? 'Belum ada preset' : 'Tidak ada yang cocok'}</option>
+          ) : null}
+          {visible.map((name) => (
             <option key={name} value={name}>
               {name}
             </option>

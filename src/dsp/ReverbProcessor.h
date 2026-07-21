@@ -1,6 +1,8 @@
 #pragma once
 
 #include "AudioProcessorBase.h"
+#include "IrEngine.h"
+
 #include <array>
 #include <atomic>
 #include <vector>
@@ -30,6 +32,12 @@ public:
     void setDecayTime (float seconds) noexcept;  // 0.5-10.0
     void setWidth (float width) noexcept;        // 0.0-1.0
     void setEnabled (bool enabled) noexcept;
+
+    /** false = the algorithmic room, true = convolution with a loaded IR. */
+    void setUseImpulseResponse (bool shouldUseIr) noexcept;
+    bool isUsingImpulseResponse() const noexcept;
+
+    IrEngine& getIrEngine() noexcept { return irEngine; }
 
     // Parameter getters
     float getRoomSize() const noexcept;
@@ -106,6 +114,15 @@ private:
     std::atomic<float> width { 1.0f };
     std::atomic<bool> enabled { true };
     std::atomic<bool> parametersDirty { true };
+    std::atomic<bool> useImpulseResponse { false };
+
+    IrEngine irEngine;
+
+    // Dry/wet for the convolution path, which the algorithmic mix constants do
+    // not apply to. Fixed size so nothing is reallocated under running audio.
+    static constexpr int kMaxIrChannels = 2;
+    static constexpr int kMaxIrBlock = 8192;
+    juce::AudioBuffer<float> irDryCopy;
 
     std::array<CombFilter, kNumCombFilters> combL;
     std::array<CombFilter, kNumCombFilters> combR;

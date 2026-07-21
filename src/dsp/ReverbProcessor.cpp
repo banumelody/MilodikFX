@@ -103,12 +103,18 @@ ReverbProcessor::ReverbProcessor()
         allpassL[(size_t) i].allocate (kAllpassFilterTuning[i]);
         allpassR[(size_t) i].allocate (kAllpassFilterTuning[i] + kStereoSpread);
     }
+
+    // Same discipline as the delay lines: sized once, never resized.
+    irDryCopy.setSize (kMaxIrChannels, kMaxIrBlock, false, true, false);
 }
 
 void ReverbProcessor::prepareToPlay (double sampleRateIn, int samplesPerBlock, int numChannels)
 {
-    juce::ignoreUnused (samplesPerBlock, numChannels);
     sampleRate = sampleRateIn > 0.0 ? sampleRateIn : 44100.0;
+
+    irEngine.prepare (sampleRate,
+                      juce::jmax (1, samplesPerBlock),
+                      juce::jlimit (1, kMaxIrChannels, numChannels));
 
     const auto scale = sampleRate / 44100.0;
 
@@ -188,6 +194,36 @@ void ReverbProcessor::processBlock (juce::AudioBuffer<float>& buffer)
     if (numChannels <= 0 || numSamples <= 0 || combL[0].buffer.empty())
         return;
 
+    // Convolution mode: the IR carries the room, so only the dry/wet balance is
+    // applied here. Falls through to the algorithmic path when nothing is loaded.
+    if (useImpulseResponse.load (std::memory_order_relaxed) && irEngine.hasImpulseResponse())
+    {
+        const auto irChannels = juce::jmin (numChannels, kMaxIrChannels);
+
+        if (numSamples <= irDryCopy.getNumSamples() && irChannels > 0)
+        {
+            for (int ch = 0; ch < irChannels; ++ch)
+                irDryCopy.copyFrom (ch, 0, buffer, ch, 0, numSamples);
+
+            if (irEngine.process (buffer))
+            {
+                const auto mix = dryWetMix.load (std::memory_order_relaxed);
+                auto* const* wet = buffer.getArrayOfWritePointers();
+
+                for (int ch = 0; ch < irChannels; ++ch)
+                    for (int i = 0; i < numSamples; ++i)
+                        wet[ch][i] = irDryCopy.getSample (ch, i) * (1.0f - mix) + wet[ch][i] * mix;
+
+                return;
+            }
+
+            // Convolution declined the block, so put the dry signal back before
+            // handing over to the algorithmic path.
+            for (int ch = 0; ch < irChannels; ++ch)
+                buffer.copyFrom (ch, 0, irDryCopy, ch, 0, numSamples);
+        }
+    }
+
     auto* const* channels = buffer.getArrayOfWritePointers();
     const auto hasRight = numChannels > 1;
 
@@ -226,6 +262,18 @@ void ReverbProcessor::reset()
     for (auto& c : combR) c.reset();
     for (auto& a : allpassL) a.reset();
     for (auto& a : allpassR) a.reset();
+
+    irEngine.reset();
+}
+
+void ReverbProcessor::setUseImpulseResponse (bool shouldUseIr) noexcept
+{
+    useImpulseResponse.store (shouldUseIr, std::memory_order_relaxed);
+}
+
+bool ReverbProcessor::isUsingImpulseResponse() const noexcept
+{
+    return useImpulseResponse.load (std::memory_order_relaxed);
 }
 
 void ReverbProcessor::setRoomSize (float size) noexcept

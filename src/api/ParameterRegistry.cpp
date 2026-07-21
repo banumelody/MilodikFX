@@ -67,6 +67,26 @@ bool ParameterRegistry::setParameter (const std::string& effectId,
     return true;
 }
 
+bool ParameterRegistry::setTextParameter (const std::string& effectId,
+                                          const std::string& parameterId,
+                                          const juce::String& value,
+                                          juce::String& outApplied) const
+{
+    const auto* parameter = findParameter (effectId, parameterId);
+
+    if (parameter == nullptr || ! parameter->isText || ! parameter->setText)
+        return false;
+
+    parameter->setText (value);
+
+    // Read back rather than trusting the write: the target may reject an unknown
+    // name and keep whatever it had.
+    outApplied = parameter->getText ? parameter->getText() : value;
+
+    notifyChanged();
+    return true;
+}
+
 bool ParameterRegistry::setEffectEnabled (const std::string& effectId, bool enabled) const
 {
     const auto* effect = findEffect (effectId);
@@ -106,8 +126,25 @@ juce::var ParameterRegistry::effectToVar (const EffectDescriptor& effect) const
         p->setProperty ("max", parameter.maxValue);
         p->setProperty ("step", parameter.step);
         p->setProperty ("default", parameter.defaultValue);
-        p->setProperty ("type", parameter.isBoolean ? "bool" : "float");
-        p->setProperty ("value", parameter.get ? parameter.get() : parameter.defaultValue);
+
+        if (parameter.isText)
+        {
+            p->setProperty ("type", "text");
+            p->setProperty ("value", parameter.getText ? parameter.getText() : juce::String());
+
+            juce::Array<juce::var> options;
+
+            if (parameter.getOptions)
+                for (const auto& option : parameter.getOptions())
+                    options.add (option);
+
+            p->setProperty ("options", options);
+        }
+        else
+        {
+            p->setProperty ("type", parameter.isBoolean ? "bool" : "float");
+            p->setProperty ("value", parameter.get ? parameter.get() : parameter.defaultValue);
+        }
 
         parameters.add (juce::var (p));
     }
@@ -139,8 +176,17 @@ juce::var ParameterRegistry::captureState() const
         auto* parameters = new juce::DynamicObject();
 
         for (const auto& parameter : effect.parameters)
-            if (parameter.get)
+        {
+            if (parameter.isText)
+            {
+                if (parameter.getText)
+                    parameters->setProperty (juce::Identifier (parameter.id), parameter.getText());
+            }
+            else if (parameter.get)
+            {
                 parameters->setProperty (juce::Identifier (parameter.id), parameter.get());
+            }
+        }
 
         auto* entry = new juce::DynamicObject();
         entry->setProperty ("enabled", effect.isEnabled ? effect.isEnabled() : true);
@@ -183,7 +229,21 @@ int ParameterRegistry::applyState (const juce::var& state) const
         {
             const auto value = parameters[juce::Identifier (parameter.id)];
 
-            if (value.isVoid() || value.isString() || ! parameter.set)
+            if (value.isVoid())
+                continue;
+
+            if (parameter.isText)
+            {
+                if (parameter.setText && value.isString())
+                {
+                    parameter.setText (value.toString());
+                    ++applied;
+                }
+
+                continue;
+            }
+
+            if (value.isString() || ! parameter.set)
                 continue;
 
             const auto asFloat = (float) (double) value;

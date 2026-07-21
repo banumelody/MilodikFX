@@ -23,15 +23,60 @@ const overdrive: EffectDescriptor = {
       value: 25,
     },
     {
+      id: 'asymmetry',
+      label: 'Asymmetry',
+      unit: '',
+      min: 0,
+      max: 1,
+      step: 0.01,
+      default: 0,
+      type: 'float',
+      value: 0,
+    },
+    {
+      // Enum: rendered as a labelled choice rather than a knob.
       id: 'oversampling',
       label: 'Oversampling',
+      unit: 'x',
+      min: 0,
+      max: 3,
+      step: 1,
+      default: 1,
+      type: 'float',
+      value: 1,
+    },
+  ],
+};
+
+const cabinet: EffectDescriptor = {
+  id: 'cabinet',
+  label: 'Cabinet',
+  description: 'Speaker emulation',
+  enabled: true,
+  toggleable: true,
+  parameters: [
+    {
+      id: 'irEnabled',
+      label: 'Pakai IR',
       unit: '',
       min: 0,
       max: 1,
       step: 1,
-      default: 1,
+      default: 0,
       type: 'bool',
-      value: 1,
+      value: 0,
+    },
+    {
+      id: 'irFile',
+      label: 'Impulse Response',
+      unit: '',
+      min: 0,
+      max: 1,
+      step: 1,
+      default: 0,
+      type: 'text',
+      value: '',
+      options: ['Marshall 4x12', 'Vox AC30'],
     },
   ],
 };
@@ -77,7 +122,8 @@ describe('EffectRack', () => {
     renderRack(overdrive);
 
     expect(screen.getByRole('slider', { name: 'Drive' })).toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: 'Oversampling' })).toBeInTheDocument();
+    expect(screen.getByRole('slider', { name: 'Asymmetry' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox')).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Overdrive on/off' })).toBeInTheDocument();
   });
 
@@ -89,12 +135,44 @@ describe('EffectRack', () => {
     expect(onParameterChange).toHaveBeenLastCalledWith('overdrive', 'drivePct', 25.5);
   });
 
-  it('sends booleans as 0 or 1', () => {
+  it('renders an enum parameter as named choices, not a raw number', () => {
     const { onParameterChange } = renderRack(overdrive);
 
-    fireEvent.click(screen.getByRole('switch', { name: 'Oversampling' }));
+    const select = screen.getByRole('combobox');
+    expect(screen.getByRole('option', { name: 'Mati' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: '8x' })).toBeInTheDocument();
 
-    expect(onParameterChange).toHaveBeenLastCalledWith('overdrive', 'oversampling', 0);
+    fireEvent.change(select, { target: { value: '3' } });
+    expect(onParameterChange).toHaveBeenLastCalledWith('overdrive', 'oversampling', 3);
+  });
+
+  it('sends booleans as 0 or 1', () => {
+    const { onParameterChange } = renderRack(cabinet);
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Pakai IR' }));
+
+    expect(onParameterChange).toHaveBeenLastCalledWith('cabinet', 'irEnabled', 1);
+  });
+
+  it('offers the engine-reported files for a text parameter and sends the name', () => {
+    // The choices come from the engine, never from a hardcoded list here, so a
+    // file dropped into the folder shows up without a frontend change.
+    const { onParameterChange } = renderRack(cabinet);
+
+    expect(screen.getByRole('option', { name: 'Marshall 4x12' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Vox AC30' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'Vox AC30' } });
+
+    expect(onParameterChange).toHaveBeenLastCalledWith('cabinet', 'irFile', 'Vox AC30');
+  });
+
+  it('lets a text parameter be cleared back to nothing', () => {
+    const { onParameterChange } = renderRack(cabinet);
+
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '' } });
+
+    expect(onParameterChange).toHaveBeenLastCalledWith('cabinet', 'irFile', '');
   });
 
   it('toggles the whole effect', () => {
@@ -156,6 +234,23 @@ describe('EffectRack', () => {
 
     fireEvent.click(mute);
     expect(onParameterChange).toHaveBeenLastCalledWith('master', 'muted', 1);
+  });
+
+  it('shows its position in the chain when told where it sits', () => {
+    const onParameterChange = vi.fn();
+    const onEnabledChange = vi.fn();
+
+    render(
+      <EffectRack
+        effect={overdrive}
+        index={4}
+        total={10}
+        onParameterChange={onParameterChange}
+        onEnabledChange={onEnabledChange}
+      />,
+    );
+
+    expect(screen.getByText('4/10')).toBeInTheDocument();
   });
 
   it('dims and disables controls when the effect is off', () => {

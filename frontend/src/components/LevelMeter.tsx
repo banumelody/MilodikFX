@@ -1,19 +1,37 @@
+import { useEffect, useRef, useState } from 'react';
+
 export interface LevelMeterProps {
   label: string;
   /** Level in dBFS. */
   db: number;
+  /** Below this the readout shows a dash rather than a noise-floor number. */
+  silenceDb?: number;
+  /** Bottom of the *displayed* scale; the engine's floor stays at -100. */
   floorDb?: number;
   /** Top of the scale in dB; headroom above 0 makes clipping visible. */
   ceilingDb?: number;
 }
 
+/** How long a peak marker stays before it starts falling, in ms. */
+const PEAK_HOLD_MS = 1200;
+
+/** How fast the peak marker falls once it lets go, in dB per second. */
+const PEAK_FALL_DB_PER_SEC = 20;
+
 /**
  * A read-only meter.
  *
- * The old UI drew levels with range inputs, so the "meters" were draggable and
- * fought the polling loop for control of their own value.
+ * The scale starts at -60 rather than the engine's -100 floor: at full range an
+ * idle noise floor around -77 dB already drew a fifth of the bar, so the meter
+ * looked busy in silence and squeezed the range that matters into the far right.
  */
-export function LevelMeter({ label, db, floorDb = -72, ceilingDb = 6 }: LevelMeterProps) {
+export function LevelMeter({
+  label,
+  db,
+  silenceDb = -65,
+  floorDb = -60,
+  ceilingDb = 6,
+}: LevelMeterProps) {
   const span = ceilingDb - floorDb;
   const clamped = Math.min(ceilingDb, Math.max(floorDb, db));
   const ratio = (clamped - floorDb) / span;
@@ -22,7 +40,33 @@ export function LevelMeter({ label, db, floorDb = -72, ceilingDb = 6 }: LevelMet
   const isHot = db > -1;
   const isLoud = db > -12;
 
-  const readout = db <= floorDb ? '--' : `${db.toFixed(1)} dB`;
+  const [peakDb, setPeakDb] = useState(floorDb);
+  const peakRef = useRef({ value: floorDb, heldSince: 0 });
+
+  useEffect(() => {
+    const now = performance.now();
+    const state = peakRef.current;
+
+    if (db >= state.value) {
+      state.value = db;
+      state.heldSince = now;
+      setPeakDb(db);
+      return;
+    }
+
+    if (now - state.heldSince < PEAK_HOLD_MS) return;
+
+    const elapsed = (now - state.heldSince - PEAK_HOLD_MS) / 1000;
+    const fallen = Math.max(db, state.value - elapsed * PEAK_FALL_DB_PER_SEC);
+
+    state.value = fallen;
+    state.heldSince = now - PEAK_HOLD_MS;
+    setPeakDb(fallen);
+  }, [db]);
+
+  const readout = db <= silenceDb ? '--' : `${db.toFixed(1)} dB`;
+  const peakRatio = (Math.min(ceilingDb, Math.max(floorDb, peakDb)) - floorDb) / span;
+  const showPeak = peakDb > silenceDb;
 
   return (
     <div className="meter">
@@ -44,6 +88,12 @@ export function LevelMeter({ label, db, floorDb = -72, ceilingDb = 6 }: LevelMet
           style={{ width: `${ratio * 100}%` }}
         />
         <div className="meter__zero" style={{ left: `${zeroRatio * 100}%` }} />
+        {showPeak ? (
+          <div
+            className={`meter__peak${peakDb > -1 ? ' meter__peak--hot' : ''}`}
+            style={{ left: `${peakRatio * 100}%` }}
+          />
+        ) : null}
       </div>
     </div>
   );

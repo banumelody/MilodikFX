@@ -43,10 +43,12 @@ void CabinetProcessor::rebuildCoefficients (float presence, float tone) noexcept
     coeffs[5] = biquad::makeLowPass (sampleRate, tone, kToneQ);
 }
 
-void CabinetProcessor::prepareToPlay (double sampleRateIn, int, int numChannels)
+void CabinetProcessor::prepareToPlay (double sampleRateIn, int samplesPerBlock, int numChannels)
 {
     sampleRate = sampleRateIn > 0.0 ? sampleRateIn : 44100.0;
     currentNumChannels = juce::jlimit (0, kMaxChannels, numChannels);
+
+    irEngine.prepare (sampleRate, juce::jmax (1, samplesPerBlock), juce::jmax (1, currentNumChannels));
 
     smoothedPresence.reset (sampleRate, kSmoothingSeconds, presenceDb.load (std::memory_order_relaxed));
     smoothedTone.reset (sampleRate, kSmoothingSeconds, toneHz.load (std::memory_order_relaxed));
@@ -66,6 +68,11 @@ void CabinetProcessor::processBlock (juce::AudioBuffer<float>& buffer)
     const auto numCh = juce::jmin (buffer.getNumChannels(), currentNumChannels, kMaxChannels);
 
     if (numSamples <= 0 || numCh <= 0)
+        return;
+
+    // Convolution when an IR is loaded and selected; otherwise fall through to
+    // the analytic chain, so a missing or unreadable file never means silence.
+    if (useImpulseResponse.load (std::memory_order_relaxed) && irEngine.process (buffer))
         return;
 
     const auto presenceTarget = presenceDb.load (std::memory_order_relaxed);
@@ -100,6 +107,18 @@ void CabinetProcessor::reset()
     for (auto& chainStates : states)
         for (auto& s : chainStates)
             s.reset();
+
+    irEngine.reset();
+}
+
+void CabinetProcessor::setUseImpulseResponse (bool shouldUseIr) noexcept
+{
+    useImpulseResponse.store (shouldUseIr, std::memory_order_relaxed);
+}
+
+bool CabinetProcessor::isUsingImpulseResponse() const noexcept
+{
+    return useImpulseResponse.load (std::memory_order_relaxed);
 }
 
 void CabinetProcessor::setPresenceDb (float db) noexcept

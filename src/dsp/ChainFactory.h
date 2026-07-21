@@ -14,6 +14,7 @@
 #include "dsp/OverdriveProcessor.h"
 #include "dsp/ReverbProcessor.h"
 #include "dsp/ToneStackProcessor.h"
+#include "preset/IrLibrary.h"
 
 namespace milodikfx::dsp
 {
@@ -41,6 +42,23 @@ struct GuitarChain
 GuitarChain buildGuitarChain (DSPChainManager& chain);
 
 /**
+ * Host-provided pieces the chain can use but does not own.
+ *
+ * Everything here is optional: a plugin has no device to route and may have no
+ * impulse-response library, and the corresponding controls are simply left out
+ * rather than registered in a broken state.
+ */
+struct ChainExtras
+{
+    /** Supplies the impulse responses the cabinet and reverb can load. */
+    milodikfx::preset::IrLibrary* irLibrary = nullptr;
+
+    /** Both must be set for the input-routing stage to be registered. */
+    std::function<float()> getInputMode;
+    std::function<void (float)> setInputMode;
+};
+
+/**
  * Registers every effect and parameter of a built chain.
  *
  * The input-routing stage is host-specific -- the standalone app maps device
@@ -50,6 +68,5 @@ GuitarChain buildGuitarChain (DSPChainManager& chain);
 void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
                               const GuitarChain& chain,
                               DSPChainManager& manager,
-                              std::function<float()> getInputMode = {},
-                              std::function<void (float)> setInputMode = {});
+                              ChainExtras extras = {});
 } // namespace milodikfx::dsp

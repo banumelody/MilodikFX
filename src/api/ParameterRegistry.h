@@ -27,6 +27,18 @@ struct ParameterDescriptor
 
     std::function<float()> get;
     std::function<void (float)> set;
+
+    /**
+     * Text-valued parameters: a file choice rather than a number.
+     *
+     * Set getText/setText instead of get/set. getOptions supplies the choices
+     * the UI offers, evaluated on read so a newly dropped file appears without
+     * anything having to invalidate a cache.
+     */
+    bool isText = false;
+    std::function<juce::String()> getText;
+    std::function<void (const juce::String&)> setText;
+    std::function<juce::StringArray()> getOptions;
 };
 
 /** One effect block: an enable switch plus its parameters, in chain order. */
@@ -62,6 +74,13 @@ public:
 
     /** Applies a value, clamped to the descriptor's range. Returns the stored value. */
     bool setParameter (const std::string& effectId, const std::string& parameterId, float value, float& outApplied) const;
+
+    /** Applies a text value. Fails for numeric parameters. */
+    bool setTextParameter (const std::string& effectId,
+                           const std::string& parameterId,
+                           const juce::String& value,
+                           juce::String& outApplied) const;
+
     bool setEffectEnabled (const std::string& effectId, bool enabled) const;
 
     /** Full state as a juce::var, so juce::JSON handles all the escaping. */

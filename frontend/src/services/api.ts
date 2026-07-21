@@ -16,8 +16,11 @@ export interface ParameterDescriptor {
   max: number;
   step: number;
   default: number;
-  type: 'float' | 'bool';
-  value: number;
+  type: 'float' | 'bool' | 'text';
+  /** A number for float/bool parameters, a name for text ones. */
+  value: number | string;
+  /** Choices offered for a text parameter, e.g. the impulse responses on disk. */
+  options?: string[];
 }
 
 export interface EffectDescriptor {
@@ -143,11 +146,33 @@ export const optimiseDevice = () =>
     body: '{}',
   });
 
-export const setParameter = (effect: string, parameter: string, value: number) =>
-  request<{ effect: string; parameter: string; value: number }>(
+export const setParameter = (effect: string, parameter: string, value: number | string) =>
+  request<{ effect: string; parameter: string; value: number | string }>(
     `/effects/${encodeURIComponent(effect)}/${encodeURIComponent(parameter)}`,
     { method: 'PUT', body: JSON.stringify({ value }) },
   );
+
+export interface IrLibraryResponse {
+  cabinets: string[];
+  reverbs: string[];
+  cabinetDirectory: string;
+  reverbDirectory: string;
+}
+
+export const getIrLibrary = () => request<IrLibraryResponse>('/ir');
+
+/** Opens the impulse-response folder in Explorer so files can be dropped in. */
+export const revealIrFolder = (category: 'cabinet' | 'reverb') =>
+  request<{ revealed: string }>('/ir/reveal', {
+    method: 'POST',
+    body: JSON.stringify({ category }),
+  });
+
+export const importIr = (category: 'cabinet' | 'reverb', name: string, base64: string) =>
+  request<{ name: string; cabinets: string[]; reverbs: string[] }>('/ir/import', {
+    method: 'POST',
+    body: JSON.stringify({ category, name, data: base64 }),
+  });
 
 export const setEffectEnabled = (effect: string, enabled: boolean) =>
   request<{ effect: string; enabled: boolean }>(

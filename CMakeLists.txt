@@ -109,12 +109,16 @@ set(MILODIKFX_ENGINE_SOURCES
   src/dsp/DelayProcessor.cpp
   src/dsp/MasterOutProcessor.h
   src/dsp/MasterOutProcessor.cpp
+  src/dsp/IrEngine.h
+  src/dsp/IrEngine.cpp
   src/dsp/DSPChainManager.h
   src/dsp/DSPChainManager.cpp
   src/dsp/ChainFactory.h
   src/dsp/ChainFactory.cpp
   src/preset/PresetManager.h
   src/preset/PresetManager.cpp
+  src/preset/IrLibrary.h
+  src/preset/IrLibrary.cpp
   src/api/ParameterRegistry.h
   src/api/ParameterRegistry.cpp
 )
@@ -180,6 +184,8 @@ target_sources(MilodikFX
     src/api/ParametersHandler.cpp
     src/api/EffectsHandler.h
     src/api/EffectsHandler.cpp
+    src/api/IrHandler.h
+    src/api/IrHandler.cpp
     src/api/LevelsHandler.h
     src/api/LevelsHandler.cpp
     src/api/PresetsHandler.h
@@ -334,6 +340,7 @@ target_sources(MilodikFX_tests
     tests/UnitTests.cpp
     tests/DspTests.cpp
     tests/RegistryTests.cpp
+    tests/IrTests.cpp
     ${MILODIKFX_ENGINE_SOURCES}
 )
 
@@ -347,6 +354,7 @@ target_link_libraries(MilodikFX_tests
   PRIVATE
     juce::juce_core
     juce::juce_audio_basics
+    juce::juce_audio_formats
     juce::juce_dsp
     juce::juce_data_structures
     juce::juce_recommended_config_flags
