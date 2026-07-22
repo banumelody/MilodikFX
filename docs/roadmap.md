@@ -45,7 +45,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - P3-8 Metronome — `MetronomeProcessor` sebagai post-processor, di luar jalur bypass
 - P3-9 CPU sparkline
 
-**Belum:** P2-5 (multi-view), P4-4 (modifier), P4-5 (looper).
+**Belum:** P2-5 (multi-view — diserap ke P6-3), P4-4 (modifier — didetailkan jadi P6-2), P4-5 (looper), P5-2–P5-5 (audit optimasi 22 Jul 2026), P6-1–P6-5 (adaptasi Fractal FM9).
 
 **Kenapa empat itu belum, per 22 Jul 2026:**
 
@@ -600,6 +600,233 @@ Satu slot rekam/overdub/undo di akhir chain (post-master, seperti metronome). Ma
 
 ---
 
+## P5-2 – P5-5. Audit optimasi (22 Jul 2026)
+
+Audit pembacaan kode + angka yang sudah terukur, bukan profiling baru — setiap item di bawah menyebut
+bukti konkretnya. Kesimpulan besarnya dulu, supaya jujur: **jalur audio sehat dan tidak ada temuan
+merah.** 7,6% DSP dengan semua efek menyala (16,3% worst case), tidak ada alokasi di `processBlock`,
+koefisien di-cache dan hanya dihitung saat nilai bergerak, spillover punya early-out, handoff NAM
+atomic dengan reaper di luar callback. Yang bisa dioptimasi ada di **sisi UI dan HTTP**, bukan DSP.
+
+### P5-2. Memoisasi frontend — pemborosan render terbesar
+
+**Temuan:** tidak ada satu pun `React.memo` di `frontend/src/components/` (diverifikasi grep). Stream
+meter SSE mengalir ~22 Hz dan setiap frame memanggil `setLevels` di `App` — yang berarti **seluruh
+pohon komponen di-render ulang 22 kali per detik**: 12 kartu `EffectRack`, puluhan `Knob` (masing-masing
+menghitung busur SVG), panel samping, semuanya — padahal yang berubah hanya empat meter, sparkline, dan
+empat angka statistik. Ini kerja render kontinu di proses WebView2 yang menyaingi drag knob dan memakan
+CPU/baterai tanpa hasil visual.
+
+**Rencana:** (1) `React.memo` untuk `EffectRack`, `Knob`, `Toggle`, dan panel samping yang prop-nya
+stabil; (2) pindahkan konsumen `levels` (meter, stats, `Sparkline`) ke subtree terpisah sehingga frame
+meter hanya me-render subtree itu; (3) `cpuHistory` berhenti menyalin array 600 elemen per frame —
+pakai buffer terbatas. Ukur sebelum/sesudah lewat DevTools performance supaya klaimnya bukan perasaan.
+**Effort:** 2–4 jam. **Risiko:** rendah; test yang ada tetap berlaku.
+
+### P5-3. Tuner lewat SSE, bukan polling 60 ms
+
+**Temuan:** `subscribeTuner` di `services/api.ts` mem-poll `/api/tuner` tiap 60 ms. Server adalah
+thread-per-connection dengan `Connection: close` (diverifikasi di `WebServer.cpp`) — jadi selama panel
+tuner terbuka, UI membuat **~17 koneksi TCP + thread baru per detik**. Mekanisme yang lebih tepat sudah
+ada dan terbukti: `registerEventStream` yang dipakai `/api/levels/stream`.
+
+**Rencana:** tambah `/api/tuner/stream` (interval ~60 ms, hanya mengirim saat tuner aktif), frontend
+memakai `EventSource` dengan fallback polling seperti meter. Satu koneksi menggantikan ribuan.
+**Effort:** 2–3 jam.
+
+### P5-4. UpdateHandler: fetch di luar lock + SSE satu-baris
+
+**Temuan (koreksi atas kode yang baru masuk di v0.15.0):** `UpdateHandler::handleGet` menjalankan fetch
+GitHub **di dalam** `std::mutex` — permintaan `/api/update` kedua yang datang saat GitHub lambat ikut
+tertahan; dan `withConnectionTimeoutMs(5000)` hanya membatasi *connect*, pembacaan stream yang macet
+bisa menggantung lebih lama. Loopback-only dan jarang dipanggil, jadi dampaknya kecil — tapi polanya
+salah dan murah diperbaiki.
+
+**Rencana:** cek cache di dalam lock → fetch di luar lock → tulis hasil kembali di dalam lock; beri
+batas waktu keseluruhan pada pembacaan. Sekalian: stream meter mengirim JSON pretty-print multi-baris
+(`JSON::toString` default) yang lalu dipecah per baris untuk prefiks `data:` — kirim satu baris saja,
+byte lebih kecil dan tanpa pemecahan. **Effort:** 1–2 jam.
+
+### P5-5. Oversampling default per voicing (opsional, kualitas-vs-biaya)
+
+**Temuan:** worst case DSP (16,3%) adalah Marshall-in-a-Box pada oversampling 8x. Voicing hard-clip/fuzz
+(RAT, Big Muff) menghasilkan harmonik tinggi paling banyak dan paling butuh oversampling; clean boost
+hampir tidak butuh sama sekali. Sekarang default oversampling seragam (2x) untuk semua tipe.
+
+**Rencana:** tabel `DriveVoicing` diberi kolom oversampling *yang disarankan* per pedal, dipakai hanya
+sebagai default saat user memilih tipe — pilihan manual user selalu menang. Fuzz mendapat kualitas
+tanpa memaksa 8x ke voicing yang tidak membutuhkannya. **Effort:** 2–3 jam termasuk test.
+
+---
+
+## P6. Studi Fractal FM9 — apa itu, dan apa yang layak diadaptasi (analisis 22 Jul 2026)
+
+### Apa itu FM9
+
+**Fractal Audio FM9** adalah amp modeler + multi-efek format floor (satu keluarga dengan Axe-Fx III dan
+FM3) yang dipakai luas oleh gitaris profesional untuk menggantikan seluruh rig amp + pedalboard. Kualitas
+pemodelan amp-nya terkenal, tapi untuk MilodikFX bukan itu pelajaran utamanya — wilayah suara sudah
+ditutup oleh NAM (capture amp) + IR cabinet. Yang menjadikan FM9 tolok ukur adalah **arsitektur
+kontrolnya**: bagaimana satu unit mengelola banyak suara dalam satu lagu, berpindah di antaranya tanpa
+jeda, dan tetap bisa dikendalikan kaki/tangan di panggung. Itu persis wilayah yang MilodikFX baru
+setengah jalan.
+
+### Konsep inti FM9, satu per satu
+
+1. **Grid routing bebas.** Blok efek ditempatkan bebas di grid besar (6 baris), bisa seri, paralel,
+   split/merge — dua amp berdampingan, delay paralel dengan reverb, dan seterusnya.
+2. **Hierarki tiga tingkat: Preset ⊃ Scene ⊃ Channel.** Ini ide terpenting FM9.
+   - **Preset** = seluruh rig: susunan grid + semua setelan. Ganti preset = muat rig baru.
+   - **Scene** (8 per preset) = kombinasi *bypass* semua blok + *pilihan channel* tiap blok + level
+     per scene. Ganti scene **instan tanpa loading** — semua blok sudah di memori — dengan spillover.
+     Satu preset dengan 8 scene biasanya menutup satu lagu penuh: intro bersih, verse crunch, chorus
+     high-gain, solo dengan delay panjang.
+   - **Channel** (A–D per blok) = empat setelan tersimpan untuk blok yang sama. Satu blok drive
+     menyimpan Tube Screamer gain rendah di A dan gain tinggi di B; scene memilih channel-nya. Tanpa
+     channel, dua suara drive butuh dua blok; dengan channel, satu blok melayani empat suara.
+3. **Modifier.** Hampir semua parameter bisa digerakkan sumber modulasi — LFO, envelope follower,
+   pedal ekspresi, sequencer — lewat mapping min-max dengan kurva. Wah tanpa blok wah: LPF yang
+   frekuensinya diikat ke pedal.
+4. **Spillover antar scene dan antar preset.** Ekor delay/reverb tetap meluruh melewati pergantian.
+5. **Perform pages.** Kumpulan kontrol pilihan user sendiri dalam satu layar — dari seluruh parameter,
+   hanya 5–10 yang benar-benar disentuh saat manggung; FM9 membiarkan user memilih itu dan menaruhnya
+   besar-besar di satu halaman.
+6. **Layout footswitch fleksibel** — tiap switch bisa diberi fungsi apa pun per preset.
+
+### Yang sudah setara di MilodikFX
+
+Scene 4 slot (enable-only), spillover per efek antar scene, tempo global + delay sync + tap, tuner,
+metronome, MIDI CC→parameter + PC→preset dengan MIDI Learn, preset dengan metadata. Fondasi hierarkinya
+sudah ada — yang belum adalah tingkat ketiganya (channel) dan postur panggungnya (perform view).
+
+### Yang sengaja TIDAK diadaptasi, dan kenapa
+
+- **Grid routing bebas** — bertabrakan frontal dengan arsitektur yang disengaja: `findProcessor<T>`
+  satu-prosesor-per-tipe, chain tetap, UI dibangkitkan dari registry. Ini keputusan yang sama dengan
+  penolakan ADD BLOCK/CLEAR CHAIN di catatan mockup (Revisi 2 di atas). Untuk rig satu orang, nilai
+  routing bebas kecil; biayanya perombakan registry/preset/REST total.
+- **Global blocks** (setelan blok dibagi antar preset) — preset MilodikFX kecil dan murah diduplikasi;
+  kompleksitas sinkronisasinya tidak sepadan.
+- **Dual amp paralel** — satu NAM sudah memakan ~20% budget; dua berarti setengah budget untuk fitur
+  yang jarang dipakai satu orang.
+- **Layout footswitch hardware** — tidak ada hardware switch; padanannya keyboard + MIDI (P6-5).
+
+### P6-1. Channel A/B/C/D per efek — jantung adaptasinya
+
+Setiap efek mendapat hingga **4 set parameter bernama** (A/B/C/D), disimpan di dalam preset; scene
+menyimpan *enable + pilihan channel* per efek. Satu preset lalu bisa memuat: scene 1 = drive A (crunch
+tipis) + delay A (slap pendek); scene 3 = drive B (gain penuh) + delay B (dotted-eighth panjang) —
+persis pola FM9, tanpa menggandakan efek.
+
+**Ini merevisi prinsip "scene hanya menyimpan enable flags" — dan revisinya jujur.** Keberatan asli
+(tercatat di P2-3): scene tidak boleh melompatkan parameter "ke nilai yang tidak kamu lihat, pada
+kontrol yang tidak kamu sentuh". Channel menjawab keberatan itu, bukan menabraknya: lompatan hanya
+menuju **keadaan bernama yang user buat sendiri**, ditampilkan terang-terangan di kartu (badge A/B/C/D),
+dan scene tetap tidak menyimpan nilai parameter bebas — hanya *indeks* channel. Yang tak terlihat tetap
+tidak ada.
+
+**Desain teknis:**
+- Penyimpanan: preset schema v4 — `channels: { <effectId>: [ {name, params:{...}}, ... ] }` +
+  `activeChannel` per efek; scene mendapat `channel: { <effectId>: 0..3 }`. File schema 3 tetap
+  termuat (efek tanpa channels = satu channel implisit).
+- Realtime: ganti channel = serangkaian penulisan lewat setter registry yang sudah ada — semua
+  parameter adalah atomic yang di-smooth, jadi ini setepat aman dengan MIDI CC yang menulis parameter
+  hari ini. Tidak ada alokasi; set channel tersimpan di sisi non-audio.
+- API: `PUT /api/effects/<id>/channel {index}`, `POST /api/effects/<id>/channel/save`; `/api/effects`
+  memuat `channel` + daftar nama channel.
+- UI: tab A/B/C/D kecil di header kartu; klik = pindah (menulis semua parameter kartu itu), klik-tahan/
+  tombol simpan = simpan keadaan sekarang ke channel itu; scene grid menampilkan huruf channel tiap
+  efek yang punya >1 channel.
+- Spillover delay/reverb tetap bekerja — ganti channel mengubah parameter, bukan mematikan efek.
+
+**Effort:** ~1.5–2 weekend. **Ketergantungan:** tidak ada; sebaiknya sebelum P6-3.
+
+### P6-2. Modifier — mendetailkan P4-4 dengan model FM9
+
+P4-4 selama ini berhenti di "desain dulu". Ini desainnya, meniru bentuk FM9:
+
+- **Sumber** (tahap awal): LFO (sine/triangle/square, rate bebas atau sync tempo), envelope follower
+  (mengikuti dinamika input chain), dan pedal ekspresi (MIDI CC yang sudah masuk lewat MidiController).
+- **Mapping:** sumber menghasilkan 0..1 → dipetakan ke min..max dalam satuan parameter, dengan kurva
+  (linear/log/exp) dan depth.
+- **Aturan realtime yang menghindari perang tulis:** modifier TIDAK menulis parameter user. Ia
+  mengevaluasi **per blok audio** (di 32 sampel = tiap 0,33 ms, jauh lebih halus dari yang terdengar)
+  dan menghasilkan *offset modulasi*; prosesor memakai `efektif = clamp(base + depth × mod)`. Nilai
+  base milik user tidak pernah berubah — UI menampilkan base seperti biasa plus cincin tipis yang
+  menunjukkan nilai efektif termodulasi. MIDI, UI, preset, undo semuanya tetap beroperasi pada base.
+- Batas awal: parameter float saja, maksimal 4 modifier, evaluasi bebas alokasi di audio thread.
+- Contoh pakai yang langsung berguna: wah (Contour freq ← pedal ekspresi), tremolo (MasterOut/level ←
+  LFO sync tempo), auto-filter funk (Contour ← envelope follower).
+
+**Effort:** ~1.5–2 weekend (estimasi P4-4 tetap).
+
+### P6-3. Perform view — rencana UI/UX (menyerap P2-5)
+
+**Masalah hari ini, dideskripsikan jujur:** UI sekarang adalah satu halaman padat — rack efek di kolom
+kiri, panel-panel (device, tuner, tempo, scene, preset, MIDI, NAM, IR, performa) bertumpuk di kolom
+kanan. Untuk *menyetel* suara ini bagus: semuanya terlihat, semuanya sejangkauan scroll. Untuk *bermain*
+ini buruk: tombol scene kecil dan terkubur di tengah sidebar, meter kecil di bar atas, nama preset
+tidak menonjol, dan tidak ada satu layar pun yang bisa dibaca dari jarak 2 meter sambil memegang
+gitar. FM9 menyebut perbedaan ini "postur edit vs postur perform" — dua pekerjaan yang layarnya memang
+tidak boleh sama.
+
+**Rencana konkret — dua view, satu saklar:**
+- Bar atas mendapat saklar **Perform | Edit**. **Edit** = seluruh tampilan sekarang, tidak berubah
+  sedikit pun. Library dan Settings tidak dijadikan tab terpisah (berbeda dari mockup 4-tab lama):
+  keduanya sudah nyaman sebagai panel sidebar di Edit, dan menyebar yang sudah berfungsi hanya
+  menambah klik. Multi-view penuh menyusul kalau panelnya benar-benar sesak.
+- **Perform** = satu layar tanpa scroll, disusun untuk dibaca jauh dan diklik kasar:
+  - **Baris atas:** nama preset dalam huruf besar (elemen paling menonjol di layar) dengan tombol
+    ‹ › untuk pindah preset; di kanannya BPM besar + tombol tap tempo selebar telapak.
+  - **Tengah, bagian terbesar:** 4 **tombol scene raksasa** (target klik ≥ 120 px — cukup untuk layar
+    sentuh atau mouse yang dioperasikan kaki), masing-masing menampilkan nama scene, keadaan aktif
+    yang menyala terang, dan (setelah P6-1) deretan huruf channel efek-efek pentingnya.
+  - **Bawah:** meter input/output besar bergaya LED tersegmen + indikator gate/comp/limiter; tombol
+    Bypass dan Mute besar (fungsi yang sama dengan B/Esc hari ini, kini terlihat).
+  - **Kolom kanan:** hingga **8 knob pin** — parameter pilihan user untuk preset itu (disimpan di
+    metadata preset, di luar `state` supaya snapshot DSP tidak berubah). Di Edit, tiap knob mendapat
+    ikon pin kecil; yang dipin muncul besar di Perform. Ini terjemahan langsung Perform Page FM9:
+    dari ~150 parameter, yang disentuh saat manggung hanya segelintir — biarkan user memilihnya.
+  - **Tuner:** tombol toggle besar; saat aktif, strip tuner lebar menggantikan baris meter.
+  - **Keyboard di Perform:** angka **1–4** = recall scene, **panah kiri/kanan** = ganti preset,
+    **T** = tap tempo (Esc mute dan B bypass sudah global hari ini dan tetap). Semua juga bisa dari
+    MIDI lewat P6-5, jadi footswitch murah pun menjadikan Perform view layar panggung sungguhan.
+- View yang dipilih disimpan di localStorage; aplikasi dibuka kembali pada view terakhir.
+
+**Effort:** ~1–1.5 weekend. **Ketergantungan:** paling bernilai setelah P6-1 (tombol scene menampilkan
+channel) dan P5-2 (memoisasi dulu, supaya layar baru tidak menambah beban render yang sudah boros).
+
+### P6-4. Spillover antar preset (verifikasi dulu)
+
+FM9 membiarkan ekor delay/reverb meluruh melewati pergantian preset. MilodikFX sudah punya spillover
+antar scene; **antar preset belum diverifikasi** — load preset menulis semua parameter lewat registry,
+dan yang perlu dipastikan adalah tidak ada jalur yang me-reset buffer delay/reverb saat itu (reset
+hanya pantas saat device/sample rate berubah). Langkah: audit jalur load → test yang membuktikan ekor
+bertahan melewati load → perbaiki kalau ternyata terpotong. Perubahan time delay saat ekor masih
+berbunyi sudah aman (read offset di-smooth, alokasi delay line maksimal sejak prepare).
+**Effort:** 2–4 jam verifikasi + test; 0.5 weekend bila perlu perbaikan.
+
+### P6-5. MIDI → scene & channel
+
+Mapping MIDI sekarang hanya CC→parameter dan PC→preset (diverifikasi di `MidiController.cpp`). Untuk
+panggung, scene (dan setelah P6-1, channel) harus bisa dipanggil dari kaki: perluas target mapping
+dengan tipe `scene` (CC value memilih slot, atau satu CC per slot mode toggle) dan `channel`
+(efek+indeks). Scene recall hanya menulis enable flags (atomics) jadi aman dari MIDI thread; penulisan
+settings tetap lewat message thread seperti sekarang. UI MIDI Learn mendapat dua pilihan target baru.
+**Effort:** ~0.5 weekend.
+
+### Urutan pengerjaan yang disarankan
+
+1. **P5-2** memoisasi (jam-jaman, memperbaiki fondasi sebelum layar baru),
+2. **P5-3 + P5-4** kebersihan HTTP/update (jam-jaman),
+3. **P6-1** channels (fitur terbesar, membuka nilai scene sesungguhnya),
+4. **P6-3** Perform view (kini punya sesuatu yang layak ditampilkan besar-besar),
+5. **P6-5** MIDI scene/channel (menghidupkan panggungnya),
+6. **P6-2** modifier, **P6-4** spillover antar preset, **P5-5** oversampling per voicing — kapan saja,
+   saling independen.
+
+---
+
 ## Ringkasan Urutan
 
 | # | Item | Tier | Effort | Ketergantungan |
@@ -637,6 +864,16 @@ Satu slot rekam/overdub/undo di akhir chain (post-master, seperti metronome). Ma
 | 31 | Modifier (envelope/LFO → parameter) | P4-4 | ~1.5–2 weekend | desain dulu; setelah P4-1/P4-2 |
 | 32 | Looper sederhana | P4-5 | ~1–1.5 weekend | — |
 | 33 | Voicing Centaur + RAT + Big Muff ✅ | P4-1b | ~1–1.5 hari | selesai (v0.14.0) |
+| 34 | Update check + sponsor + credit + situs ✅ | P5-1 | ~0.5 weekend | selesai (v0.15.0) |
+| 35 | Memoisasi frontend (render 22 Hz) | P5-2 | ~2–4 jam | — |
+| 36 | Tuner lewat SSE | P5-3 | ~2–3 jam | — |
+| 37 | UpdateHandler fetch di luar lock + SSE 1-baris | P5-4 | ~1–2 jam | — |
+| 38 | Oversampling default per voicing | P5-5 | ~2–3 jam | — |
+| 39 | Channel A/B/C/D per efek | P6-1 | ~1.5–2 weekend | — |
+| 40 | Modifier (desain FM9, menggantikan P4-4) | P6-2 | ~1.5–2 weekend | — |
+| 41 | Perform view (menyerap P2-5) | P6-3 | ~1–1.5 weekend | setelah P6-1, P5-2 |
+| 42 | Spillover antar preset (verifikasi) | P6-4 | ~2–4 jam | — |
+| 43 | MIDI → scene & channel | P6-5 | ~0.5 weekend | setelah P6-1 |
 
 Total estimasi kalau semua dikerjakan: kira-kira 27–35 weekend, dengan catatan NAM adalah yang paling tidak pasti dan bisa melar jauh dari estimasi tergantung hasil tahap riset.
 
