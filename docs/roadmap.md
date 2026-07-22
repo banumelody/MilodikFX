@@ -801,12 +801,15 @@ channel) dan P5-2 (memoisasi dulu, supaya layar baru tidak menambah beban render
 ### P6-4. Spillover antar preset (verifikasi dulu)
 
 FM9 membiarkan ekor delay/reverb meluruh melewati pergantian preset. MilodikFX sudah punya spillover
-antar scene; **antar preset belum diverifikasi** — load preset menulis semua parameter lewat registry,
-dan yang perlu dipastikan adalah tidak ada jalur yang me-reset buffer delay/reverb saat itu (reset
-hanya pantas saat device/sample rate berubah). Langkah: audit jalur load → test yang membuktikan ekor
-bertahan melewati load → perbaiki kalau ternyata terpotong. Perubahan time delay saat ekor masih
-berbunyi sudah aman (read offset di-smooth, alokasi delay line maksimal sejak prepare).
-**Effort:** 2–4 jam verifikasi + test; 0.5 weekend bila perlu perbaikan.
+antar scene; **antar preset SELESAI diverifikasi (22 Jul 2026)** — dan ternyata sudah benar secara
+konstruksi. Load preset lewat `PresetsHandler` memanggil `ParameterRegistry::applyState`, yang **hanya**
+memegang closure `get`/`set`/`setEnabled`; ia tidak punya referensi ke `reset()` sama sekali, jadi tidak
+mungkin mengosongkan delay line. Preset dengan delay mati mendarat di `setEnabled(false)` dengan spillover
+menyala, tempat jalur feedback tetap berjalan dan ekornya terus berdering. Dikunci dengan regression test
+di `DspTests.cpp` ("A repeat still ringing survives the effect being switched off"): impuls di-ring saat
+aktif, delay dimatikan seperti load preset, blok senyap berikutnya masih membawa echo. Perubahan time
+delay saat ekor berbunyi sudah aman sejak dulu (read offset di-smooth, alokasi delay line maksimal sejak
+prepare).
 
 ### P6-5. MIDI → scene & channel
 
@@ -874,7 +877,7 @@ settings tetap lewat message thread seperti sekarang. UI MIDI Learn mendapat dua
 | 39 | Channel A/B/C/D per efek | P6-1 | ~1.5–2 weekend | — |
 | 40 | Modifier (desain FM9, menggantikan P4-4) | P6-2 | ~1.5–2 weekend | — |
 | 41 | Perform view (menyerap P2-5) | P6-3 | ~1–1.5 weekend | setelah P6-1, P5-2 |
-| 42 | Spillover antar preset (verifikasi) | P6-4 | ~2–4 jam | — |
+| 42 | Spillover antar preset (verifikasi) ✅ | P6-4 | ~2–4 jam | selesai |
 | 43 | MIDI → scene & channel | P6-5 | ~0.5 weekend | setelah P6-1 |
 
 Total estimasi kalau semua dikerjakan: kira-kira 27–35 weekend, dengan catatan NAM adalah yang paling tidak pasti dan bisa melar jauh dari estimasi tergantung hasil tahap riset.

@@ -846,6 +846,44 @@ public:
             expect (allFinite (feedbackBuf));
             expect (peak (feedbackBuf) < 8.0f, "delay feedback ran away at block " + juce::String (block));
         }
+
+        beginTest ("A repeat still ringing survives the effect being switched off");
+        {
+            // Cross-preset spillover (P6-4). Loading a preset routes through
+            // ParameterRegistry::applyState, which only ever calls the
+            // parameter setters and setEnabled -- it holds no reference to
+            // reset(), so it cannot clear the delay line. A preset that turns
+            // the delay off therefore lands here: setEnabled(false) with
+            // spillover on, where the feedback path keeps running and the tail
+            // rings on. This locks that in so a future change to the load path
+            // cannot start chopping the repeats dead.
+            milodikfx::dsp::DelayProcessor spill;
+            spill.setSpillover (true);
+            spill.setEnabled (true);
+            spill.setTimeMs (120.0f);
+            spill.setFeedbackPercent (60.0f);
+            spill.setMixPercent (100.0f);
+            spill.prepareToPlay (kRate, 4096, 1);
+
+            // Ring it: an impulse written into the line while enabled. The first
+            // echo is one delay time (~5760 samples) out, past this first block.
+            juce::AudioBuffer<float> ring (1, 4096);
+            ring.clear();
+            ring.setSample (0, 0, 1.0f);
+            spill.processBlock (ring);
+
+            // Switch off exactly as a preset with the delay off would, then feed
+            // silence across the block the first echo lands in.
+            spill.setEnabled (false);
+
+            juce::AudioBuffer<float> tail (1, 4096);
+            tail.clear();
+            spill.processBlock (tail);
+
+            expect (tail.getMagnitude (0, tail.getNumSamples()) > 0.05f,
+                    "the delay tail was cut when the effect was switched off: "
+                        + juce::String (tail.getMagnitude (0, tail.getNumSamples()), 4));
+        }
     }
 
 private:
