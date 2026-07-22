@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
 import type { EffectDescriptor, ParameterDescriptor } from '../services/api';
 
@@ -29,7 +29,7 @@ function findParameter(effect: EffectDescriptor | undefined, id: string) {
  * beats on the audio clock, and polling it often enough to drive a smooth flash
  * would cost more requests than the flash is worth.
  */
-export function TempoPanel({
+function TempoPanelBase({
   bpm,
   metronome,
   disabled = false,
@@ -200,5 +200,7 @@ export function TempoPanel({
     </section>
   );
 }
+
+export const TempoPanel = memo(TempoPanelBase);
 
 export default TempoPanel;

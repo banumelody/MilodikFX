@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
 import { EFFECT_ACCENTS } from './EffectRack';
 import { captureScene, getScenes, recallScene, renameScene, setSceneEffect } from '../services/api';
@@ -18,7 +18,7 @@ interface SceneGridProps {
  * SceneManager for why. Clicking a cell edits the stored scene without
  * touching what is playing; the number button recalls it.
  */
-export function SceneGrid({ effects, disabled = false, onRecalled }: SceneGridProps) {
+function SceneGridBase({ effects, disabled = false, onRecalled }: SceneGridProps) {
   const [state, setState] = useState<ScenesState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
@@ -171,5 +171,7 @@ export function SceneGrid({ effects, disabled = false, onRecalled }: SceneGridPr
     </section>
   );
 }
+
+export const SceneGrid = memo(SceneGridBase);
 
 export default SceneGrid;

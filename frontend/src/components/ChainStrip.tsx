@@ -1,3 +1,5 @@
+import { memo } from 'react';
+
 import { EFFECT_ACCENTS } from './EffectRack';
 import type { EffectDescriptor } from '../services/api';
 
@@ -16,7 +18,7 @@ export interface ChainStripProps {
  * The rack below is a wrapping grid, which gives no hint that these stages run
  * in series. This strip is where the order is actually visible.
  */
-export function ChainStrip({ effects, onSelect, onToggle, disabled = false }: ChainStripProps) {
+function ChainStripBase({ effects, onSelect, onToggle, disabled = false }: ChainStripProps) {
   // Input routing, the global controls and the metronome are not stages the
   // guitar passes through, so they stay out of the picture. The metronome is
   // genuinely outside the chain -- it is mixed in after the master stage.
@@ -68,5 +70,8 @@ export function ChainStrip({ effects, onSelect, onToggle, disabled = false }: Ch
     </nav>
   );
 }
+
+/** Memoised: always on screen, re-rendered at 22 Hz, props stable per frame. */
+export const ChainStrip = memo(ChainStripBase);
 
 export default ChainStrip;

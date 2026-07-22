@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   clearMidiMapping,
@@ -60,7 +60,7 @@ function collectAssignable(effects: EffectDescriptor[]): Assignable[] {
   return result;
 }
 
-export function MidiMapping({ effects, disabled = false }: MidiMappingProps) {
+function MidiMappingBase({ effects, disabled = false }: MidiMappingProps) {
   const [state, setState] = useState<MidiState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [target, setTarget] = useState('');
@@ -238,5 +238,7 @@ export function MidiMapping({ effects, disabled = false }: MidiMappingProps) {
     </section>
   );
 }
+
+export const MidiMapping = memo(MidiMappingBase);
 
 export default MidiMapping;

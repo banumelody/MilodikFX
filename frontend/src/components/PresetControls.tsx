@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { PresetMetadata } from '../services/api';
 
@@ -27,7 +27,7 @@ const EMPTY: PresetMetadata = {
   savedAt: '',
 };
 
-export function PresetControls({
+function PresetControlsBase({
   presets,
   details = [],
   selected,
@@ -275,5 +275,7 @@ export function PresetControls({
     </section>
   );
 }
+
+export const PresetControls = memo(PresetControlsBase);
 
 export default PresetControls;

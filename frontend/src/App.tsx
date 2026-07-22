@@ -265,6 +265,17 @@ export function App() {
     }
   }, []);
 
+  // Stable void-returning wrappers. The meter stream re-renders App ~22 times a
+  // second; the memoised children (EffectRack, ChainStrip, the panels) only stay
+  // memoised if the callbacks they receive keep the same identity across those
+  // renders, so the inline arrows they used to get are hoisted into useCallback.
+  const toggleEffect = useCallback(
+    (effectId: string, enabled: boolean) => {
+      void handleEnabledChange(effectId, enabled);
+    },
+    [handleEnabledChange],
+  );
+
   const handleDeviceApply = useCallback(
     async (request: DeviceRequest) => {
       setDeviceBusy(true);
@@ -301,6 +312,23 @@ export function App() {
       setDeviceBusy(false);
     }
   }, [refreshDevices]);
+
+  // The rest of the stable wrappers (see toggleEffect above for why).
+  const applyDevice = useCallback(
+    (request: DeviceRequest) => {
+      void handleDeviceApply(request);
+    },
+    [handleDeviceApply],
+  );
+  const refreshDevicesVoid = useCallback(() => {
+    void refreshDevices();
+  }, [refreshDevices]);
+  const optimiseVoid = useCallback(() => {
+    void handleOptimise();
+  }, [handleOptimise]);
+  const refreshEffectsVoid = useCallback(() => {
+    void refreshEffects();
+  }, [refreshEffects]);
 
   const withMessage = useCallback(async (action: () => Promise<void>, success: string) => {
     try {
@@ -641,7 +669,7 @@ export function App() {
         effects={effects}
         disabled={offline}
         onSelect={scrollToEffect}
-        onToggle={(id, enabled) => void handleEnabledChange(id, enabled)}
+        onToggle={toggleEffect}
       />
 
       <main className="layout">
@@ -659,7 +687,7 @@ export function App() {
               disabled={offline}
               sampleRate={levels.sampleRate || undefined}
               onParameterChange={handleParameterChange}
-              onEnabledChange={(id, enabled) => void handleEnabledChange(id, enabled)}
+              onEnabledChange={toggleEffect}
             />
           ))}
         </div>
@@ -669,9 +697,9 @@ export function App() {
             devices={devices}
             busy={deviceBusy}
             error={deviceError}
-            onApply={(request) => void handleDeviceApply(request)}
-            onRefresh={() => void refreshDevices()}
-            onOptimise={() => void handleOptimise()}
+            onApply={applyDevice}
+            onRefresh={refreshDevicesVoid}
+            onOptimise={optimiseVoid}
           />
 
           <TunerDisplay disabled={offline} />
@@ -681,14 +709,10 @@ export function App() {
             metronome={metronome}
             disabled={offline}
             onParameterChange={handleParameterChange}
-            onEnabledChange={(id, enabled) => void handleEnabledChange(id, enabled)}
+            onEnabledChange={toggleEffect}
           />
 
-          <SceneGrid
-            effects={rackEffects}
-            disabled={offline}
-            onRecalled={() => void refreshEffects()}
-          />
+          <SceneGrid effects={rackEffects} disabled={offline} onRecalled={refreshEffectsVoid} />
 
           <PresetControls
             presets={presets}
@@ -705,7 +729,7 @@ export function App() {
 
           <MidiMapping effects={effects} disabled={offline} />
 
-          <NamPanel disabled={offline} onLibraryChanged={() => void refreshEffects()} />
+          <NamPanel disabled={offline} onLibraryChanged={refreshEffectsVoid} />
 
           <section className="panel" aria-label="Impulse response">
             <header className="panel__head">

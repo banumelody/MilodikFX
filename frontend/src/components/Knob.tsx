@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
 export interface KnobProps {
   value: number;
@@ -44,7 +44,7 @@ function decimalsForStep(step: number) {
   return 2;
 }
 
-export function Knob({
+function KnobBase({
   value,
   onChange,
   onCommit,
@@ -227,5 +227,12 @@ export function Knob({
     </div>
   );
 }
+
+/**
+ * Memoised: the meter stream re-renders App ~22 times a second, and a rack of
+ * a dozen cards holds enough dials that recomputing every arc path each frame
+ * was measurable. Props are stable across a meter frame, so the memo skips it.
+ */
+export const Knob = memo(KnobBase);
 
 export default Knob;

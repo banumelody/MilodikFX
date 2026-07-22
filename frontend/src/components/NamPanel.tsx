@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
 import { getNamLibrary, importNam, revealNamFolder } from '../services/api';
 import type { NamLibraryResponse } from '../services/api';
@@ -18,7 +18,7 @@ interface NamPanelProps {
  * so a build without NAM or a CPU without AVX2 explains itself rather than
  * failing a load silently.
  */
-export function NamPanel({ disabled = false, onLibraryChanged }: NamPanelProps) {
+function NamPanelBase({ disabled = false, onLibraryChanged }: NamPanelProps) {
   const [library, setLibrary] = useState<NamLibraryResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement | null>(null);
@@ -135,5 +135,7 @@ export function NamPanel({ disabled = false, onLibraryChanged }: NamPanelProps) 
     </section>
   );
 }
+
+export const NamPanel = memo(NamPanelBase);
 
 export default NamPanel;

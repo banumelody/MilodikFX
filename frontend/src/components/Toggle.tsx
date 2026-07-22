@@ -1,3 +1,5 @@
+import { memo } from 'react';
+
 export interface ToggleProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
@@ -6,7 +8,7 @@ export interface ToggleProps {
   disabled?: boolean;
 }
 
-export function Toggle({ checked, onChange, label, accent = '#4da3ff', disabled = false }: ToggleProps) {
+function ToggleBase({ checked, onChange, label, accent = '#4da3ff', disabled = false }: ToggleProps) {
   return (
     <button
       type="button"
@@ -22,5 +24,8 @@ export function Toggle({ checked, onChange, label, accent = '#4da3ff', disabled 
     </button>
   );
 }
+
+/** Memoised for the same reason as Knob: many instances, re-rendered at 22 Hz. */
+export const Toggle = memo(ToggleBase);
 
 export default Toggle;

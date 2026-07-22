@@ -259,6 +259,32 @@ describe('EffectRack drive voicings', () => {
     expect(onParameterChange).toHaveBeenCalledWith('overdrive', 'type', 5);
   });
 
+  it('nudges oversampling to a value that suits the chosen voicing', () => {
+    const { onParameterChange } = renderRack(overdrive);
+
+    // Big Muff (11) is a fuzz -- the most high harmonics, so it gets 4x (index 2)
+    // rather than the 2x default a clean voicing would keep.
+    fireEvent.change(screen.getByRole('combobox', { name: 'Tipe' }), {
+      target: { value: '11' },
+    });
+
+    expect(onParameterChange).toHaveBeenCalledWith('overdrive', 'type', 11);
+    expect(onParameterChange).toHaveBeenCalledWith('overdrive', 'oversampling', 2);
+  });
+
+  it('leaves oversampling alone for non-drive enum changes', () => {
+    const { onParameterChange } = renderRack(overdrive);
+
+    // The oversampling nudge is specific to the voicing selector; changing the
+    // oversampling dropdown itself must not fire a second write.
+    fireEvent.change(screen.getByRole('combobox', { name: 'Oversampling' }), {
+      target: { value: '3' },
+    });
+
+    expect(onParameterChange).toHaveBeenCalledTimes(1);
+    expect(onParameterChange).toHaveBeenCalledWith('overdrive', 'oversampling', 3);
+  });
+
   it('falls back to the Custom layout for a voicing it does not know', () => {
     // A preset saved by a newer build must still render something usable
     // rather than an empty card.

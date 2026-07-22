@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 
 import { setTunerEnabled, subscribeTuner } from '../services/api';
 import type { TunerReading } from '../services/api';
@@ -27,7 +27,7 @@ interface TunerDisplayProps {
  * panel switches it on when opened and off when closed rather than leaving it
  * running behind a collapsed card.
  */
-export function TunerDisplay({ disabled = false }: TunerDisplayProps) {
+function TunerDisplayBase({ disabled = false }: TunerDisplayProps) {
   const [open, setOpen] = useState(false);
   const [reading, setReading] = useState<TunerReading>(IDLE);
 
@@ -145,5 +145,7 @@ export function TunerDisplay({ disabled = false }: TunerDisplayProps) {
     </section>
   );
 }
+
+export const TunerDisplay = memo(TunerDisplayBase);
 
 export default TunerDisplay;

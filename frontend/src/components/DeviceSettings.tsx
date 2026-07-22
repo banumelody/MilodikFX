@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import type { DeviceRequest, DevicesResponse } from '../services/api';
 
 export interface DeviceSettingsProps {
@@ -17,7 +17,7 @@ function latencyClass(ms: number) {
   return ' pill--bad';
 }
 
-export function DeviceSettings({
+function DeviceSettingsBase({
   devices,
   busy,
   error,
@@ -171,5 +171,7 @@ export function DeviceSettings({
     </section>
   );
 }
+
+export const DeviceSettings = memo(DeviceSettingsBase);
 
 export default DeviceSettings;

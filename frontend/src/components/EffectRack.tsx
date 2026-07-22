@@ -1,3 +1,5 @@
+import { memo } from 'react';
+
 import { Knob } from './Knob';
 import { Toggle } from './Toggle';
 import { ToneCurve } from './ToneCurve';
@@ -56,6 +58,29 @@ const ENUM_OPTIONS: Record<string, string[]> = {
  */
 const OVERRIDDEN_BY: Record<string, { parameter: string; whenNot: number }> = {
   'delay.timeMs': { parameter: 'syncMode', whenNot: 0 },
+};
+
+/**
+ * A sensible oversampling default per drive voicing, indexed by drive::Type.
+ * Written only when the user picks a voicing from the Tipe dropdown, never on a
+ * preset restore (which sets parameters straight through the registry) -- so the
+ * user's own oversampling choice is always respected until they change type
+ * again. Fuzz and hard clip make the most high harmonics and want the most
+ * headroom; a clean boost barely clips and needs none. 0=Mati 1=2x 2=4x 3=8x.
+ */
+const RECOMMENDED_OVERSAMPLING: Record<number, number> = {
+  0: 1, // Custom
+  1: 1, // Tube Screamer
+  2: 1, // Bluesbreaker
+  3: 1, // Blues Driver
+  4: 1, // Transparent
+  5: 2, // OCD
+  6: 1, // Dumble
+  7: 2, // Marshall-in-a-Box
+  8: 0, // Clean Boost
+  9: 1, // Centaur
+  10: 2, // RAT
+  11: 2, // Big Muff
 };
 
 /**
@@ -135,7 +160,7 @@ function formatValue(parameter: ParameterDescriptor, value: number) {
   return value.toFixed(2);
 }
 
-export function EffectRack({
+function EffectRackBase({
   effect,
   index,
   total,
@@ -247,9 +272,22 @@ export function EffectRack({
                 <select
                   value={String(Math.round(Number(parameter.value)))}
                   disabled={inactive}
-                  onChange={(event) =>
-                    onParameterChange(effect.id, parameter.id, Number(event.target.value))
-                  }
+                  onChange={(event) => {
+                    const next = Number(event.target.value);
+                    onParameterChange(effect.id, parameter.id, next);
+
+                    // Picking a drive voicing also nudges oversampling to a
+                    // value that suits it -- fuzz gets headroom, a clean boost
+                    // does not pay for what it will not use. Only here, on the
+                    // explicit dropdown choice; a manual oversampling turn after
+                    // this stays put, and a preset restore never comes through
+                    // this path at all.
+                    if (enumKey === 'overdrive.type') {
+                      const recommended = RECOMMENDED_OVERSAMPLING[next];
+                      if (recommended !== undefined)
+                        onParameterChange(effect.id, 'oversampling', recommended);
+                    }
+                  }}
                 >
                   {options.map((option, optionIndex) => (
                     <option key={option} value={optionIndex}>
@@ -306,5 +344,14 @@ export function EffectRack({
     </section>
   );
 }
+
+/**
+ * Memoised: this is the heavy child. A dozen of these, each with its dials and
+ * tone curve, must not re-render on every meter frame. Props are stable across
+ * a frame -- the effect object only changes when that effect changes, the
+ * callbacks are stabilised in App, and sampleRate is a steady number -- so the
+ * memo skips all of them until something the card actually shows moves.
+ */
+export const EffectRack = memo(EffectRackBase);
 
 export default EffectRack;
