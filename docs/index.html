@@ -3,243 +3,234 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>MilodikFX — multi-efek gitar/bass realtime untuk Windows</title>
+<title>MilodikFX — multi-efek gitar & bass realtime untuk Windows</title>
 <meta name="description" content="MilodikFX: satu executable C++/JUCE mandiri untuk memproses gitar dan bass secara realtime di Windows — 11 voicing overdrive/distorsi/fuzz, amp head NAM, cabinet IR, tuner, delay/reverb, MIDI, dan latensi ASIO rendah." />
 <meta property="og:title" content="MilodikFX" />
-<meta property="og:description" content="Multi-efek gitar/bass realtime untuk Windows — satu exe mandiri, latensi ASIO rendah." />
+<meta property="og:description" content="Multi-efek gitar & bass realtime untuk Windows — satu exe mandiri, latensi ASIO rendah." />
 <meta property="og:type" content="website" />
 <style>
   :root {
-    --bg: #0d0f14;
-    --bg-raised: #151923;
-    --bg-sunken: #0a0c11;
-    --line: #232a38;
-    --text: #e6eaf2;
-    --text-dim: #8b95a7;
-    --text-faint: #5d6779;
-    --accent: #ff8a3d;
-    --accent-2: #ff5c7a;
-    --blue: #4da3ff;
-    --good: #28c76f;
-    --warn: #ffc93c;
-    --radius: 14px;
+    --bg: #0b0c0f;
+    --bg-soft: #101217;
+    --bg-card: #12151b;
+    --line: #20242e;
+    --line-soft: #191d25;
+    --text: #eceef2;
+    --text-dim: #9aa0ad;
+    --text-faint: #616776;
+    --gold: #d9b877;
+    --gold-soft: #e7cf9e;
+    --radius: 16px;
+    --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Georgia', serif;
+    --sans: 'Inter', 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
     color-scheme: dark;
   }
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
   body {
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font: 16px/1.65 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.7;
+    letter-spacing: 0.005em;
     -webkit-font-smoothing: antialiased;
   }
-  a { color: var(--blue); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  h1, h2, h3 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
-  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 22px; }
+  a { color: var(--gold-soft); text-decoration: none; transition: color 0.15s; }
+  a:hover { color: var(--gold); }
+  h1, h2, h3 { margin: 0; font-weight: 500; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  .eyebrow {
+    font-size: 12px; letter-spacing: 0.24em; text-transform: uppercase;
+    color: var(--gold); font-weight: 600; margin: 0 0 20px;
+  }
   .muted { color: var(--text-dim); }
+  .hairline { height: 1px; background: var(--line); border: 0; margin: 0; }
 
-  /* hero */
+  /* ---- hero ---- */
   header.hero {
-    position: relative;
-    overflow: hidden;
-    padding: 72px 0 56px;
-    background:
-      radial-gradient(1100px 460px at 15% -10%, rgba(255, 138, 61, 0.18), transparent 60%),
-      radial-gradient(900px 420px at 95% 0%, rgba(77, 163, 255, 0.14), transparent 60%),
-      linear-gradient(180deg, #12161f 0%, var(--bg) 100%);
+    position: relative; overflow: hidden;
+    padding: 88px 0 76px;
     border-bottom: 1px solid var(--line);
+    background:
+      radial-gradient(900px 500px at 78% -10%, rgba(217, 184, 119, 0.10), transparent 62%),
+      linear-gradient(180deg, #0d0f13 0%, var(--bg) 100%);
   }
-  .brand { display: flex; align-items: center; gap: 14px; margin-bottom: 26px; }
-  .logo {
-    width: 44px; height: 44px; border-radius: 12px;
-    background: linear-gradient(135deg, var(--accent), var(--accent-2));
-    box-shadow: 0 6px 20px rgba(255, 92, 122, 0.35);
-    display: grid; place-items: center; font-weight: 800; color: #10131a; font-size: 20px;
+  /* A quiet six-string motif behind the hero, drawn not loaded. */
+  .strings { position: absolute; inset: 0; opacity: 0.5; pointer-events: none; }
+  .strings i {
+    position: absolute; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(217,184,119,0.16) 30%, rgba(217,184,119,0.05) 100%);
   }
-  .brand span { font-weight: 700; font-size: 18px; letter-spacing: 0.02em; }
+  .brand { display: flex; align-items: center; gap: 14px; margin-bottom: 40px; position: relative; }
+  .mark {
+    width: 40px; height: 40px; border-radius: 11px;
+    border: 1px solid rgba(217, 184, 119, 0.5);
+    display: grid; place-items: center;
+    font-family: var(--serif); font-size: 21px; color: var(--gold-soft);
+    background: linear-gradient(180deg, rgba(217,184,119,0.12), transparent);
+  }
+  .brand b { font-weight: 600; font-size: 18px; letter-spacing: 0.04em; }
   .hero h1 {
-    font-size: clamp(34px, 6vw, 56px);
-    line-height: 1.05;
-    max-width: 18ch;
-    background: linear-gradient(180deg, #ffffff, #b9c2d4);
-    -webkit-background-clip: text; background-clip: text; color: transparent;
+    font-family: var(--serif);
+    font-size: clamp(38px, 6.2vw, 66px);
+    line-height: 1.04; font-weight: 500; letter-spacing: -0.01em;
+    max-width: 15ch; margin: 0; position: relative;
   }
-  .hero p.lead { font-size: clamp(16px, 2.4vw, 20px); color: var(--text-dim); max-width: 62ch; margin: 20px 0 0; }
-  .cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 34px; }
+  .hero h1 em { font-style: italic; color: var(--gold-soft); }
+  .hero .lead {
+    font-size: clamp(16px, 2.2vw, 19px); color: var(--text-dim);
+    max-width: 58ch; margin: 26px 0 0; position: relative;
+  }
+  .cta { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 40px; position: relative; }
   .btn {
     display: inline-flex; align-items: center; gap: 9px;
-    padding: 12px 20px; border-radius: 999px; font-weight: 650; font-size: 15px;
-    border: 1px solid transparent; cursor: pointer;
+    padding: 13px 24px; border-radius: 999px; font-size: 15px; font-weight: 550;
+    border: 1px solid transparent; cursor: pointer; transition: all 0.15s;
   }
-  .btn:hover { text-decoration: none; }
-  .btn--primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #10131a; }
-  .btn--primary:hover { filter: brightness(1.06); }
-  .btn--ghost { border-color: var(--line); color: var(--text); background: rgba(255,255,255,0.02); }
-  .btn--ghost:hover { border-color: #34405a; background: rgba(255,255,255,0.05); }
-  .btn--coffee { border-color: rgba(255, 201, 60, 0.45); background: rgba(255, 201, 60, 0.12); color: var(--warn); }
-  .btn--coffee:hover { background: rgba(255, 201, 60, 0.2); }
+  .btn svg { width: 17px; height: 17px; }
+  .btn--gold { background: linear-gradient(180deg, var(--gold-soft), var(--gold)); color: #241b09; border-color: var(--gold); }
+  .btn--gold:hover { filter: brightness(1.05); color: #241b09; }
+  .btn--line { border-color: var(--line); color: var(--text); }
+  .btn--line:hover { border-color: #3a4152; color: var(--text); background: rgba(255,255,255,0.02); }
 
-  /* signal chain */
-  .chain-note { margin-top: 44px; }
-  .chain {
-    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px;
-  }
-  .chain .node {
-    font-size: 12.5px; padding: 6px 11px; border-radius: 8px;
-    background: var(--bg-raised); border: 1px solid var(--line); color: var(--text-dim);
-    white-space: nowrap;
-  }
-  .chain .node.hot { color: var(--accent); border-color: rgba(255, 138, 61, 0.4); background: rgba(255, 138, 61, 0.08); }
-  .chain .arrow { color: var(--text-faint); align-self: center; }
+  /* ---- sections ---- */
+  section { padding: 76px 0; border-bottom: 1px solid var(--line); }
+  section h2 { font-family: var(--serif); font-size: clamp(26px, 3.6vw, 36px); font-weight: 500; letter-spacing: -0.01em; }
+  section .sub { color: var(--text-dim); margin: 14px 0 44px; max-width: 62ch; }
 
-  section { padding: 58px 0; border-bottom: 1px solid var(--line); }
-  section h2 { font-size: clamp(24px, 3.5vw, 32px); }
-  section .sub { color: var(--text-dim); margin: 10px 0 34px; max-width: 66ch; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(272px, 1fr)); gap: 1px; background: var(--line-soft); border: 1px solid var(--line-soft); border-radius: var(--radius); overflow: hidden; }
+  .feature { background: var(--bg); padding: 30px 26px; transition: background 0.2s; }
+  .feature:hover { background: var(--bg-card); }
+  .feature .ic { width: 26px; height: 26px; color: var(--gold); margin-bottom: 18px; }
+  .feature .ic svg { width: 100%; height: 100%; }
+  .feature h3 { font-size: 16px; font-weight: 600; letter-spacing: 0.01em; margin-bottom: 8px; }
+  .feature p { margin: 0; font-size: 14px; color: var(--text-dim); line-height: 1.65; }
 
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
-  .card {
-    background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius);
-    padding: 20px; transition: border-color 0.15s, transform 0.15s;
-  }
-  .card:hover { border-color: #34405a; transform: translateY(-2px); }
-  .card h3 { font-size: 16px; margin-bottom: 7px; }
-  .card p { margin: 0; font-size: 14px; color: var(--text-dim); }
-  .card .tag { font-size: 20px; }
-
-  /* voicings */
-  .pills { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 6px; }
+  /* ---- voicings ---- */
+  .pills { display: flex; flex-wrap: wrap; gap: 10px; }
   .pill {
-    padding: 7px 13px; border-radius: 999px; font-size: 13.5px; font-weight: 600;
-    background: var(--bg-raised); border: 1px solid var(--line); color: var(--text-dim);
+    padding: 9px 16px; border-radius: 999px; font-size: 14px; letter-spacing: 0.01em;
+    background: var(--bg-card); border: 1px solid var(--line); color: var(--text-dim);
   }
-  .pill.new { color: var(--accent); border-color: rgba(255, 138, 61, 0.5); background: rgba(255, 138, 61, 0.1); }
+  .pill.n { color: var(--gold-soft); border-color: rgba(217, 184, 119, 0.45); }
 
-  /* download */
-  .dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
-  .dl .card code { color: var(--text); font-size: 13px; }
-  .badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-bottom: 10px; }
-  .badge.rec { background: rgba(40, 199, 111, 0.15); color: var(--good); }
-  .badge.port { background: rgba(77, 163, 255, 0.15); color: var(--blue); }
-  .badge.asio { background: rgba(255, 138, 61, 0.15); color: var(--accent); }
+  /* ---- specs ---- */
+  .specs { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0 56px; }
+  .specs dl { margin: 0; }
+  .specs .row { display: grid; grid-template-columns: 120px 1fr; gap: 18px; padding: 16px 0; border-bottom: 1px solid var(--line-soft); }
+  .specs dt { color: var(--gold); font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; padding-top: 2px; }
+  .specs dd { margin: 0; color: var(--text-dim); font-size: 15px; }
+  .specs dd b { color: var(--text); font-weight: 600; }
+  .specs .note { grid-column: 1 / -1; margin-top: 24px; color: var(--text-faint); font-size: 13.5px; }
 
-  /* support */
-  .support {
-    background:
-      radial-gradient(700px 300px at 80% 20%, rgba(255, 201, 60, 0.12), transparent 60%),
-      var(--bg);
-  }
+  /* ---- download ---- */
+  .dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(268px, 1fr)); gap: 16px; }
+  .flavour { background: var(--bg-card); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px; }
+  .flavour .tag { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold); margin-bottom: 12px; }
+  .flavour h3 { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
+  .flavour p { margin: 0; font-size: 13.5px; color: var(--text-dim); }
+  .flavour code { color: var(--text); font-size: 12.5px; background: var(--bg-soft); padding: 1px 6px; border-radius: 5px; }
+
+  /* ---- support ---- */
   .support .box {
-    background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius);
-    padding: 28px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px;
+    border: 1px solid var(--line); border-radius: var(--radius); padding: 40px;
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 24px;
+    background: radial-gradient(600px 260px at 85% 10%, rgba(217,184,119,0.08), transparent 60%);
   }
-  .support .box p { margin: 6px 0 0; color: var(--text-dim); max-width: 52ch; }
+  .support .box h2 { margin-bottom: 8px; }
+  .support .box p { margin: 0; color: var(--text-dim); max-width: 50ch; }
 
-  footer.site {
-    padding: 34px 0 48px; color: var(--text-faint); font-size: 13.5px;
-  }
-  footer.site .row { display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: baseline; }
-  footer.site strong { color: var(--text-dim); }
+  footer.site { padding: 40px 0 56px; color: var(--text-faint); font-size: 14px; }
+  footer.site .row { display: flex; flex-wrap: wrap; gap: 18px; justify-content: space-between; align-items: center; }
+  footer.site b { color: var(--text-dim); font-weight: 600; }
 
   @media (max-width: 560px) {
     .cta { flex-direction: column; align-items: stretch; }
     .btn { justify-content: center; }
+    .specs .row { grid-template-columns: 100px 1fr; gap: 12px; }
   }
 </style>
 </head>
 <body>
   <header class="hero">
+    <div class="strings" aria-hidden="true">
+      <i style="top:22%"></i><i style="top:35%"></i><i style="top:48%"></i>
+      <i style="top:61%"></i><i style="top:74%"></i><i style="top:87%"></i>
+    </div>
     <div class="wrap">
       <div class="brand">
-        <div class="logo">M</div>
-        <span>MilodikFX</span>
+        <span class="mark">M</span>
+        <b>MilodikFX</b>
       </div>
 
-      <h1>Multi-efek gitar &amp; bass realtime untuk Windows.</h1>
+      <h1>Rig gitar &amp; bass-mu, dalam <em>satu</em> aplikasi.</h1>
       <p class="lead">
-        Satu executable C++/JUCE mandiri: menjalankan audio engine, menyajikan UI-nya di jendelanya
-        sendiri, dan memproses gitar maupun bass dengan latensi ASIO serendah beberapa milidetik —
-        tanpa DAW, tanpa tab browser, tanpa proses terpisah.
+        Multi-efek realtime untuk Windows. Satu executable mandiri menjalankan audio engine dan
+        menampilkan antarmukanya di jendelanya sendiri — memproses gitar maupun bass dengan latensi
+        ASIO serendah beberapa milidetik. Tanpa DAW, tanpa tab browser.
       </p>
 
       <div class="cta">
-        <a class="btn btn--primary" href="https://github.com/banumelody/MilodikFX/releases/latest">
-          ⬇ Unduh versi terbaru
+        <a class="btn btn--gold" href="https://github.com/banumelody/MilodikFX/releases/latest">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l4-4m-4 4l-4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+          Unduh versi terbaru
         </a>
-        <a class="btn btn--ghost" href="https://github.com/banumelody/MilodikFX">
-          Kode sumber di GitHub
+        <a class="btn btn--line" href="https://github.com/banumelody/MilodikFX">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-4 1.5-4-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 00-1.3-3.2 4.3 4.3 0 00-.1-3.2s-1-.3-3.4 1.3a11.7 11.7 0 00-6 0C6.9 2.3 5.9 2.6 5.9 2.6a4.3 4.3 0 00-.1 3.2A4.6 4.6 0 004.5 9c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21"/></svg>
+          Kode sumber
         </a>
-        <a class="btn btn--coffee" href="https://github.com/sponsors/banumelody">
-          ☕ Traktir kopi
-        </a>
-      </div>
-
-      <div class="chain-note wrap" style="padding:0">
-        <p class="muted" style="margin-bottom:0">Rantai sinyal tetap — sama untuk gitar dan bass:</p>
-        <div class="chain">
-          <span class="node">InputTrim</span><span class="arrow">→</span>
-          <span class="node">NoiseGate</span><span class="arrow">→</span>
-          <span class="node">CleanBoost</span><span class="arrow">→</span>
-          <span class="node">Compressor</span><span class="arrow">→</span>
-          <span class="node hot">Overdrive</span><span class="arrow">→</span>
-          <span class="node">EQ</span><span class="arrow">→</span>
-          <span class="node">Contour</span><span class="arrow">→</span>
-          <span class="node hot">NAM</span><span class="arrow">→</span>
-          <span class="node">Cabinet</span><span class="arrow">→</span>
-          <span class="node">Delay</span><span class="arrow">→</span>
-          <span class="node">Reverb</span><span class="arrow">→</span>
-          <span class="node">MasterOut</span>
-        </div>
       </div>
     </div>
   </header>
 
   <section>
     <div class="wrap">
-      <h2>Yang ada di dalamnya</h2>
-      <p class="sub">Rig lengkap dalam satu binari — setiap kartu terikat ke parameter DSP yang hidup, jadi UI-nya tidak pernah melenceng dari engine.</p>
+      <p class="eyebrow">Rantai sinyal lengkap</p>
+      <h2>Semua yang biasanya berupa pedalboard, di dalam satu binari.</h2>
+      <p class="sub">Setiap kartu terikat ke parameter DSP yang hidup, jadi antarmukanya tidak pernah melenceng dari engine.</p>
 
       <div class="grid">
-        <div class="card">
-          <div class="tag">🎛️</div>
+        <div class="feature">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="8"/><path d="M12 4v3M12 12l3.5 2" stroke-linecap="round"/></svg></span>
           <h3>11 voicing overdrive</h3>
-          <p>Dari overdrive transparan sampai distorsi dan fuzz — Tube Screamer, OCD, Marshall-in-a-Box, Centaur, RAT, Big Muff, dan lainnya. Kontrol menyesuaikan tipe.</p>
+          <p>Dari overdrive transparan sampai distorsi dan fuzz — Tube Screamer, OCD, Marshall-in-a-Box, Centaur, RAT, Big Muff. Kontrol menyesuaikan tipe.</p>
         </div>
-        <div class="card">
-          <div class="tag">🔊</div>
+        <div class="feature">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="7" width="16" height="10" rx="2"/><path d="M8 7V5M16 7V5M8 17v2M16 17v2M4 12H2M22 12h-2" stroke-linecap="round"/></svg></span>
           <h3>Amp head NAM</h3>
-          <p>Menjalankan capture Neural Amp Modeler (<code>.nam</code>) di antara tone shaping dan cabinet — memodelkan cara distorsi amp berubah mengikuti seberapa keras kamu bermain.</p>
+          <p>Menjalankan capture Neural Amp Modeler (<code>.nam</code>) — memodelkan cara distorsi amp berubah mengikuti seberapa keras kamu bermain.</p>
         </div>
-        <div class="card">
-          <div class="tag">📦</div>
+        <div class="feature">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="3" width="14" height="18" rx="2"/><circle cx="12" cy="9" r="3.2"/><circle cx="12" cy="16.5" r="1.2"/></svg></span>
           <h3>Cabinet dua IR</h3>
           <p>Cabinet analitik plus dua slot impulse response yang bisa di-blend, untuk mencampur dua karakter speaker.</p>
         </div>
-        <div class="card">
-          <div class="tag">🎯</div>
+        <div class="feature">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M9 3v8a3 3 0 006 0V3"/><path d="M12 14v7M9 21h6"/></svg></span>
           <h3>Tuner gitar &amp; bass</h3>
-          <p>Kromatik, sampai low B bass 5-senar (≈ 31 Hz) lewat dekimasi ke ~16 kHz sebelum YIN. Akurat dalam ±5 sen.</p>
+          <p>Kromatik, sampai low B bass 5-senar (≈ 31 Hz). Akurat dalam ±5 sen, dengan pemberitahuan pas/rendah/tinggi.</p>
         </div>
-        <div class="card">
-          <div class="tag">🌫️</div>
+        <div class="feature">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 12c2 0 2-5 4-5s2 10 4 10 2-10 4-10 2 5 4 5"/></svg></span>
           <h3>Delay &amp; reverb spillover</h3>
           <p>Ekor tetap meluruh saat efek dimatikan, jadi pergantian scene di tengah lagu tidak memotong repeat.</p>
         </div>
-        <div class="card">
-          <div class="tag">🎚️</div>
+        <div class="feature">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 3l8 4-8 4-8-4 8-4z"/><path d="M4 12l8 4 8-4M4 16.5l8 4 8-4"/></svg></span>
           <h3>Scene &amp; preset</h3>
-          <p>Empat scene (hanya flag on/off, instan) plus preset penuh dengan metadata, impor/ekspor, dan undo/redo.</p>
+          <p>Empat scene instan plus preset penuh dengan metadata, impor/ekspor, dan undo/redo.</p>
         </div>
-        <div class="card">
-          <div class="tag">🎹</div>
+        <div class="feature">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1"/><circle cx="15.5" cy="10" r="1"/><circle cx="12" cy="8" r="1"/><circle cx="9.5" cy="15" r="1"/><circle cx="14.5" cy="15" r="1"/></svg></span>
           <h3>Kontrol MIDI</h3>
           <p>Footswitch dan controller dengan MIDI Learn — mode toggle untuk footswitch, continuous untuk pedal ekspresi.</p>
         </div>
-        <div class="card">
-          <div class="tag">⚡</div>
+        <div class="feature">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg></span>
           <h3>Latensi ASIO rendah</h3>
-          <p>Dengan ASIO turun sampai 32 sampel; tanpa SDK jatuh mulus ke WASAPI exclusive. ~7,6% DSP dengan semua efek menyala.</p>
+          <p>Dengan ASIO turun sampai 32 sampel; tanpa SDK jatuh mulus ke WASAPI. ~7,6% DSP dengan semua efek menyala.</p>
         </div>
       </div>
     </div>
@@ -247,8 +238,9 @@
 
   <section>
     <div class="wrap">
-      <h2>Sebelas pedal dalam satu blok</h2>
-      <p class="sub">Voicing overdrive disimpan sebagai tabel data, bukan cabang kode per pedal. Preset lama tetap berbunyi persis sama karena urutan tipenya append-only.</p>
+      <p class="eyebrow">Sebelas pedal, satu blok</p>
+      <h2>Voicing sebagai tabel data, bukan cabang kode per pedal.</h2>
+      <p class="sub">Preset lama tetap berbunyi persis sama karena urutan tipenya append-only.</p>
       <div class="pills">
         <span class="pill">Custom</span>
         <span class="pill">Tube Screamer</span>
@@ -259,36 +251,63 @@
         <span class="pill">Dumble</span>
         <span class="pill">Marshall-in-a-Box</span>
         <span class="pill">Clean Boost</span>
-        <span class="pill new">Centaur ✦</span>
-        <span class="pill new">RAT ✦</span>
-        <span class="pill new">Big Muff ✦</span>
+        <span class="pill n">Centaur</span>
+        <span class="pill n">RAT</span>
+        <span class="pill n">Big Muff</span>
       </div>
     </div>
   </section>
 
   <section>
     <div class="wrap">
-      <h2>Unduh</h2>
-      <p class="sub">Taruh di folder mana saja lalu jalankan. UI terbuka di jendelanya sendiri (butuh WebView2, sudah ada di Windows 10/11 modern).</p>
+      <p class="eyebrow">Spesifikasi minimum</p>
+      <h2>Ringan. Berjalan di komputer yang sudah kamu punya.</h2>
+      <p class="sub">Satu exe ~8 MB tanpa dependensi terpisah. Yang berikut ini cukup untuk menjalankan seluruh chain.</p>
+
+      <div class="specs">
+        <dl>
+          <div class="row"><dt>Sistem</dt><dd><b>Windows 10 atau 11</b>, 64-bit</dd></div>
+          <div class="row"><dt>Prosesor</dt><dd>x64 mana pun. Amp <b>NAM</b> membutuhkan <b>AVX2</b> (CPU sekitar 2013 ke atas)</dd></div>
+          <div class="row"><dt>Memori</dt><dd><b>4 GB</b> RAM</dd></div>
+        </dl>
+        <dl>
+          <div class="row"><dt>Penyimpanan</dt><dd>~<b>20 MB</b> ruang kosong</dd></div>
+          <div class="row"><dt>Audio</dt><dd>Interface apa pun. <b>ASIO</b> untuk latensi terendah; <b>WASAPI</b>/DirectSound sebagai fallback</dd></div>
+          <div class="row"><dt>Runtime</dt><dd><b>Edge WebView2</b> — sudah terpasang di Windows 10/11 modern</dd></div>
+        </dl>
+        <p class="note">
+          Tanpa AVX2, hanya amp NAM yang dinonaktifkan dengan pesan jelas — seluruh efek lain (overdrive,
+          cabinet IR, delay, reverb, tuner, dan sisanya) tetap berjalan penuh. Versi <b>portable</b> tidak
+          perlu dipasang dan berjalan di Windows mana pun lewat WASAPI/DirectSound.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <p class="eyebrow">Unduh</p>
+      <h2>Pilih rasa yang cocok.</h2>
+      <p class="sub">Taruh di folder mana saja lalu jalankan — antarmukanya terbuka di jendelanya sendiri.</p>
       <div class="dl">
-        <div class="card">
-          <span class="badge rec">Paling mudah</span>
+        <div class="flavour">
+          <div class="tag">Paling mudah</div>
           <h3>Installer</h3>
           <p><code>MilodikFX-x.x.x-setup.exe</code> — pasang seperti aplikasi biasa, dengan ASIO.</p>
         </div>
-        <div class="card">
-          <span class="badge asio">Latensi terendah</span>
+        <div class="flavour">
+          <div class="tag">Latensi terendah</div>
           <h3>ASIO</h3>
-          <p><code>MilodikFX-x.x.x.exe</code> — exe tunggal dengan dukungan ASIO untuk latensi paling rendah.</p>
+          <p><code>MilodikFX-x.x.x.exe</code> — exe tunggal dengan dukungan ASIO.</p>
         </div>
-        <div class="card">
-          <span class="badge port">Jalan di mana saja</span>
+        <div class="flavour">
+          <div class="tag">Jalan di mana saja</div>
           <h3>Portable</h3>
           <p><code>MilodikFX-x.x.x-portable.exe</code> — exe tunggal, WASAPI/DirectSound, tanpa dipasang.</p>
         </div>
       </div>
-      <p style="margin-top:22px">
-        <a class="btn btn--primary" href="https://github.com/banumelody/MilodikFX/releases/latest">Buka halaman rilis →</a>
+      <p style="margin-top:26px">
+        <a class="btn btn--gold" href="https://github.com/banumelody/MilodikFX/releases/latest">Buka halaman rilis →</a>
       </p>
     </div>
   </section>
@@ -298,26 +317,19 @@
       <div class="box">
         <div>
           <h2>Suka MilodikFX?</h2>
-          <p>
-            Aplikasi ini gratis dan sumber terbuka, dikerjakan satu orang di sela waktu. Kalau ia
-            menghemat uangmu dari beli pedal atau plugin, pertimbangkan mentraktir satu kopi —
-            tiap dukungan bikin voicing dan rilis berikutnya lebih cepat datang.
-          </p>
+          <p>Gratis dan sumber terbuka, dikerjakan satu orang di sela waktu. Kalau ia menghemat uangmu dari beli pedal atau plugin, pertimbangkan mentraktir satu kopi.</p>
         </div>
-        <a class="btn btn--coffee" href="https://github.com/sponsors/banumelody">☕ Jadi sponsor</a>
+        <a class="btn btn--gold" href="https://github.com/sponsors/banumelody">☕ Jadi sponsor</a>
       </div>
     </div>
   </section>
 
   <footer class="site">
     <div class="wrap row">
+      <div>Dibuat oleh <b>Banu Antoro</b> · <a href="https://github.com/banumelody">@banumelody</a></div>
       <div>
-        Dibuat oleh <strong>Banu Antoro</strong> ·
-        <a href="https://github.com/banumelody">@banumelody</a>
-      </div>
-      <div>
-        Lisensi <a href="https://github.com/banumelody/MilodikFX/blob/main/LICENSE">AGPLv3</a> ·
-        <a href="https://github.com/banumelody/MilodikFX">Kode sumber</a> ·
+        <a href="https://github.com/banumelody/MilodikFX/blob/main/LICENSE">AGPLv3</a> ·
+        <a href="https://github.com/banumelody/MilodikFX">GitHub</a> ·
         <a href="https://github.com/sponsors/banumelody">Dukung</a>
       </div>
     </div>
