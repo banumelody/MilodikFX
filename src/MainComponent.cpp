@@ -1,6 +1,7 @@
 #include "MainComponent.h"
 
 #include "api/HealthHandler.h"
+#include "api/UpdateHandler.h"
 
 #include <cmath>
 
@@ -34,6 +35,13 @@ public:
     }
 
     bool pageAboutToLoad (const juce::String&) override { return true; }
+
+    void newWindowAttemptingToLoad (const juce::String& newURL) override
+    {
+        // A target=_blank link -- the sponsor page, a release -- belongs in the
+        // user's real browser, not a chromeless WebView2 popup with no way back.
+        juce::URL (newURL).launchInDefaultBrowser();
+    }
 
     void pageFinishedLoading (const juce::String&) override
     {
@@ -472,6 +480,7 @@ void MainComponent::startServer()
     historyHandler->onChanged = [this] { markSettingsDirty(); };
     webServer->registerApiHandler ("/api/history", historyHandler);
     webServer->registerApiHandler ("/api/health", std::make_shared<HealthHandler>());
+    webServer->registerApiHandler ("/api/update", std::make_shared<UpdateHandler>());
 
     // Meters over one held-open connection instead of a fresh HTTP request every
     // 100 ms, which on a thread-per-connection server meant a thread per poll.

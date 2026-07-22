@@ -746,6 +746,17 @@ describe('MilodikFX UI against a live engine', () => {
     });
   });
 
+  it('reports its own version and an update verdict', () => {
+    // The shape is what matters: current is the build's version and the verdict
+    // is a boolean. The value depends on what is published on GitHub and whether
+    // the check reached it, so the test does not pin it -- the engine still
+    // answers (with current filled in) even when GitHub is unreachable.
+    cy.request('/api/update').then(({ body }) => {
+      expect(body.current, 'reports a current version').to.match(/^\d+\.\d+\.\d+$/);
+      expect(body.updateAvailable, 'gives a boolean verdict').to.be.a('boolean');
+    });
+  });
+
   it('offers two cabinet impulse responses and a blend between them', () => {
     cy.request('/api/effects/cabinet').then(({ body }) => {
       const ids = body.parameters.map((p: { id: string }) => p.id);

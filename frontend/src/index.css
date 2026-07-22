@@ -1346,6 +1346,110 @@ input[type='text']:disabled {
   color: #ffb3c1;
 }
 
+.banner--update {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(77, 163, 255, 0.12);
+  border-color: rgba(77, 163, 255, 0.4);
+  color: #cfe3ff;
+}
+
+.banner__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.banner__link {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.banner__link:hover {
+  text-decoration: underline;
+}
+
+.banner__close {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.banner__close:hover {
+  color: var(--text);
+}
+
+/* --------------------------------------------------------------- app footer */
+.appfooter {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 22px;
+  border-top: 1px solid var(--line);
+  background: var(--bg-sunken);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.appfooter__credit {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.appfooter__app {
+  color: var(--text);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.appfooter__by {
+  color: var(--text-faint);
+}
+
+.appfooter__by strong {
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.appfooter__by a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.appfooter__by a:hover {
+  text-decoration: underline;
+}
+
+.appfooter__sponsor {
+  flex: 0 0 auto;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 201, 60, 0.4);
+  background: rgba(255, 201, 60, 0.12);
+  color: var(--warn);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.appfooter__sponsor:hover {
+  background: rgba(255, 201, 60, 0.2);
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition-duration: 0.01ms !important;

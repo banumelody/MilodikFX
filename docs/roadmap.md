@@ -29,6 +29,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - P4-2 Spillover ekor delay/reverb — fade hanya saat dimatikan, blok berhenti setelah ekor < −80 dB
 - P4-1 Tipe overdrive — 8 voicing sebagai tabel data (`DriveVoicing.h`), kontrol UI menyesuaikan tipe
 - P4-1b Voicing Centaur/RAT/Big Muff — **SELESAI (22 Jul 2026)**, 3 voicing baru di tabel (total 11 pedal): `germanium`+`hardClip` di `ClipCurve`, `toneMode` scoop-mid tilt Big Muff, pre-emphasis + Filter terbalik RAT, blend Klon Centaur. Kontrol UI + label per-pedal, level dicocokkan lintas voicing. Diuji: backend + 154 test frontend.
+- P5-1 Update check, sponsor link, credit, situs — **SELESAI (22 Jul 2026, v0.15.0)**. `/api/update` (`UpdateHandler`) membandingkan `MILODIKFX_VERSION` dengan tag rilis terbaru GitHub; banner pemberitahuan yang bisa ditutup (dismissal diingat per versi di localStorage). Perbandingan versi = fungsi murni `isNewerVersion` (diuji, termasuk jebakan `0.9` vs `0.10`). Footer aplikasi memuat credit **Banu Antoro / @banumelody** + tombol sponsor; tautan eksternal dibuka di browser sistem lewat `newWindowAttemptingToLoad`. Situs GitHub Pages di `docs/` (`.nojekyll`).
 - P4-3 Dual IR + blend di cabinet — `irFileB` + `irBlend`, default 0 sehingga tidak mengubah apa pun
 - P1-2 Overdrive asimetri + oversampling adjustable
 - P1-3 Delay damping + ping-pong
@@ -53,7 +54,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - **P4-5 Looper** — mandiri dan tidak menyentuh arsitektur lain, tapi bukan kebutuhan inti; paling akhir sejak awal.
 - **P2-5 Multi-view** — sidebar masih terbaca dalam satu layar, jadi tab Perform/Edit/Library/Settings belum menyelesaikan masalah nyata. Akan terasa perlu begitu panelnya bertambah lagi.
 
-**Rilis terbaru:** v0.14.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.14.0
+**Rilis terbaru:** v0.15.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.15.0
 
 **Catatan P4-1 yang lahir dari implementasi:** tiga hal yang hanya ketahuan lewat pengukuran, bukan pembacaan kode. (1) Split butuh dua filter sungguhan; mengurangi salinan low-pass *tampak* setara tapi menyisakan selisih fasa yang lalu kena gain penuh clipper — Tube Screamer terukur mendistorsi bass lebih keras daripada drive full-range, persis terbalik. (2) Tahap kaskade harus membagi gain; dua tahap gain penuh mengotakkan sinyal, DC blocker menengahkannya, dan harmonik genap — alasan utama memilih voicing asimetris — hilang sama sekali. (3) Test harmoniknya sempat mengukur kebocoran spektralnya sendiri; di luar bin analisis, fundamental menyebar di sekitar −43 dB, satu orde dengan harmonik yang diukur, sehingga kurva simetris tampak punya harmonik genap sebanyak yang asimetris. Tepat di bin, kurva simetris terbaca 0,000000.
 

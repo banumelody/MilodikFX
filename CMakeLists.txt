@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(MilodikFX VERSION 0.14.0 LANGUAGES CXX)
+project(MilodikFX VERSION 0.15.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -303,6 +303,7 @@ target_sources(MilodikFX
     src/api/ApiJson.h
     src/api/RestApiDispatcher.h
     src/api/HealthHandler.h
+    src/api/UpdateHandler.h
     src/api/DevicesHandler.h
     src/api/DevicesHandler.cpp
     src/api/ParametersHandler.h
@@ -337,6 +338,7 @@ target_compile_definitions(MilodikFX
     JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=$<BOOL:${MILODIKFX_ENABLE_WEBVIEW}>
     MILODIKFX_ENABLE_WEBVIEW=$<BOOL:${MILODIKFX_ENABLE_WEBVIEW}>
     MILODIKFX_EMBED_UI=${MILODIKFX_HAS_EMBEDDED_UI}
+    MILODIKFX_VERSION="${PROJECT_VERSION}"
 )
 
 if(MILODIKFX_HAS_EMBEDDED_UI)
@@ -486,6 +488,7 @@ target_sources(MilodikFX_tests
     tests/UndoTests.cpp
     tests/InputTrimTests.cpp
     tests/DriveVoicingTests.cpp
+    tests/UpdateTests.cpp
     tests/NamTests.cpp
     tests/PerformanceTests.cpp
     ${MILODIKFX_ENGINE_SOURCES}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { AppFooter } from './components/AppFooter';
 import { ChainStrip } from './components/ChainStrip';
 import { DeviceSettings } from './components/DeviceSettings';
 import { EffectRack, EFFECT_ACCENTS } from './components/EffectRack';
@@ -12,6 +13,7 @@ import { SceneGrid } from './components/SceneGrid';
 import { Sparkline } from './components/Sparkline';
 import { TempoPanel } from './components/TempoPanel';
 import { TunerDisplay } from './components/TunerDisplay';
+import { UpdateBanner } from './components/UpdateBanner';
 import {
   deletePreset,
   exportPreset,
@@ -19,6 +21,7 @@ import {
   getEffects,
   getHistory,
   getPresets,
+  getUpdate,
   importPreset,
   loadPreset,
   optimiseDevice,
@@ -40,9 +43,13 @@ import type {
   HistoryState,
   Levels,
   PresetMetadata,
+  UpdateInfo,
 } from './services/api';
 
 type Connection = 'connecting' | 'online' | 'offline';
+
+/** Remembers the last release the user dismissed, so a newer one still shows. */
+const DISMISSED_UPDATE_KEY = 'milodikfx.update.dismissed';
 
 /** Coalescing window for parameter writes, in ms. */
 const WRITE_INTERVAL_MS = 40;
@@ -79,6 +86,14 @@ export function App() {
   const [selectedPreset, setSelectedPreset] = useState('');
   const [connection, setConnection] = useState<Connection>('connecting');
   const [message, setMessage] = useState<string | null>(null);
+  const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  const [dismissedUpdate, setDismissedUpdate] = useState<string>(() => {
+    try {
+      return window.localStorage.getItem(DISMISSED_UPDATE_KEY) ?? '';
+    } catch {
+      return '';
+    }
+  });
   const [deviceError, setDeviceError] = useState<string | null>(null);
   const [deviceBusy, setDeviceBusy] = useState(false);
   const [history, setHistory] = useState<HistoryState>({
@@ -136,6 +151,39 @@ export function App() {
       cancelled = true;
     };
   }, [refreshEffects, refreshDevices, refreshPresets]);
+
+  // The update check is deliberately separate from bootstrap: it reaches out to
+  // GitHub, which may be slow or blocked, and its failure must never colour the
+  // "connected to engine" status or hold up the rack.
+  useEffect(() => {
+    let cancelled = false;
+
+    getUpdate()
+      .then((info) => {
+        if (!cancelled) setUpdate(info);
+      })
+      .catch(() => {
+        /* offline or blocked; the banner simply stays hidden */
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const dismissUpdate = useCallback(() => {
+    setUpdate((current) => {
+      if (current) {
+        setDismissedUpdate(current.latest);
+        try {
+          window.localStorage.setItem(DISMISSED_UPDATE_KEY, current.latest);
+        } catch {
+          /* private mode; it will just show again next launch */
+        }
+      }
+      return current;
+    });
+  }, []);
 
   useEffect(() => {
     const unsubscribe = subscribeLevels(
@@ -584,6 +632,11 @@ export function App() {
         </div>
       ) : null}
 
+      <UpdateBanner
+        info={update && update.latest !== dismissedUpdate ? update : null}
+        onDismiss={dismissUpdate}
+      />
+
       <ChainStrip
         effects={effects}
         disabled={offline}
@@ -707,6 +760,8 @@ export function App() {
           </section>
         </aside>
       </main>
+
+      <AppFooter version={update?.current} />
     </div>
   );
 }

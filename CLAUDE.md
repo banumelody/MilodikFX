@@ -307,7 +307,15 @@ Measured delivery is ~22 Hz against a 33 ms target: Windows rounds a sleep up to
 granularity.
 
 Endpoints: `/api/effects`, `/api/parameters`, `/api/devices`, `/api/levels`, `/api/tuner`, `/api/ir`,
-`/api/nam`, `/api/midi`, `/api/scenes`, `/api/presets`, `/api/health`.
+`/api/nam`, `/api/midi`, `/api/scenes`, `/api/presets`, `/api/health`, `/api/update`.
+
+`/api/update` (`UpdateHandler`) reads the newest tag from GitHub Releases and compares it to the
+compiled-in `MILODIKFX_VERSION`, returning `{current, latest, updateAvailable, url}`; the UI raises a
+dismissible banner on it. The network read runs on the Winsock worker thread with a short timeout, and a
+success is cached for 30 min so a reload loop cannot exhaust GitHub's unauthenticated rate limit. The
+version comparison is a pure function (`isNewerVersion`) and is unit-tested; the network fetch is not.
+External links in the UI (sponsor page, a release) open via `UiWebView::newWindowAttemptingToLoad`, which
+hands a `target=_blank` off to the system browser rather than a chromeless WebView2 popup.
 
 ### Presets and scenes
 

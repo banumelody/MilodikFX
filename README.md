@@ -40,7 +40,10 @@ Semuanya untuk **gitar maupun bass**. Sorotan:
 
 Fitur lain: **tuner kromatik** (gitar & bass 5-senar, sampai low B ≈ 31 Hz), **kontrol MIDI/footswitch**
 dengan MIDI Learn, **scene** 4 slot, **preset** dengan metadata + impor/ekspor, **undo/redo**, kurva
-respons EQ, dan metering lewat Server-Sent Events.
+respons EQ, metering lewat Server-Sent Events, dan **pengecekan update otomatis** — aplikasi memeriksa
+GitHub Releases saat dibuka dan memunculkan pemberitahuan bila ada versi baru.
+
+Situs: **https://banumelody.github.io/MilodikFX/**
 
 ## Build (Windows)
 

@@ -375,6 +375,23 @@ export interface HistoryState {
   effects?: EffectDescriptor[];
 }
 
+export interface UpdateInfo {
+  /** The version this build reports for itself, e.g. "0.15.0". */
+  current: string;
+  /** The newest release tag on GitHub, e.g. "v0.15.0". Empty when unknown. */
+  latest: string;
+  updateAvailable: boolean;
+  /** The release page to open. */
+  url: string;
+  /** The release's title. */
+  name: string;
+  /** Present when the check could not reach GitHub; the UI just stays quiet. */
+  error?: string;
+}
+
+/** Asks the engine to check GitHub Releases. The engine caches the result. */
+export const getUpdate = () => request<UpdateInfo>('/update');
+
 export const getHistory = () => request<HistoryState>('/history');
 
 export const undoChange = () =>
