@@ -31,6 +31,10 @@ export interface EffectDescriptor {
   /** False for stages that are always in the path (input routing, master out). */
   toggleable: boolean;
   parameters: ParameterDescriptor[];
+  /** Active channel index (0-3), present when the engine tracks channels. */
+  channel?: number;
+  /** The four channel names, e.g. ["A","B","C","D"]. */
+  channels?: string[];
 }
 
 export interface EffectsResponse {
@@ -382,6 +386,24 @@ export const setEffectEnabled = (effect: string, enabled: boolean) =>
     `/effects/${encodeURIComponent(effect)}/enabled`,
     { method: 'POST', body: JSON.stringify({ enabled }) },
   );
+
+/**
+ * Selects a channel (A/B/C/D) for one effect. The whole block jumps to that
+ * saved sound; the response is the effect with its new parameter values, so the
+ * card can redraw without a second request.
+ */
+export const selectChannel = (effect: string, index: number) =>
+  request<EffectDescriptor>(`/effects/${encodeURIComponent(effect)}/channel`, {
+    method: 'PUT',
+    body: JSON.stringify({ value: index }),
+  });
+
+/** Stores the effect's current live sound into one of its channels. */
+export const saveChannel = (effect: string, index: number) =>
+  request<EffectDescriptor>(`/effects/${encodeURIComponent(effect)}/channel/save`, {
+    method: 'POST',
+    body: JSON.stringify({ value: index }),
+  });
 
 export const getPresets = () => request<PresetsResponse>('/presets');
 

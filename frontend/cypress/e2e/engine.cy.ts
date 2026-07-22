@@ -746,6 +746,67 @@ describe('MilodikFX UI against a live engine', () => {
     });
   });
 
+  it('gives each effect four channels and stores a sound per channel', () => {
+    cy.request('POST', '/api/effects/overdrive/enabled', { enabled: true });
+
+    // Every real effect block carries channel info in the effects list.
+    cy.request('/api/effects/overdrive').then(({ body }) => {
+      expect(body.channels, 'four channel names').to.have.length(4);
+      expect(body.channel, 'an active channel index').to.be.a('number');
+    });
+
+    // Dial a sound on A, switch to B (which saves A), dial B apart.
+    cy.request('PUT', '/api/effects/overdrive/channel', { value: 0 });
+    cy.request('PUT', '/api/effects/overdrive/drivePct', { value: 20 });
+    cy.request('PUT', '/api/effects/overdrive/channel', { value: 1 }).then(({ body }) => {
+      expect(body.channel).to.eq(1);
+    });
+    cy.request('PUT', '/api/effects/overdrive/drivePct', { value: 80 });
+
+    // Back to A: its stored drive (20) returns, not B's 80.
+    cy.request('PUT', '/api/effects/overdrive/channel', { value: 0 }).then(({ body }) => {
+      expect(body.channel).to.eq(0);
+      const drive = body.parameters.find((p: { id: string }) => p.id === 'drivePct');
+      expect(Number(drive.value)).to.be.closeTo(20, 1);
+    });
+
+    // And B still holds 80.
+    cy.request('PUT', '/api/effects/overdrive/channel', { value: 1 }).then(({ body }) => {
+      const drive = body.parameters.find((p: { id: string }) => p.id === 'drivePct');
+      expect(Number(drive.value)).to.be.closeTo(80, 1);
+    });
+
+    cy.request('PUT', '/api/effects/overdrive/channel', { value: 0 });
+  });
+
+  it('carries channels through a preset save and load', () => {
+    cy.request('POST', '/api/effects/overdrive/enabled', { enabled: true });
+
+    // Two distinct sounds in A and B, then save a preset.
+    cy.request('PUT', '/api/effects/overdrive/channel', { value: 0 });
+    cy.request('PUT', '/api/effects/overdrive/drivePct', { value: 15 });
+    cy.request('PUT', '/api/effects/overdrive/channel', { value: 1 });
+    cy.request('PUT', '/api/effects/overdrive/drivePct', { value: 65 });
+    cy.request('POST', '/api/presets/save', { name: 'ChannelRoundTrip' });
+
+    // Move things, then load the preset back.
+    cy.request('PUT', '/api/effects/overdrive/channel', { value: 0 });
+    cy.request('PUT', '/api/effects/overdrive/drivePct', { value: 99 });
+    cy.request('POST', '/api/presets/load', { name: 'ChannelRoundTrip' });
+
+    // Channel A's saved sound came back through the file.
+    cy.request('PUT', '/api/effects/overdrive/channel', { value: 0 }).then(({ body }) => {
+      const drive = body.parameters.find((p: { id: string }) => p.id === 'drivePct');
+      expect(Number(drive.value)).to.be.closeTo(15, 1);
+    });
+    cy.request('PUT', '/api/effects/overdrive/channel', { value: 1 }).then(({ body }) => {
+      const drive = body.parameters.find((p: { id: string }) => p.id === 'drivePct');
+      expect(Number(drive.value)).to.be.closeTo(65, 1);
+    });
+
+    cy.request('POST', '/api/presets/delete', { name: 'ChannelRoundTrip' });
+  });
+
   it('reports its own version and an update verdict', () => {
     // The shape is what matters: current is the build's version and the verdict
     // is a boolean. The value depends on what is published on GitHub and whether

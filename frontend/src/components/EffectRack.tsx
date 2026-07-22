@@ -148,6 +148,8 @@ export interface EffectRackProps {
   total?: number;
   onParameterChange: (effectId: string, parameterId: string, value: number | string) => void;
   onEnabledChange: (effectId: string, enabled: boolean) => void;
+  /** Selects a channel (A/B/C/D). Absent when the engine does not track them. */
+  onChannelSelect?: (effectId: string, index: number) => void;
   disabled?: boolean;
   /** Only affects where the tone curve puts Nyquist; harmless when unknown. */
   sampleRate?: number;
@@ -166,11 +168,21 @@ function EffectRackBase({
   total,
   onParameterChange,
   onEnabledChange,
+  onChannelSelect,
   disabled = false,
   sampleRate,
 }: EffectRackProps) {
   const accent = EFFECT_ACCENTS[effect.id] ?? '#4da3ff';
   const inactive = disabled || !effect.enabled;
+
+  // Channel tabs (A/B/C/D) belong on the real effect blocks -- the ones with a
+  // bypass -- not on the input router or the master out.
+  const showChannels =
+    effect.toggleable !== false &&
+    Array.isArray(effect.channels) &&
+    effect.channels.length > 0 &&
+    onChannelSelect !== undefined;
+  const activeChannel = Math.round(Number(effect.channel ?? 0));
 
   // The overdrive registers every voicing's controls; only the selected
   // voicing's are worth showing, under the names its original used.
@@ -229,6 +241,28 @@ function EffectRackBase({
           />
         )}
       </header>
+
+      {showChannels ? (
+        <div className="rack__channels" role="tablist" aria-label={`${effect.label} channel`}>
+          {effect.channels!.map((name, i) => (
+            <button
+              key={i}
+              type="button"
+              role="tab"
+              aria-selected={i === activeChannel}
+              className={`rack__channel${i === activeChannel ? ' rack__channel--active' : ''}`}
+              style={i === activeChannel ? { borderColor: accent, color: accent } : undefined}
+              // Switchable even while the effect is bypassed, so a channel can be
+              // dialled in before it is needed; only a dead engine disables it.
+              disabled={disabled}
+              title={`Channel ${name}`}
+              onClick={() => onChannelSelect?.(effect.id, i)}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <ToneCurve effect={effect} sampleRate={sampleRate} accent={accent} />
 

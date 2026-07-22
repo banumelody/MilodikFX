@@ -28,6 +28,7 @@ import {
   redoChange,
   revealIrFolder,
   savePreset,
+  selectChannel,
   ApiError,
   setDevice,
   setEffectEnabled,
@@ -275,6 +276,21 @@ export function App() {
     },
     [handleEnabledChange],
   );
+
+  // Selecting a channel jumps the whole block to a saved sound. The engine
+  // returns the effect with its new parameter values, so the one card is
+  // replaced from the response rather than refetching the whole chain.
+  const handleChannelSelect = useCallback((effectId: string, index: number) => {
+    void (async () => {
+      try {
+        const updated = await selectChannel(effectId, index);
+        setEffects((current) => current.map((effect) => (effect.id === effectId ? updated : effect)));
+      } catch (error) {
+        setConnection('offline');
+        setMessage(describeError(error));
+      }
+    })();
+  }, []);
 
   const handleDeviceApply = useCallback(
     async (request: DeviceRequest) => {
@@ -688,6 +704,7 @@ export function App() {
               sampleRate={levels.sampleRate || undefined}
               onParameterChange={handleParameterChange}
               onEnabledChange={toggleEffect}
+              onChannelSelect={handleChannelSelect}
             />
           ))}
         </div>

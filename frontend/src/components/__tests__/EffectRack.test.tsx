@@ -160,16 +160,18 @@ const input: EffectDescriptor = {
 function renderRack(effect: EffectDescriptor) {
   const onParameterChange = vi.fn();
   const onEnabledChange = vi.fn();
+  const onChannelSelect = vi.fn();
 
   render(
     <EffectRack
       effect={effect}
       onParameterChange={onParameterChange}
       onEnabledChange={onEnabledChange}
+      onChannelSelect={onChannelSelect}
     />,
   );
 
-  return { onParameterChange, onEnabledChange };
+  return { onParameterChange, onEnabledChange, onChannelSelect };
 }
 
 describe('EffectRack drive voicings', () => {
@@ -292,6 +294,43 @@ describe('EffectRack drive voicings', () => {
 
     expect(screen.getByRole('slider', { name: 'Drive' })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Tipe' })).toBeInTheDocument();
+  });
+});
+
+describe('EffectRack channels', () => {
+  const withChannels = (active: number): EffectDescriptor => ({
+    ...overdrive,
+    channel: active,
+    channels: ['A', 'B', 'C', 'D'],
+  });
+
+  it('shows four channel tabs with the active one selected', () => {
+    renderRack(withChannels(1));
+
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs).toHaveLength(4);
+    expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
+    expect(tabs[0]).toHaveAttribute('aria-selected', 'false');
+  });
+
+  it('selects a channel by index when a tab is clicked', () => {
+    const { onChannelSelect } = renderRack(withChannels(0));
+
+    fireEvent.click(screen.getByRole('tab', { name: 'C' }));
+    expect(onChannelSelect).toHaveBeenCalledWith('overdrive', 2);
+  });
+
+  it('shows no tabs for a stage that is always in the path', () => {
+    // Input routing and master out have no bypass and no channels.
+    renderRack({ ...withChannels(0), toggleable: false });
+
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+  });
+
+  it('shows no tabs when the engine reports no channels', () => {
+    renderRack(overdrive);
+
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
   });
 });
 

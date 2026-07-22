@@ -313,6 +313,42 @@ h2 {
   text-overflow: ellipsis;
 }
 
+/* Channel tabs (A/B/C/D): four saved sounds for one block, FM9-style. */
+.rack__channels {
+  display: flex;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.rack__channel {
+  min-width: 30px;
+  padding: 4px 0;
+  flex: 1 1 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--bg-sunken);
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+
+.rack__channel:hover:not(:disabled) {
+  color: var(--text);
+  border-color: #34405a;
+}
+
+.rack__channel--active {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.rack__channel:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .rack__body {
   display: flex;
   flex-wrap: wrap;
