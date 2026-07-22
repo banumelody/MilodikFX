@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(MilodikFX VERSION 0.16.0 LANGUAGES CXX)
+project(MilodikFX VERSION 0.17.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -240,6 +240,8 @@ set(MILODIKFX_ENGINE_SOURCES
   src/preset/NamLibrary.cpp
   src/preset/SceneManager.h
   src/preset/SceneManager.cpp
+  src/preset/ChannelStore.h
+  src/preset/ChannelStore.cpp
   src/api/ParameterRegistry.h
   src/api/ParameterRegistry.cpp
   src/api/UndoHistory.h
@@ -485,6 +487,7 @@ target_sources(MilodikFX_tests
     tests/TunerTests.cpp
     tests/MidiTests.cpp
     tests/SceneTests.cpp
+    tests/ChannelTests.cpp
     tests/UndoTests.cpp
     tests/InputTrimTests.cpp
     tests/DriveVoicingTests.cpp

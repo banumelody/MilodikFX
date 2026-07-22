@@ -374,6 +374,23 @@ void MainComponent::loadSettingsIntoRegistry()
     {
         sceneManager.resetToCurrent();
     }
+
+    // Channels come back the same way -- inside a preset normally, with a copy
+    // in the settings file so the chain returns as left even when nothing was
+    // loaded.
+    const auto storedChannels = settingsFile.getValue (kKeyChannels, {});
+
+    if (storedChannels.isNotEmpty())
+    {
+        juce::var parsed;
+
+        if (juce::JSON::parse (storedChannels, parsed).wasOk() && parsed.isObject())
+            channelStore.fromVar (parsed);
+    }
+    else
+    {
+        channelStore.resetToCurrent();
+    }
 }
 
 void MainComponent::markSettingsDirty()
@@ -411,6 +428,7 @@ void MainComponent::saveSettingsIfNeeded (bool force)
     saveMidiSettings();
 
     settingsFile.setValue (kKeyScenes, juce::JSON::toString (sceneManager.toVar(), true));
+    settingsFile.setValue (kKeyChannels, juce::JSON::toString (channelStore.toVar(), true));
 
     settingsFile.saveIfNeeded();
 
@@ -458,16 +476,24 @@ void MainComponent::startServer()
     levelsHandler = std::make_shared<LevelsHandler>();
     presetsHandler = std::make_shared<PresetsHandler> (presetManager, registry);
     presetsHandler->setSceneManager (&sceneManager);
+    presetsHandler->setChannelStore (&channelStore);
     presetsHandler->setSelectedName (settingsFile.getValue (kKeyPresetSelectedName, {}));
     presetsHandler->onSelectionChanged = [this] (const juce::String&) { markSettingsDirty(); };
+
+    // A channel switch changes the sound, so it has to survive a restart the
+    // same way a knob turn does.
+    channelStore.onChanged = [this] { markSettingsDirty(); };
 
     auto scenesHandler = std::make_shared<ScenesHandler> (sceneManager);
     scenesHandler->onChanged = [this] { markSettingsDirty(); };
 
+    auto effectsHandler = std::make_shared<EffectsHandler> (registry);
+    effectsHandler->setChannelStore (&channelStore);
+
     webServer->registerApiHandler ("/api/devices", std::make_shared<DevicesHandler> (deviceController));
     webServer->registerApiHandler ("/api/parameters",
                                    std::make_shared<ParametersHandler> (registry, "master", "volumeDb"));
-    webServer->registerApiHandler ("/api/effects", std::make_shared<EffectsHandler> (registry));
+    webServer->registerApiHandler ("/api/effects", effectsHandler);
     webServer->registerApiHandler ("/api/ir", std::make_shared<IrHandler> (irLibrary));
     webServer->registerApiHandler ("/api/nam", std::make_shared<NamHandler> (namLibrary));
     webServer->registerApiHandler ("/api/levels", levelsHandler);

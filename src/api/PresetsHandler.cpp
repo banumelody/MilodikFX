@@ -128,10 +128,20 @@ HttpHandler::Response PresetsHandler::handlePost (const std::string& path, const
             // scenes are being replaced.
             presetManager.loadDocument (name, document);
 
+            // Fold the live edits into each effect's active channel first, so
+            // the stored channel matches what the state snapshot is about to
+            // capture -- otherwise reloading and returning to the active channel
+            // would revert the edits made since the last switch.
+            if (channelStore != nullptr)
+                channelStore->commitActive();
+
             document.state = registry.captureState();
 
             if (sceneManager != nullptr)
                 document.scenes = sceneManager->toVar();
+
+            if (channelStore != nullptr)
+                document.channels = channelStore->toVar();
 
             if (! presetManager.saveDocument (name, document))
                 return jsonError (500, "Failed to write the preset file");
@@ -167,6 +177,17 @@ HttpHandler::Response PresetsHandler::handlePost (const std::string& path, const
                     sceneManager->fromVar (document.scenes);
                 else
                     sceneManager->resetToCurrent();
+            }
+
+            if (channelStore != nullptr)
+            {
+                // The state has already been applied above, so an older preset
+                // with no channels seeds all four from the sound it just put in
+                // place -- never from the previous preset's channels.
+                if (document.channels.isObject())
+                    channelStore->fromVar (document.channels);
+                else
+                    channelStore->resetToCurrent();
             }
 
             selectedName = name;

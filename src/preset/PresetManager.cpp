@@ -113,6 +113,9 @@ bool PresetManager::saveDocument (const juce::String& presetName, const PresetDo
     if (document.scenes.isArray())
         root->setProperty ("scenes", document.scenes);
 
+    if (document.channels.isObject())
+        root->setProperty ("channels", document.channels);
+
     root->setProperty ("state", document.state);
 
     return file.replaceWithText (juce::JSON::toString (juce::var (root), false));
@@ -148,6 +151,7 @@ bool PresetManager::loadDocument (const juce::String& presetName, PresetDocument
 
     outDocument.state = state;
     outDocument.scenes = parsed["scenes"];
+    outDocument.channels = parsed["channels"];
 
     // Absent in a version 2 file, which is fine: the fields simply stay empty
     // rather than the whole preset being refused.
@@ -203,6 +207,7 @@ juce::String PresetManager::importPreset (const juce::String& presetName, const 
     PresetDocument document;
     document.state = parsed["state"];
     document.scenes = parsed["scenes"];
+    document.channels = parsed["channels"];
     document.metadata.description = parsed["description"].toString();
     document.metadata.notes = parsed["notes"].toString();
     document.metadata.favourite = (bool) parsed["favourite"];

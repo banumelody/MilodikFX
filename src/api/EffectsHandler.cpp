@@ -9,12 +9,54 @@ namespace
 constexpr const char* kPrefix = "/api/effects";
 } // namespace
 
+void EffectsHandler::augment (juce::var& effectVar) const
+{
+    if (channelStore_ == nullptr)
+        return;
+
+    auto* object = effectVar.getDynamicObject();
+
+    if (object == nullptr)
+        return;
+
+    const auto id = object->getProperty ("id").toString().toStdString();
+
+    object->setProperty ("channel", channelStore_->getActive (id));
+
+    juce::Array<juce::var> names;
+
+    for (int i = 0; i < milodikfx::preset::ChannelStore::kNumChannels; ++i)
+        names.add (channelStore_->getName (id, i));
+
+    object->setProperty ("channels", names);
+}
+
+juce::var EffectsHandler::effectWithChannels (const milodikfx::api::EffectDescriptor& effect) const
+{
+    auto v = registry_.effectToVar (effect);
+    augment (v);
+    return v;
+}
+
 HttpHandler::Response EffectsHandler::handleGet (const std::string& path, const std::string&) const
 {
     try
     {
         if (path == kPrefix || path == "/api/effects/")
-            return jsonOk (registry_.toVar());
+        {
+            if (channelStore_ == nullptr)
+                return jsonOk (registry_.toVar());
+
+            juce::Array<juce::var> effects;
+
+            for (const auto& effect : registry_.getEffects())
+                effects.add (effectWithChannels (effect));
+
+            auto* root = new juce::DynamicObject();
+            root->setProperty ("effects", effects);
+
+            return jsonOk (juce::var (root));
+        }
 
         const auto segments = pathSegmentsAfter (path, kPrefix);
 
@@ -28,7 +70,7 @@ HttpHandler::Response EffectsHandler::handleGet (const std::string& path, const 
             return jsonError (404, "Unknown effect");
 
         if (segments.size() == 1)
-            return jsonOk (registry_.effectToVar (*effect));
+            return jsonOk (effectWithChannels (*effect));
 
         if (segments.size() == 2 && segments[1] == "enabled")
         {
@@ -85,6 +127,23 @@ HttpHandler::Response EffectsHandler::handlePost (const std::string& path, const
 
         const auto parsed = parseBody (body);
 
+        // Storing the live sound into one of the four channels.
+        if (segments.size() == 3 && segments[1] == "channel" && segments[2] == "save")
+        {
+            if (channelStore_ == nullptr)
+                return jsonError (503, "Channels are not available in this build");
+
+            double index = 0.0;
+
+            if (! readNumber (parsed, "value", index) && ! readNumber (parsed, "index", index))
+                return jsonError (400, "Body must contain a numeric channel 'value' (0-3)");
+
+            if (! channelStore_->save (effectId, (int) index))
+                return jsonError (400, "Channel index out of range");
+
+            return jsonOk (effectWithChannels (*effect));
+        }
+
         bool enabled = false;
 
         if (! readBool (parsed, "enabled", enabled))
@@ -116,6 +175,28 @@ HttpHandler::Response EffectsHandler::handlePut (const std::string& path, const 
 
         const auto effectId = toLowerAscii (segments[0]);
         const auto parsed = parseBody (body);
+
+        // Selecting a channel: the whole block jumps to that saved sound. The
+        // response carries the effect's new parameter values so the card can
+        // redraw without a second round trip.
+        if (segments[1] == "channel")
+        {
+            if (channelStore_ == nullptr)
+                return jsonError (503, "Channels are not available in this build");
+
+            double index = 0.0;
+
+            if (! readNumber (parsed, "value", index) && ! readNumber (parsed, "index", index))
+                return jsonError (400, "Body must contain a numeric channel 'value' (0-3)");
+
+            if (! channelStore_->recall (effectId, (int) index))
+                return jsonError (400, "Unknown effect or channel index out of range");
+
+            const auto* effect = registry_.findEffect (effectId);
+
+            return effect != nullptr ? jsonOk (effectWithChannels (*effect))
+                                     : jsonError (404, "Unknown effect");
+        }
 
         // PUT .../enabled is accepted as well as POST, since the UI treats every
         // control the same way.

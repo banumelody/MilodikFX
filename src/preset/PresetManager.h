@@ -37,14 +37,17 @@ struct PresetDocument
 
     /** Scene slots, opaque here -- SceneManager owns the shape. */
     juce::var scenes;
+
+    /** Per-effect A/B/C/D channels, opaque here -- ChannelStore owns the shape. */
+    juce::var channels;
 };
 
 class PresetManager final
 {
 public:
-    /** 3 added metadata and scenes. Version 2 files still load; the new fields
-        simply come back empty. */
-    static constexpr int kSchemaVersion = 3;
+    /** 3 added metadata and scenes; 4 added per-effect channels. Older files
+        still load; the new fields simply come back empty. */
+    static constexpr int kSchemaVersion = 4;
 
     explicit PresetManager (juce::File presetsDirectoryIn);
 

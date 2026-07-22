@@ -6,6 +6,7 @@
 
 #include "api/HttpHandler.h"
 #include "api/ParameterRegistry.h"
+#include "preset/ChannelStore.h"
 #include "preset/PresetManager.h"
 #include "preset/SceneManager.h"
 
@@ -41,6 +42,9 @@ public:
      */
     void setSceneManager (milodikfx::preset::SceneManager* manager) { sceneManager = manager; }
 
+    /** Channels travel inside the preset too; optional, like the scene manager. */
+    void setChannelStore (milodikfx::preset::ChannelStore* store) { channelStore = store; }
+
     Response handleGet (const std::string& path, const std::string& query) const override;
     Response handlePost (const std::string& path, const std::string& body) override;
     Response handleDelete (const std::string& path) override;
@@ -57,5 +61,6 @@ private:
     milodikfx::preset::PresetManager& presetManager;
     const milodikfx::api::ParameterRegistry& registry;
     milodikfx::preset::SceneManager* sceneManager = nullptr;
+    milodikfx::preset::ChannelStore* channelStore = nullptr;
     juce::String selectedName;
 };

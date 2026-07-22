@@ -24,6 +24,7 @@
 #include "midi/MidiController.h"
 #include "preset/IrLibrary.h"
 #include "preset/PresetManager.h"
+#include "preset/ChannelStore.h"
 #include "ui/WebServer.h"
 
 /**
@@ -72,6 +73,7 @@ private:
     static constexpr const char* kKeyInputMode = "audio.inputMode";
     static constexpr const char* kKeyMidiDevice = "midi.device";
     static constexpr const char* kKeyScenes = "ui.scenes";
+    static constexpr const char* kKeyChannels = "ui.channels";
 
     void buildChain();
     void buildRegistry();
@@ -113,6 +115,7 @@ private:
     milodikfx::preset::NamLibrary namLibrary;
     milodikfx::api::ParameterRegistry registry;
     milodikfx::preset::SceneManager sceneManager { registry };
+    milodikfx::preset::ChannelStore channelStore { registry };
     milodikfx::api::UndoHistory undoHistory { registry };
 
     juce::AudioDeviceManager deviceManager;
