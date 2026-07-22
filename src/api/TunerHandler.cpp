@@ -30,7 +30,15 @@ juce::var readingToVar (const milodikfx::dsp::TunerAnalyzer& analyzer)
 
 HttpHandler::Response TunerHandler::handleGet (const std::string&, const std::string&) const
 {
-    return jsonOk (readingToVar (analyzer));
+    return jsonOkCompact (readingToVar (analyzer));
+}
+
+std::string TunerHandler::streamPayload() const
+{
+    if (! analyzer.isEnabled())
+        return {};
+
+    return toCompactJsonString (readingToVar (analyzer));
 }
 
 HttpHandler::Response TunerHandler::handlePost (const std::string& path, const std::string& body)

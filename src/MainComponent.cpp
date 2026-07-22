@@ -471,7 +471,10 @@ void MainComponent::startServer()
     webServer->registerApiHandler ("/api/ir", std::make_shared<IrHandler> (irLibrary));
     webServer->registerApiHandler ("/api/nam", std::make_shared<NamHandler> (namLibrary));
     webServer->registerApiHandler ("/api/levels", levelsHandler);
-    webServer->registerApiHandler ("/api/tuner", std::make_shared<TunerHandler> (tunerAnalyzer));
+
+    auto tunerHandler = std::make_shared<TunerHandler> (tunerAnalyzer);
+    webServer->registerApiHandler ("/api/tuner", tunerHandler);
+
     webServer->registerApiHandler ("/api/midi", std::make_shared<MidiHandler> (midiController));
     webServer->registerApiHandler ("/api/presets", presetsHandler);
     webServer->registerApiHandler ("/api/scenes", scenesHandler);
@@ -502,6 +505,20 @@ void MainComponent::startServer()
                                         return handler->handleGet ("/api/levels", {}).body;
                                     },
                                     33);
+
+    // The tuner needle over one connection too, replacing a 60 ms poll that
+    // opened a fresh thread-per-connection socket ~17 times a second while the
+    // panel was open. The payload is empty while analysis is off, so an open but
+    // idle panel sends nothing.
+    webServer->registerEventStream ("/api/tuner/stream",
+                                    [handler = tunerHandler]() -> std::string
+                                    {
+                                        if (handler == nullptr)
+                                            return {};
+
+                                        return handler->streamPayload();
+                                    },
+                                    60);
 
     log ("REST API handlers registered");
 }

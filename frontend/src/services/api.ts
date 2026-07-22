@@ -248,10 +248,10 @@ export const setTunerEnabled = (enabled: boolean) =>
  * Polls the tuner while it is open. Same skip-while-in-flight rule as the
  * meters; 60 ms is fast enough for the needle to feel attached to the string.
  */
-export function subscribeTuner(
+function pollTuner(
   onReading: (reading: TunerReading) => void,
   onError: (error: unknown) => void,
-  intervalMs = 60,
+  intervalMs: number,
 ): () => void {
   let stopped = false;
   let inFlight = false;
@@ -274,6 +274,58 @@ export function subscribeTuner(
   return () => {
     stopped = true;
     window.clearInterval(timer);
+  };
+}
+
+/**
+ * Subscribes to the tuner, preferring the engine's event stream over a poll.
+ *
+ * The old poll opened a fresh connection every 60 ms, which on a
+ * thread-per-connection server meant ~17 threads a second for the whole time
+ * the panel was open. The stream is one connection; it sends nothing while
+ * analysis is off. Falls back to polling exactly like the meters do, so an
+ * environment without EventSource still gets a needle.
+ */
+export function subscribeTuner(
+  onReading: (reading: TunerReading) => void,
+  onError: (error: unknown) => void,
+  intervalMs = 60,
+): () => void {
+  if (typeof EventSource !== 'function') return pollTuner(onReading, onError, intervalMs);
+
+  let stopped = false;
+  let delivered = false;
+  let stopPolling: (() => void) | null = null;
+  let source: EventSource | null = new EventSource(`${API_BASE}/tuner/stream`);
+
+  source.onmessage = (event) => {
+    if (stopped) return;
+
+    try {
+      onReading(JSON.parse(event.data) as TunerReading);
+      delivered = true;
+    } catch {
+      /* a truncated frame; the next one is close behind */
+    }
+  };
+
+  source.onerror = () => {
+    if (stopped) return;
+
+    onError(new Error('Aliran tuner terputus'));
+
+    if (delivered) return;
+
+    source?.close();
+    source = null;
+
+    if (!stopPolling) stopPolling = pollTuner(onReading, onError, intervalMs);
+  };
+
+  return () => {
+    stopped = true;
+    source?.close();
+    stopPolling?.();
   };
 }
 
