@@ -28,8 +28,9 @@ InputTrim → NoiseGate → CleanBoost → Compressor → Overdrive → EQ → C
 Semuanya untuk **gitar maupun bass**. Sorotan:
 
 - **Input Gain** di depan noise gate — samakan level tiap gitar/bass sekali, gate ikut menyesuaikan.
-- **Overdrive** dengan 8 voicing pedal (Tube Screamer, Bluesbreaker, Blues Driver, Transparent/Klon, OCD,
-  Dumble, Marshall-in-a-Box, Clean Boost); kontrol menyesuaikan tipe, plus asimetri + oversampling.
+- **Overdrive** dengan 11 voicing pedal — dari overdrive transparan sampai distorsi dan fuzz
+  (Tube Screamer, Bluesbreaker, Blues Driver, Transparent/Klon, OCD, Dumble, Marshall-in-a-Box,
+  Clean Boost, Centaur, RAT, Big Muff); kontrol menyesuaikan tipe, plus asimetri + oversampling.
 - **Amp (NAM)** — kepala amp hasil capture Neural Amp Modeler (`.nam`), di antara tone shaping dan
   cabinet. Melengkapi cabinet IR: IR memodelkan speaker, NAM memodelkan kepala amp-nya. Butuh CPU AVX2.
 - **Cabinet** analitik + dua slot impulse response yang bisa di-blend.

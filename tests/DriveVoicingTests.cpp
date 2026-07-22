@@ -397,6 +397,97 @@ public:
                         + " HP " + juce::String (hp, 5));
         }
 
+        beginTest ("The Centaur is nearly clean at low gain, a real drive at high");
+        {
+            // The Klon character: a transparent boost at low gain, a proper
+            // drive when pushed. The clean blend rising with gain keeps the
+            // former honest.
+            const auto low = runVoicing (drive::centaur, bin (85), 0.3f, 15.0f);
+            const auto high = runVoicing (drive::centaur, bin (85), 0.5f, 95.0f);
+
+            const auto lowRatio = harmonicRatio (low, bin (85), bin (255));
+            const auto highRatio = harmonicRatio (high, bin (85), bin (255));
+
+            expect (lowRatio < 0.06,
+                    "Centaur too dirty at low gain: " + juce::String (lowRatio, 4));
+            expect (highRatio > lowRatio * 2.0,
+                    "Centaur did not dirty up at high gain: low " + juce::String (lowRatio, 4)
+                        + " high " + juce::String (highRatio, 4));
+        }
+
+        beginTest ("The RAT is a hard distortion, not a mild overdrive");
+        {
+            // Its huge gain into a hard silicon clip: at a knob setting where a
+            // clean boost is barely touched, the RAT is already deep into
+            // distortion. Both tones bright, a fundamental (bin 85) above the
+            // split so it is clipped, not routed around.
+            const auto boost = runTypeTone (drive::cleanBoost, 50.0f, bin (85), 30.0f);
+            const auto rat = runTypeTone (drive::rat, 0.0f, bin (85), 30.0f);
+
+            const auto boostThird = harmonicRatio (boost, bin (85), bin (255));
+            const auto ratThird = harmonicRatio (rat, bin (85), bin (255));
+
+            logMessage ("  third harmonic: RAT " + juce::String (ratThird, 4)
+                        + " vs clean boost " + juce::String (boostThird, 4));
+
+            expect (ratThird > boostThird * 3.0,
+                    "RAT did not distort much harder than a clean boost: RAT "
+                        + juce::String (ratThird, 4) + " vs " + juce::String (boostThird, 4));
+        }
+
+        beginTest ("The RAT's Filter runs backwards -- clockwise is darker");
+        {
+            // Reversed tone: 0 is bright, 100 is dark, the opposite of every
+            // other voicing's Tone.
+            const auto bright = runTypeTone (drive::rat, 0.0f, bin (85), 70.0f);
+            const auto dark = runTypeTone (drive::rat, 100.0f, bin (85), 70.0f);
+
+            const auto brightHF = magnitudeAt (bright, bin (255), kWindow, kWindow);
+            const auto darkHF = magnitudeAt (dark, bin (255), kWindow, kWindow);
+
+            expect (brightHF > darkHF * 1.3,
+                    "Filter not reversed: tone 0 HF " + juce::String (brightHF, 5)
+                        + " vs tone 100 HF " + juce::String (darkHF, 5));
+        }
+
+        beginTest ("The Big Muff scoops the mids deepest at noon");
+        {
+            // A sine at the tone pivot: at noon the low-pass and high-pass legs
+            // are out of phase there and cancel, notching it far below where
+            // either extreme leaves it. That notch is the Muff's voice.
+            auto atPivot = [] (float tonePct)
+            {
+                const auto out = runTypeTone (drive::bigMuff, tonePct, bin (77), 60.0f);
+                return magnitudeAt (out, bin (77), kWindow, kWindow);
+            };
+
+            const auto dark = atPivot (0.0f);    // all low-pass
+            const auto scoop = atPivot (50.0f);  // both legs, notch at the pivot
+            const auto bright = atPivot (100.0f); // all high-pass
+
+            expect (scoop < dark * 0.6 && scoop < bright * 0.6,
+                    "noon did not scoop the pivot: dark " + juce::String (dark, 4)
+                        + " scoop " + juce::String (scoop, 4)
+                        + " bright " + juce::String (bright, 4));
+        }
+
+        beginTest ("The Big Muff sustains -- it compresses rather than tracking the input");
+        {
+            // A fuzz's sustain is heavy compression: triple the input and the
+            // fundamental barely grows, the opposite of a clean split path
+            // (which the Tube Screamer test measures at ~3.0).
+            const auto quiet = runVoicing (drive::bigMuff, bin (85), 0.15f, 80.0f);
+            const auto loud = runVoicing (drive::bigMuff, bin (85), 0.45f, 80.0f);
+
+            const auto quietLevel = magnitudeAt (quiet, bin (85), kWindow, kWindow);
+            const auto loudLevel = magnitudeAt (loud, bin (85), kWindow, kWindow);
+            const auto ratio = quietLevel > 1.0e-9 ? loudLevel / quietLevel : 0.0;
+
+            expect (ratio < 2.0,
+                    "Big Muff did not compress: input tripled, output x"
+                        + juce::String (ratio, 2));
+        }
+
         beginTest ("Every voicing survives every oversampling factor");
         {
             for (int type = 0; type < drive::numTypes; ++type)
@@ -442,6 +533,29 @@ private:
         const auto loudLevel = magnitudeAt (loud, bin (9), kWindow, kWindow);
 
         return quietLevel > 1.0e-9 ? loudLevel / quietLevel : 0.0;
+    }
+
+    /** Runs a voicing at a given Tone and fundamental, returning the settled buffer. */
+    static juce::AudioBuffer<float> runTypeTone (int type, float tonePct, double freqHz, float drivePct)
+    {
+        milodikfx::dsp::OverdriveProcessor od;
+        od.setEnabled (true);
+        od.setType (type);
+        od.setDrivePercent (drivePct);
+        od.setLevelPercent (100.0f);
+        od.setTonePercent (tonePct);
+        od.setOversamplingIndex (1);
+        od.prepareToPlay (kRate, 8192, 1);
+
+        juce::AudioBuffer<float> buffer (1, 8192);
+
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            fillSine (buffer, freqHz, 0.6f);
+            od.processBlock (buffer);
+        }
+
+        return buffer;
     }
 
     /** Third-harmonic energy for a Tube Screamer at a given Tone setting. */

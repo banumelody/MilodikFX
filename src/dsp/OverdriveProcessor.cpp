@@ -153,12 +153,34 @@ void OverdriveProcessor::updateVoicingIfNeeded (double rate) noexcept
     splitCoeffs = splitHz > 0.0f ? biquad::makeLowPass (rate, splitHz, 0.707) : BiquadCoeffs {};
     splitHighCoeffs = splitHz > 0.0f ? biquad::makeHighPass (rate, splitHz, 0.707) : BiquadCoeffs {};
 
-    const auto hasTone = v.toneMaxHz > v.toneMinHz;
-    const auto toneHz = hasTone
-                            ? v.toneMinHz + (tone / 100.0f) * (v.toneMaxHz - v.toneMinHz)
-                            : 0.0f;
+    // The RAT's LM308 gain network lifts mids and treble *before* the clipper,
+    // so those frequencies clip while the lows stay cleaner. This is what makes
+    // it a RAT rather than a harder OCD.
+    preEmphasisCoeffs = v.preEmphasisDb != 0.0f && v.preEmphasisHz > 0.0f
+                            ? biquad::makeHighShelf (rate, v.preEmphasisHz, v.preEmphasisDb)
+                            : BiquadCoeffs {};
 
-    toneCoeffs = hasTone ? biquad::makeLowPass (rate, toneHz, 0.707) : BiquadCoeffs {};
+    // The knob position, reversed for a RAT (clockwise is darker there).
+    const auto tonePos = v.toneReversed ? (1.0f - tone / 100.0f) : (tone / 100.0f);
+
+    if (v.toneMode == ToneMode::midScoopTilt)
+    {
+        // Big Muff: a low-pass and a high-pass around a common pivot. The knob
+        // tilts between them, and at noon both contribute and the mid scoops --
+        // the notch is the whole point of a Muff. The crossfade happens in
+        // applyVoicedDrive; here we just build the two legs.
+        const auto pivot = v.toneMinHz > 0.0f ? v.toneMinHz : 900.0f;
+        toneCoeffs = biquad::makeLowPass (rate, pivot, 0.707);
+        toneHighCoeffs = biquad::makeHighPass (rate, pivot, 0.707);
+    }
+    else
+    {
+        const auto hasSweep = v.toneMaxHz > v.toneMinHz;
+        const auto toneHz = hasSweep ? v.toneMinHz + tonePos * (v.toneMaxHz - v.toneMinHz) : 0.0f;
+
+        toneCoeffs = hasSweep ? biquad::makeLowPass (rate, toneHz, 0.707) : BiquadCoeffs {};
+        toneHighCoeffs = BiquadCoeffs {};
+    }
 
     auto presenceHz = v.presenceHz;
     auto presenceDb = v.presenceDb;
@@ -215,10 +237,17 @@ void OverdriveProcessor::applyVoicedDrive (float* const* channels,
         driveMax *= 1.4f;
 
     const auto splitting = v.splitHz > 0.0f || t == drive::transparent;
-    const auto hasTone = v.toneMaxHz > v.toneMinHz;
+    const auto tiltTone = v.toneMode == ToneMode::midScoopTilt;
+    const auto hasTone = v.toneMaxHz > v.toneMinHz || tiltTone;
+    const auto hasPreEmphasis = v.preEmphasisDb != 0.0f && v.preEmphasisHz > 0.0f;
     const auto hasPresence = presenceCoeffs.b0 != 1.0f || presenceCoeffs.b1 != 0.0f;
     const auto stack = t == drive::marshallInABox;
     const auto hasTreble = stack || t == drive::transparent;
+
+    // The tilt crossfade amount, forward regardless of toneReversed (the Muff's
+    // tone is not reversed, but keep the mapping explicit).
+    const auto tonePctVal = tonePercent.load (std::memory_order_relaxed);
+    const auto tilt = v.toneReversed ? (1.0f - tonePctVal / 100.0f) : (tonePctVal / 100.0f);
 
     const auto outputGain = juce::Decibels::decibelsToGain (v.outputDb);
 
@@ -252,6 +281,11 @@ void OverdriveProcessor::applyVoicedDrive (float* const* channels,
             const auto low = splitting ? state.split.process (splitCoeffs, dryIn) : 0.0f;
             auto x = splitting ? state.splitHigh.process (splitHighCoeffs, dryIn) : dryIn;
 
+            // Pre-emphasis before the clipper: the RAT lifts mids and treble
+            // going in, so they distort while the lows stay cleaner.
+            if (hasPreEmphasis)
+                x = state.preEmphasis.process (preEmphasisCoeffs, x);
+
             // Cascaded stages split the gain between them rather than each
             // taking the lot. Two full-gain stages drove everything into a
             // square wave, and once the DC blocker centred that the asymmetry
@@ -265,8 +299,18 @@ void OverdriveProcessor::applyVoicedDrive (float* const* channels,
 
             x = state.dc.process (x);
 
-            if (hasTone)
+            if (tiltTone)
+            {
+                // Crossfade the low-pass and high-pass legs; at noon both are
+                // present and the middle scoops -- the Big Muff's voice.
+                const auto lp = state.tone.process (toneCoeffs, x);
+                const auto hpv = state.toneHigh.process (toneHighCoeffs, x);
+                x = lp * (1.0f - tilt) + hpv * tilt;
+            }
+            else if (hasTone)
+            {
                 x = state.tone.process (toneCoeffs, x);
+            }
 
             if (hasPresence)
                 x = state.presence.process (presenceCoeffs, x);

@@ -39,7 +39,7 @@ const overdrive: EffectDescriptor = {
       label: 'Tipe',
       unit: '',
       min: 0,
-      max: 8,
+      max: 11,
       step: 1,
       default: 0,
       type: 'float',
@@ -222,6 +222,31 @@ describe('EffectRack drive voicings', () => {
     expect(screen.getByRole('slider', { name: 'Boost' })).toBeInTheDocument();
     expect(screen.queryByRole('slider', { name: 'Tone' })).not.toBeInTheDocument();
     expect(screen.queryByRole('slider', { name: 'Asymmetry' })).not.toBeInTheDocument();
+  });
+
+  it('names a Centaur Gain, Treble and Output', () => {
+    renderRack(overdriveAs(9));
+
+    expect(screen.getByRole('slider', { name: 'Gain' })).toBeInTheDocument();
+    expect(screen.getByRole('slider', { name: 'Treble' })).toBeInTheDocument();
+    expect(screen.getByRole('slider', { name: 'Output' })).toBeInTheDocument();
+    expect(screen.queryByRole('slider', { name: 'Asymmetry' })).not.toBeInTheDocument();
+  });
+
+  it('names a RAT Distortion, Filter and Volume', () => {
+    renderRack(overdriveAs(10));
+
+    expect(screen.getByRole('slider', { name: 'Distortion' })).toBeInTheDocument();
+    expect(screen.getByRole('slider', { name: 'Filter' })).toBeInTheDocument();
+    expect(screen.getByRole('slider', { name: 'Volume' })).toBeInTheDocument();
+  });
+
+  it('names a Big Muff Sustain, Tone and Volume', () => {
+    renderRack(overdriveAs(11));
+
+    expect(screen.getByRole('slider', { name: 'Sustain' })).toBeInTheDocument();
+    expect(screen.getByRole('slider', { name: 'Tone' })).toBeInTheDocument();
+    expect(screen.getByRole('slider', { name: 'Volume' })).toBeInTheDocument();
   });
 
   it('writes the voicing choice as its index', () => {

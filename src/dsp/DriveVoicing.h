@@ -31,7 +31,25 @@ enum class ClipCurve
     hardKnee,
 
     /** Positive half softer than the negative: asymmetric diode pair. */
-    diodeAsymmetric
+    diodeAsymmetric,
+
+    /** Low threshold, rounded knee: a germanium diode. The Centaur's edge. */
+    germanium,
+
+    /** Op-amp into silicon diodes to ground: harder and gnarlier than hardKnee.
+        The Pro Co RAT's grind. */
+    hardClip
+};
+
+/** How a voicing's post-clip tone control behaves. */
+enum class ToneMode
+{
+    /** A single low-pass sweep. What most drive and distortion pedals have. */
+    lpSweep = 0,
+
+    /** A tilt between a low-pass and a high-pass with a scooped middle -- the
+        Big Muff tone stack, deepest notch at noon. */
+    midScoopTilt
 };
 
 struct DriveVoicing
@@ -50,9 +68,25 @@ struct DriveVoicing
     /** Pre-gain the Drive knob commands at full. */
     float driveMax = 20.0f;
 
+    /**
+     * A treble/mid lift applied *before* the clipper.
+     *
+     * A RAT is not just a harder OCD: its LM308 gain network emphasises mids
+     * and treble going in, so those frequencies clip while the lows stay
+     * cleaner. Zero dB means no pre-emphasis, which is every other voicing.
+     */
+    float preEmphasisHz = 0.0f;
+    float preEmphasisDb = 0.0f;
+
     /** Post-clip low-pass sweep. Both zero means the voicing has no Tone knob. */
     float toneMinHz = 0.0f;
     float toneMaxHz = 0.0f;
+
+    /** Shape of the Tone control; midScoopTilt is the Big Muff stack. */
+    ToneMode toneMode = ToneMode::lpSweep;
+
+    /** Reverses the Tone knob, so clockwise is darker -- the RAT's Filter. */
+    bool toneReversed = false;
 
     /** Fixed presence lift after the clipper. */
     float presenceHz = 0.0f;
@@ -82,6 +116,9 @@ enum Type
     dumble,
     marshallInABox,
     cleanBoost,
+    centaur,
+    rat,
+    bigMuff,
 
     numTypes
 };
@@ -96,6 +133,8 @@ enum Type
  */
 inline const DriveVoicing& voicingFor (int type) noexcept
 {
+    // Designated initialisers rather than positional, so a new field in the
+    // struct can never silently shift every voicing's values out of alignment.
     static const DriveVoicing table[numTypes] = {
         // custom -- never used; the untouched original path handles it.
         DriveVoicing {},
@@ -104,37 +143,65 @@ inline const DriveVoicing& voicingFor (int type) noexcept
         // The high split costs real level, so it needs the most making up --
         // these output figures were measured, not guessed, so that auditioning
         // voicings is not a volume ride.
-        DriveVoicing { 720.0f, ClipCurve::cubic, 0.0f, 40.0f,
-                       1000.0f, 5000.0f, 0.0f, 0.0f, 0.0f, 1.2f, 1 },
+        DriveVoicing { .splitHz = 720.0f, .curve = ClipCurve::cubic, .driveMax = 40.0f,
+                       .toneMinHz = 1000.0f, .toneMaxHz = 5000.0f, .outputDb = 1.2f },
 
         // Bluesbreaker: high headroom, barely any bias, opens up as you dig in.
-        DriveVoicing { 300.0f, ClipCurve::tanhSoft, 0.05f, 12.0f,
-                       1500.0f, 8000.0f, 3000.0f, 1.5f, 0.0f, -1.0f, 1 },
+        DriveVoicing { .splitHz = 300.0f, .curve = ClipCurve::tanhSoft, .bias = 0.05f, .driveMax = 12.0f,
+                       .toneMinHz = 1500.0f, .toneMaxHz = 8000.0f,
+                       .presenceHz = 3000.0f, .presenceDb = 1.5f, .outputDb = -1.0f },
 
         // Blues Driver: discrete two-stage, asymmetric, bright and glassy.
-        DriveVoicing { 150.0f, ClipCurve::diodeAsymmetric, 0.20f, 25.0f,
-                       1200.0f, 7000.0f, 3500.0f, 2.5f, 0.0f, -2.0f, 2 },
+        DriveVoicing { .splitHz = 150.0f, .curve = ClipCurve::diodeAsymmetric, .bias = 0.20f, .driveMax = 25.0f,
+                       .toneMinHz = 1200.0f, .toneMaxHz = 7000.0f,
+                       .presenceHz = 3500.0f, .presenceDb = 2.5f, .outputDb = -2.0f, .stages = 2 },
 
-        // Transparent: almost no split, hard low-threshold clip, clean blend
-        // rising with gain. Bass and Treble replace the Tone knob.
-        DriveVoicing { 40.0f, ClipCurve::hardKnee, 0.0f, 15.0f,
-                       0.0f, 0.0f, 0.0f, 0.0f, 0.5f, -1.0f, 1 },
+        // Transparent (Timmy/Klon-style): almost no split, hard low-threshold
+        // clip, clean blend rising with gain. Bass and Treble replace the Tone.
+        DriveVoicing { .splitHz = 40.0f, .curve = ClipCurve::hardKnee, .driveMax = 15.0f,
+                       .cleanBlend = 0.5f, .outputDb = -1.0f },
 
         // OCD: far more low end into a harder curve, and a lot more of it.
-        DriveVoicing { 200.0f, ClipCurve::hardKnee, 0.12f, 60.0f,
-                       900.0f, 6000.0f, 3000.0f, 1.0f, 0.0f, -3.0f, 1 },
+        DriveVoicing { .splitHz = 200.0f, .curve = ClipCurve::hardKnee, .bias = 0.12f, .driveMax = 60.0f,
+                       .toneMinHz = 900.0f, .toneMaxHz = 6000.0f,
+                       .presenceHz = 3000.0f, .presenceDb = 1.0f, .outputDb = -3.0f },
 
         // Dumble-style: mid-focused split, asymmetric, dark post filter. Vocal.
-        DriveVoicing { 500.0f, ClipCurve::diodeAsymmetric, 0.25f, 30.0f,
-                       800.0f, 3500.0f, 0.0f, -1.0f, 0.0f, 1.0f, 2 },
+        DriveVoicing { .splitHz = 500.0f, .curve = ClipCurve::diodeAsymmetric, .bias = 0.25f, .driveMax = 30.0f,
+                       .toneMinHz = 800.0f, .toneMaxHz = 3500.0f, .outputDb = 1.0f, .stages = 2 },
 
         // Marshall-in-a-box: cascaded preamp gain into a passive-style stack.
-        DriveVoicing { 120.0f, ClipCurve::cubic, 0.08f, 50.0f,
-                       0.0f, 0.0f, 4000.0f, 3.0f, 0.0f, -4.0f, 2 },
+        DriveVoicing { .splitHz = 120.0f, .curve = ClipCurve::cubic, .bias = 0.08f, .driveMax = 50.0f,
+                       .presenceHz = 4000.0f, .presenceDb = 3.0f, .outputDb = -4.0f, .stages = 2 },
 
         // Clean boost: barely any saturation at all, just the EP's colour.
-        DriveVoicing { 0.0f, ClipCurve::tanhSoft, 0.0f, 3.0f,
-                       0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1 },
+        DriveVoicing { .curve = ClipCurve::tanhSoft, .driveMax = 3.0f },
+
+        // Centaur (Klon-style): germanium soft clip, a low split so the lows stay
+        // clean, and a big clean blend that rises with gain -- the "transparent"
+        // trick. Sits beside Transparent (which leans Timmy) rather than
+        // replacing it, since presets depend on that one's sound.
+        DriveVoicing { .splitHz = 100.0f, .curve = ClipCurve::germanium, .driveMax = 30.0f,
+                       .toneMinHz = 2000.0f, .toneMaxHz = 8000.0f,
+                       .presenceHz = 2500.0f, .presenceDb = 1.5f, .cleanBlend = 0.6f, .outputDb = -1.0f },
+
+        // RAT: an LM308 gain stage that emphasises mids and treble *before* a
+        // hard silicon clip -- the pre-emphasis is what makes it a RAT and not
+        // just a higher-gain OCD. The Filter knob runs backwards: clockwise is
+        // darker. Highest gain of the lot.
+        DriveVoicing { .splitHz = 100.0f, .curve = ClipCurve::hardClip, .bias = 0.08f, .driveMax = 120.0f,
+                       .preEmphasisHz = 1200.0f, .preEmphasisDb = 6.0f,
+                       .toneMinHz = 800.0f, .toneMaxHz = 5000.0f, .toneReversed = true, .outputDb = -6.0f },
+
+        // Big Muff: two cascaded gain stages driven hard into a woolly fuzz --
+        // no split, so the whole low end is clipped -- and the scooped-mid tone
+        // stack that is its signature, deepest notch at noon.
+        // The mid scoop and the two-stage compression both cost level, so the
+        // Muff needs the most making up of any voicing -- measured, so switching
+        // to it is not a drop in volume.
+        DriveVoicing { .splitHz = 0.0f, .curve = ClipCurve::tanhSoft, .driveMax = 50.0f,
+                       .toneMinHz = 900.0f, .toneMode = ToneMode::midScoopTilt,
+                       .outputDb = 4.0f, .stages = 2 },
     };
 
     return table[(size_t) juce::jlimit (0, numTypes - 1, type)];
@@ -179,6 +246,40 @@ inline float clipDiodeAsymmetric (float x) noexcept
     return x >= 0.0f ? std::tanh (x) : std::tanh (x * 1.6f) * 0.78f;
 }
 
+/**
+ * Germanium diode: conducts earlier and approaches the rail gradually.
+ *
+ * An algebraic soft clip -- never quite flat -- so it saturates sooner and more
+ * gently than silicon. The compressed, rounded feel a Klon Centaur is reached
+ * for, though most of that pedal's "transparency" is really its clean blend.
+ */
+inline float clipGermanium (float x) noexcept
+{
+    const auto s = x * 1.5f;
+    return s / (1.0f + std::abs (s));
+}
+
+/**
+ * Silicon diodes to ground after an op-amp: a hard clip with a sharp corner,
+ * harsher than the MOSFET knee. The Pro Co RAT's grind. The corner is only
+ * lightly rounded, enough to take the very worst of the aliasing off an ideal
+ * clip without softening the edge that is the whole point.
+ */
+inline float clipHardClip (float x) noexcept
+{
+    constexpr float knee = 0.9f;
+
+    const auto a = std::abs (x);
+
+    if (a <= knee)
+        return x;
+
+    const auto over = a - knee;
+    const auto y = juce::jmin (1.0f, knee + over / (1.0f + over * 8.0f));
+
+    return x > 0.0f ? y : -y;
+}
+
 inline float applyCurve (ClipCurve curve, float x) noexcept
 {
     switch (curve)
@@ -186,6 +287,8 @@ inline float applyCurve (ClipCurve curve, float x) noexcept
         case ClipCurve::tanhSoft:        return clipTanhSoft (x);
         case ClipCurve::hardKnee:        return clipHardKnee (x);
         case ClipCurve::diodeAsymmetric: return clipDiodeAsymmetric (x);
+        case ClipCurve::germanium:       return clipGermanium (x);
+        case ClipCurve::hardClip:        return clipHardClip (x);
         case ClipCurve::cubic:
         default:                         return clipCubic (x);
     }

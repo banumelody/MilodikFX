@@ -40,6 +40,9 @@ const ENUM_OPTIONS: Record<string, string[]> = {
     'Dumble',
     'Marshall-in-a-Box',
     'Clean Boost',
+    'Centaur',
+    'RAT',
+    'Big Muff',
   ],
   // Order fixed by DelayProcessor::SyncDivision; the index is what the engine
   // stores, so these labels must stay lined up with it.
@@ -96,6 +99,21 @@ const DRIVE_CONTROLS: Record<
   8: {
     show: ['bright', 'drivePct', 'levelPct', 'oversampling'],
     labels: { drivePct: 'Boost' },
+  },
+  // Centaur: Gain, Treble (the tone sweep), Output -- the three the pedal has.
+  9: {
+    show: ['drivePct', 'tonePct', 'levelPct', 'oversampling'],
+    labels: { drivePct: 'Gain', tonePct: 'Treble', levelPct: 'Output' },
+  },
+  // RAT: Distortion, Filter (runs backwards, clockwise is darker), Volume.
+  10: {
+    show: ['drivePct', 'tonePct', 'levelPct', 'oversampling'],
+    labels: { drivePct: 'Distortion', tonePct: 'Filter', levelPct: 'Volume' },
+  },
+  // Big Muff: Sustain, Tone (the scooped-mid stack), Volume.
+  11: {
+    show: ['drivePct', 'tonePct', 'levelPct', 'oversampling'],
+    labels: { drivePct: 'Sustain', tonePct: 'Tone', levelPct: 'Volume' },
   },
 };
 

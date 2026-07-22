@@ -319,7 +319,7 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         EffectDescriptor e;
         e.id = "overdrive";
         e.label = "Overdrive";
-        e.description = "Pilih voicing pedalnya - kontrol menyesuaikan tipe";
+        e.description = "Overdrive, distorsi, dan fuzz - pilih voicing pedalnya, kontrol menyesuaikan tipe";
         e.isEnabled = [p] { return p->isEnabled(); };
         e.setEnabled = [p] (bool v) { p->setEnabled (v); };
 

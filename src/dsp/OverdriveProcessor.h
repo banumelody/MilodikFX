@@ -120,9 +120,11 @@ private:
     /** Filter state for one channel of the voiced path. */
     struct VoiceState
     {
+        BiquadState preEmphasis; // pre-clip mid/treble lift (RAT)
         BiquadState split;
         BiquadState splitHigh;
         BiquadState tone;
+        BiquadState toneHigh;    // the high-pass leg of the Big Muff tilt
         BiquadState presence;
         BiquadState bass;
         BiquadState mid;
@@ -131,9 +133,11 @@ private:
 
         void reset() noexcept
         {
+            preEmphasis.reset();
             split.reset();
             splitHigh.reset();
             tone.reset();
+            toneHigh.reset();
             presence.reset();
             bass.reset();
             mid.reset();
@@ -165,7 +169,8 @@ private:
     std::atomic<bool> bright { false };
 
     // Audio-thread owned. Rebuilt only when one of the inputs actually moved.
-    BiquadCoeffs splitCoeffs, splitHighCoeffs, toneCoeffs, presenceCoeffs;
+    BiquadCoeffs splitCoeffs, splitHighCoeffs, toneCoeffs, toneHighCoeffs, presenceCoeffs;
+    BiquadCoeffs preEmphasisCoeffs;
     BiquadCoeffs bassCoeffs, midCoeffs, trebleCoeffs;
     int builtForType = -1;
     float builtForTone = -1.0f;

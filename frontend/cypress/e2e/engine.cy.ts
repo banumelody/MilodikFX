@@ -742,7 +742,7 @@ describe('MilodikFX UI against a live engine', () => {
 
       const type = body.parameters.find((p: { id: string }) => p.id === 'type');
       expect(type.min).to.eq(0);
-      expect(type.max).to.eq(8);
+      expect(type.max).to.eq(11);
     });
   });
 

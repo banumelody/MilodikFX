@@ -28,6 +28,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - P4-0 Input gain / trim — `InputTrimProcessor` di depan noise gate, `input.gainDb`, meter pasca-trim
 - P4-2 Spillover ekor delay/reverb — fade hanya saat dimatikan, blok berhenti setelah ekor < −80 dB
 - P4-1 Tipe overdrive — 8 voicing sebagai tabel data (`DriveVoicing.h`), kontrol UI menyesuaikan tipe
+- P4-1b Voicing Centaur/RAT/Big Muff — **SELESAI (22 Jul 2026)**, 3 voicing baru di tabel (total 11 pedal): `germanium`+`hardClip` di `ClipCurve`, `toneMode` scoop-mid tilt Big Muff, pre-emphasis + Filter terbalik RAT, blend Klon Centaur. Kontrol UI + label per-pedal, level dicocokkan lintas voicing. Diuji: backend + 154 test frontend.
 - P4-3 Dual IR + blend di cabinet — `irFileB` + `irBlend`, default 0 sehingga tidak mengubah apa pun
 - P1-2 Overdrive asimetri + oversampling adjustable
 - P1-3 Delay damping + ping-pong
@@ -43,7 +44,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - P3-8 Metronome — `MetronomeProcessor` sebagai post-processor, di luar jalur bypass
 - P3-9 CPU sparkline
 
-**Belum:** P2-5 (multi-view), P4-1b (voicing Centaur/RAT/Big Muff — analisis selesai, lihat entry-nya), P4-4 (modifier), P4-5 (looper).
+**Belum:** P2-5 (multi-view), P4-4 (modifier), P4-5 (looper).
 
 **Kenapa empat itu belum, per 22 Jul 2026:**
 
@@ -52,7 +53,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - **P4-5 Looper** — mandiri dan tidak menyentuh arsitektur lain, tapi bukan kebutuhan inti; paling akhir sejak awal.
 - **P2-5 Multi-view** — sidebar masih terbaca dalam satu layar, jadi tab Perform/Edit/Library/Settings belum menyelesaikan masalah nyata. Akan terasa perlu begitu panelnya bertambah lagi.
 
-**Rilis terbaru:** v0.11.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.11.0
+**Rilis terbaru:** v0.14.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.14.0
 
 **Catatan P4-1 yang lahir dari implementasi:** tiga hal yang hanya ketahuan lewat pengukuran, bukan pembacaan kode. (1) Split butuh dua filter sungguhan; mengurangi salinan low-pass *tampak* setara tapi menyisakan selisih fasa yang lalu kena gain penuh clipper — Tube Screamer terukur mendistorsi bass lebih keras daripada drive full-range, persis terbalik. (2) Tahap kaskade harus membagi gain; dua tahap gain penuh mengotakkan sinyal, DC blocker menengahkannya, dan harmonik genap — alasan utama memilih voicing asimetris — hilang sama sekali. (3) Test harmoniknya sempat mengukur kebocoran spektralnya sendiri; di luar bin analisis, fundamental menyebar di sekitar −43 dB, satu orde dengan harmonik yang diukur, sehingga kurva simetris tampak punya harmonik genap sebanyak yang asimetris. Tepat di bin, kurva simetris terbaca 0,000000.
 
@@ -533,7 +534,9 @@ Latar: pertanyaan "butuh amp simulator tidak?" dan "fitur Fractal mana yang bisa
 
 **Effort:** ±2 weekend, dipecah tiga batch sesuai urutan di atas.
 
-### P4-1b. Voicing tambahan: Centaur, RAT, Big Muff (analisis 22 Jul 2026)
+### P4-1b. Voicing tambahan: Centaur, RAT, Big Muff — SELESAI (22 Jul 2026)
+
+> **Status: terkirim di v0.14.0.** Ketiga voicing ada di tabel (`drive.type` 9/10/11) dengan kurva `germanium`/`hardClip`, `toneMode` scoop-mid Big Muff, pre-emphasis + Filter terbalik RAT, dan blend Klon Centaur. Kartu **tidak** jadi di-relabel "Drive" (id `overdrive` dan label "Overdrive" tetap, deskripsinya saja yang menyebut fuzz/distorsi) — mengganti label yang sudah dipakai preset lebih berisiko daripada nilainya. Analisis asli di bawah dipertahankan sebagai catatan desain.
 
 **Pertanyaan:** bisa tidak menambah klon Centaur, Pro Co RAT, dan Big Muff? **Bisa** — dan cocoknya sebagai **tiga voicing baru di blok Overdrive** (`drive.type` 9/10/11), bukan stage chain baru. Alasannya berlapis: aturan satu-prosesor-per-tipe `findProcessor<T>` menutup opsi stage terpisah tanpa perombakan; posisi blok Overdrive di rantai (setelah kompresor, sebelum EQ/amp/NAM) persis tempat ketiga pedal ini di pedalboard nyata — fuzz → amp bersih (NAM) → cab adalah rig Big Muff klasik, dan urutannya sudah benar; dan tabel `DriveVoicing` memang dibangun supaya menambah pedal = menambah baris data. Enum-nya append-only, jadi preset lama aman.
 
@@ -566,10 +569,10 @@ Ketiganya genre berbeda (transparent OD / distortion / fuzz) tapi secara sinyal 
 
 **Aliasing:** hard clip dan fuzz menghasilkan harmonik tinggi jauh lebih banyak dari soft clip — ketiganya paling rentan aliasing di antara semua voicing. Default oversampling 2x yang ada sudah menolong; sarankan 4x di deskripsi. Test performa yang ada ("tidak ada voicing boleh 3x lebih mahal dari yang lain") otomatis mencakup tipe baru karena loop-nya `type < numTypes`.
 
-**Test** (pola spektral/linearitas yang sama dengan P4-1, semua di bin analisis):
-- Centaur: gain rendah ≈ bersih (rasio harmonik-3 < batas); linearitas jalur bersih tetap ~3,0 saat input di-tripel-kan pada nada rendah; blend naik dengan gain.
-- RAT: rasio harmonik ganjil >> Tube Screamer pada drive setara (hard vs soft clip); Filter CW terukur menggelapkan; pre-emphasis terukur (harmonik nada mid > harmonik nada rendah relatif fundamental).
-- Big Muff: notch mid terukur di Tone jam 12 (magnitudo 1 kHz jauh di bawah 250 Hz dan 4 kHz); "sustain" = kompresi terukur (fundamental loud/quiet << 3,0 — kebalikan test split TS); DC nol (dua tahap + blocker).
+**Test** (pola spektral/linearitas yang sama dengan P4-1, semua di bin analisis) — yang benar-benar dikirim di `tests/DriveVoicingTests.cpp`:
+- Centaur: gain rendah ≈ bersih (rasio harmonik-3 kecil) tapi gain tinggi jelas terdistorsi; **lolos**.
+- RAT: **hard distortion, bukan overdrive ringan** — pada setelan knob rendah rasio harmonik-3 RAT >3x clean boost (gain besar + `hardClip`); Filter CW terukur menggelapkan (test terbalik). *Catatan kejujuran:* rencana awal "harmonik RAT >> Tube Screamer" dan "pre-emphasis nada mid > nada rendah" **dibatalkan** — keduanya ternyata metrik rapuh: pada drive apa pun yang cukup untuk diukur, kedua kurva sama-sama mengotak jadi gelombang persegi (cubic TS mengunci tepat di ±1, sama kerasnya), dan tone LP + boost fundamental oleh pre-emphasis mengacaukan rasio harmonik per-frekuensi. Perbandingan vs clean boost menangkap "ini distorsi keras" secara tak ambigu; pre-emphasis tetap terpasang di sinyal, hanya tidak di-assert lewat sweep frekuensi.
+- Big Muff: notch mid terukur di Tone jam 12 (magnitudo 1 kHz jauh di bawah 250 Hz dan 4 kHz); "sustain" = kompresi terukur (fundamental loud/quiet << 3,0 — kebalikan test split TS); level dicocokkan (`outputDb` dinaikkan ke +4 agar tidak melompat saat ganti voicing).
 - Semua: test level-match, finite, oversampling, dan crossfade drive-nol yang ada otomatis memuat 3 tipe baru. E2E yang meng-assert `type.max == 8` diubah ke 11; `DRIVE_CONTROLS` + `ENUM_OPTIONS` di UI ditambah tiga entri.
 
 **Urutan pengerjaan:** Centaur dulu (hanya butuh kurva baru — terkecil), lalu RAT (pre-emphasis + toneReversed + hardClip), lalu Big Muff (toneMode tilt — mekanisme terakhir). **Effort:** ±1–1,5 hari total. Tidak bergantung apa pun; bisa dikerjakan kapan saja.
@@ -632,7 +635,7 @@ Satu slot rekam/overdub/undo di akhir chain (post-master, seperti metronome). Ma
 | 30 | Dual IR + blend di cabinet | P4-3 | ~0.5–1 weekend | — |
 | 31 | Modifier (envelope/LFO → parameter) | P4-4 | ~1.5–2 weekend | desain dulu; setelah P4-1/P4-2 |
 | 32 | Looper sederhana | P4-5 | ~1–1.5 weekend | — |
-| 33 | Voicing Centaur + RAT + Big Muff | P4-1b | ~1–1.5 hari | — |
+| 33 | Voicing Centaur + RAT + Big Muff ✅ | P4-1b | ~1–1.5 hari | selesai (v0.14.0) |
 
 Total estimasi kalau semua dikerjakan: kira-kira 27–35 weekend, dengan catatan NAM adalah yang paling tidak pasti dan bisa melar jauh dari estimasi tergantung hasil tahap riset.
 
