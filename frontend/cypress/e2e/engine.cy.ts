@@ -127,7 +127,9 @@ describe('MilodikFX UI against a live engine', () => {
   it('draws the signal chain in order, from input to output', () => {
     cy.get('nav[aria-label="Rantai sinyal"]').should('exist');
     cy.contains('nav[aria-label="Rantai sinyal"] span', 'IN').should('be.visible');
-    cy.contains('nav[aria-label="Rantai sinyal"] span', 'OUT').should('be.visible');
+    // The strip scrolls horizontally, and with the amp head added it is now
+    // wider than the panel, so OUT sits off the right edge until scrolled to.
+    cy.contains('nav[aria-label="Rantai sinyal"] span', 'OUT').scrollIntoView().should('be.visible');
 
     cy.request('/api/effects').then(({ body }) => {
       const stages = body.effects
@@ -769,6 +771,71 @@ describe('MilodikFX UI against a live engine', () => {
     });
 
     cy.request('PUT', '/api/effects/cabinet/irBlend', { value: 0 });
+  });
+
+  it('puts the amp head between the tone shaping and the cabinet', () => {
+    cy.request('/api/effects').then(({ body }) => {
+      const ids = body.effects.map((e: { id: string }) => e.id);
+      const nam = ids.indexOf('nam');
+      const contour = ids.indexOf('toneStack');
+      const cabinet = ids.indexOf('cabinet');
+
+      expect(nam, 'nam is registered').to.be.greaterThan(-1);
+      expect(nam).to.be.greaterThan(contour);
+      expect(nam).to.be.lessThan(cabinet);
+    });
+
+    cy.request('/api/effects/nam').then(({ body }) => {
+      const ids = body.parameters.map((p: { id: string }) => p.id);
+      expect(ids).to.include('inputDb');
+      expect(ids).to.include('outputDb');
+      expect(ids).to.include('namFile');
+      expect(body.toggleable).to.eq(true);
+    });
+
+    // The card is drawn in the rack like any other stage.
+    cy.get('section[aria-label="Amp (NAM)"]').should('exist');
+  });
+
+  it('reports the NAM model library and whether models can run', () => {
+    cy.request('/api/nam').then(({ body }) => {
+      expect(body.models).to.be.an('array');
+      expect(body).to.have.property('directory');
+      expect(body).to.have.property('available');
+      // available and the reason must agree.
+      if (body.available) {
+        expect(body.unavailableReason).to.eq('');
+      } else {
+        expect(body.unavailableReason).to.not.eq('');
+      }
+    });
+
+    cy.get('section[aria-label="Model NAM"]').should('exist');
+  });
+
+  it('refuses a NAM import that is not a real request', () => {
+    cy.request({
+      method: 'POST',
+      url: '/api/nam/import',
+      body: { name: '' },
+      failOnStatusCode: false,
+    }).then((response) => {
+      expect(response.status).to.eq(400);
+    });
+  });
+
+  it('round-trips the amp head input and output gains', () => {
+    cy.request('PUT', '/api/effects/nam/inputDb', { value: 4.5 });
+    cy.reload();
+
+    cy.get('section[aria-label="Amp (NAM)"] [role="slider"][aria-label="Input"]')
+      .should('have.attr', 'aria-valuenow', '4.5');
+
+    cy.request('/api/effects/nam/inputDb').then(({ body }) => {
+      expect(Number(body.value)).to.be.closeTo(4.5, 0.01);
+    });
+
+    cy.request('PUT', '/api/effects/nam/inputDb', { value: 0 });
   });
 
   it('reports MIDI state even with no controller attached', () => {

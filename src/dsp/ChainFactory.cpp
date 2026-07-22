@@ -95,6 +95,42 @@ ParameterDescriptor makeIrFileParam (ProcessorType* processor,
 
     return p;
 }
+
+/**
+ * The "which .nam model" control. Selecting a name loads it on the calling REST
+ * thread (never the audio thread); an unknown or unreadable name clears the
+ * head, which falls back to passing the signal straight through.
+ */
+ParameterDescriptor makeNamFileParam (NamProcessor* processor,
+                                      milodikfx::preset::NamLibrary& library)
+{
+    ParameterDescriptor p;
+    p.id = "namFile";
+    p.label = "Amp Model";
+    p.isText = true;
+
+    p.getText = [processor] { return processor->getLoadedName(); };
+
+    p.setText = [processor, &library] (const juce::String& name)
+    {
+        if (name.isEmpty())
+        {
+            processor->clearModel();
+            return;
+        }
+
+        const auto file = library.resolve (name);
+
+        // Best-effort like the IR loader: a bad file leaves the head cleared
+        // rather than throwing across the REST boundary.
+        if (processor->loadModel (file).isNotEmpty())
+            processor->clearModel();
+    };
+
+    p.getOptions = [&library] { return library.list(); };
+
+    return p;
+}
 } // namespace
 
 GuitarChain buildGuitarChain (DSPChainManager& chain)
@@ -113,6 +149,9 @@ GuitarChain buildGuitarChain (DSPChainManager& chain)
     result.overdrive = add<OverdriveProcessor> (chain);
     result.eq = add<EQProcessor> (chain);
     result.toneStack = add<ToneStackProcessor> (chain);
+    // The amp head sits between the tone shaping and the cabinet, exactly where
+    // a real head sits between the pedals and the speaker.
+    result.nam = add<NamProcessor> (chain);
     result.cabinet = add<CabinetProcessor> (chain);
     result.delay = add<DelayProcessor> (chain);
     result.reverb = add<ReverbProcessor> (chain);
@@ -367,6 +406,28 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         e.parameters.push_back (makeParam ("trebleDb", "High", "dB", -12.0f, 12.0f, 0.1f, 0.0f,
                                            [p] { return p->getTrebleDb(); },
                                            [p] (float v) { p->setTrebleDb (v); }));
+        registry.addEffect (std::move (e));
+    }
+
+    if (auto* p = chain.nam)
+    {
+        EffectDescriptor e;
+        e.id = "nam";
+        e.label = "Amp (NAM)";
+        e.description = "Kepala amp hasil capture Neural Amp Modeler - sebelum cabinet";
+        e.isEnabled = [p] { return p->isEnabled(); };
+        e.setEnabled = [p] (bool v) { p->setEnabled (v); };
+
+        e.parameters.push_back (makeParam ("inputDb", "Input", "dB", -24.0f, 24.0f, 0.1f, 0.0f,
+                                           [p] { return p->getInputDb(); },
+                                           [p] (float v) { p->setInputDb (v); }));
+        e.parameters.push_back (makeParam ("outputDb", "Output", "dB", -24.0f, 24.0f, 0.1f, 0.0f,
+                                           [p] { return p->getOutputDb(); },
+                                           [p] (float v) { p->setOutputDb (v); }));
+
+        if (extras.namLibrary != nullptr)
+            e.parameters.push_back (makeNamFileParam (p, *extras.namLibrary));
+
         registry.addEffect (std::move (e));
     }
 

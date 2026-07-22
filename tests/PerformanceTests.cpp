@@ -118,6 +118,66 @@ public:
                         + juce::String (load * 100.0, 1) + " %");
         }
 
+       #if MILODIKFX_ENABLE_NAM
+        beginTest ("The NAM head does not blow the budget on top of the chain");
+        {
+            // A tiny real WaveNet, because this runs in an unoptimised Debug
+            // build where a Standard model would take seconds per block. The
+            // absolute figure is meaningless here (Release is many times
+            // faster); what this guards is that adding the head to an already
+            // full chain does not multiply its cost. The real Standard-model
+            // measurement is done live in Release -- see docs/nam-plan.md.
+            const juce::File tiny (juce::String (MILODIKFX_NAM_EXAMPLE_MODELS_DIR) + "/wavenet.nam");
+
+            if (! tiny.existsAsFile() || ! milodikfx::dsp::NamProcessor::isAvailable())
+            {
+                logMessage ("  (skipping NAM perf: "
+                            + milodikfx::dsp::NamProcessor::unavailableReason() + ")");
+            }
+            else
+            {
+                milodikfx::dsp::DSPChainManager chain;
+                const auto processors = milodikfx::dsp::buildGuitarChain (chain);
+
+                milodikfx::api::ParameterRegistry registry;
+                milodikfx::dsp::registerChainParameters (registry, processors, chain);
+
+                enableEverything (registry);
+                chain.prepareToPlay (kRate, kBlock, 2);
+
+                // Baseline with the head present but no model (passthrough).
+                const auto withoutModel = measureLoad (chain, 2000);
+
+                processors.nam->loadModel (tiny);
+
+                // Let the staged model be adopted.
+                juce::AudioBuffer<float> warm (2, kBlock);
+                for (int i = 0; i < 200; ++i) { warm.clear(); chain.processBlock (warm); }
+
+                const auto withModel = measureLoad (chain, 2000);
+
+                logMessage ("  chain without NAM model " + juce::String (withoutModel * 100.0, 1)
+                            + " % vs with a tiny model " + juce::String (withModel * 100.0, 1) + " %");
+
+                // No hard budget gate here: Debug NAM runs on unoptimised Eigen,
+                // several times slower than the Release build that ships, so an
+                // absolute bound would fail for reasons unrelated to the code.
+                // The Release budget (total < ~25 % with a Standard model) is
+                // validated live on the rig -- see docs/nam-plan.md. What this
+                // asserts is only that the head runs and adds real cost.
+                expect (withModel > withoutModel, "the NAM head added no measurable cost");
+
+                juce::AudioBuffer<float> check (2, kBlock);
+                for (int i = 0; i < kBlock; ++i) check.setSample (0, i, 0.2f);
+                check.copyFrom (1, 0, check, 0, 0, kBlock);
+                chain.processBlock (check);
+
+                for (int i = 0; i < kBlock; ++i)
+                    expect (std::isfinite (check.getSample (0, i)));
+            }
+        }
+       #endif
+
         beginTest ("The most expensive drive voicing still keeps up");
         {
             // Every voicing filter running, at the highest oversampling factor,

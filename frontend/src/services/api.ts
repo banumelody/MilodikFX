@@ -203,6 +203,26 @@ export const importIr = (category: 'cabinet' | 'reverb', name: string, base64: s
     body: JSON.stringify({ category, name, data: base64 }),
   });
 
+export interface NamLibraryResponse {
+  models: string[];
+  directory: string;
+  /** False when NAM was not compiled in, or the CPU has no AVX2. */
+  available: boolean;
+  /** Why loading is disabled, when it is. Empty when available. */
+  unavailableReason: string;
+}
+
+export const getNamLibrary = () => request<NamLibraryResponse>('/nam');
+
+export const revealNamFolder = () =>
+  request<{ revealed: string }>('/nam/reveal', { method: 'POST', body: '{}' });
+
+export const importNam = (name: string, base64: string) =>
+  request<{ name: string; models: string[] }>('/nam/import', {
+    method: 'POST',
+    body: JSON.stringify({ name, data: base64 }),
+  });
+
 export interface TunerReading {
   enabled: boolean;
   /** Empty when nothing is detected. */

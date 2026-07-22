@@ -274,9 +274,9 @@ public:
         milodikfx::dsp::DSPChainManager manager;
         const auto chain = milodikfx::dsp::buildGuitarChain (manager);
 
-        // Eleven stages the guitar passes through. The metronome is deliberately
+        // Twelve stages the guitar passes through. The metronome is deliberately
         // not one of them -- it is mixed in afterwards, outside bypass.
-        expectEquals (manager.getNumProcessors(), 11);
+        expectEquals (manager.getNumProcessors(), 12);
         expect (chain.metronome != nullptr);
 
         // Ahead of the gate, so the gate threshold tracks the trim rather than
@@ -288,6 +288,8 @@ public:
         expect (chain.overdrive != nullptr);
         expect (chain.eq != nullptr);
         expect (chain.toneStack != nullptr);
+        // The amp head, between the tone shaping and the cabinet.
+        expect (chain.nam != nullptr);
         expect (chain.cabinet != nullptr);
         expect (chain.delay != nullptr);
         expect (chain.reverb != nullptr);
@@ -310,8 +312,8 @@ public:
 
         milodikfx::dsp::registerChainParameters (appRegistry, chain, manager, std::move (appExtras));
 
-        expectEquals ((int) pluginRegistry.getEffects().size(), 13);
-        expectEquals ((int) appRegistry.getEffects().size(), 13);
+        expectEquals ((int) pluginRegistry.getEffects().size(), 14);
+        expectEquals ((int) appRegistry.getEffects().size(), 14);
 
         // The plugin has the Input card too, with the trim but without Mode.
         const auto* pluginInput = pluginRegistry.findEffect ("input");

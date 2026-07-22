@@ -82,6 +82,112 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
+# NAM (Neural Amp Modeler) — the amp head simulator (P2-1)
+#
+# NeuralAmpModelerCore ships no CMake library target, so we build our own
+# static lib out of its globbed sources, pinned to a specific main commit
+# (there is no recent stable tag). AVX2 and NAM's compile defines are scoped to
+# THIS lib only, never leaking to the app: without /arch:AVX2 the Eigen kernels
+# run several-fold slower, and NAM_SAMPLE_FLOAT / EIGEN_MPL2_ONLY must be
+# identical across every NAM translation unit (an ODR hazard otherwise).
+#
+# When disabled — or if the fetch fails — MilodikFX still builds; NamProcessor
+# compiles to a passthrough stub and model loading reports NAM as unavailable.
+# ---------------------------------------------------------------------------
+option(MILODIKFX_ENABLE_NAM "Build the NAM amp-head simulator" ON)
+
+# Pinned to 3cde95c (8 Jul 2026): after the LSTM real-time-safety fix (#299),
+# with the multichannel process() API and the allocation-tracking test.
+set(MILODIKFX_NAM_GIT_TAG "3cde95c354d5ba6da01316cad90b05cfc4855053"
+    CACHE STRING "NeuralAmpModelerCore commit to vendor")
+
+set(MILODIKFX_HAS_NAM 0)
+
+if(MILODIKFX_ENABLE_NAM)
+  # Only the Eigen submodule is needed for the core DSP; AudioDSPTools (the
+  # plugin's resampler) is skipped — resampling is done with JUCE primitives so
+  # the single binary does not grow a WDL dependency.
+  FetchContent_Declare(
+    namcore
+    GIT_REPOSITORY https://github.com/sdatkinson/NeuralAmpModelerCore.git
+    GIT_TAG ${MILODIKFX_NAM_GIT_TAG}
+    GIT_SUBMODULES "Dependencies/eigen"
+    GIT_SUBMODULES_RECURSE OFF
+    GIT_SHALLOW OFF
+    # Point at a directory that does not exist so MakeAvailable only downloads
+    # the sources and never runs NeuralAmpModelerCore's own CMake -- that would
+    # try to build its command-line tools, which need a submodule we skip.
+    SOURCE_SUBDIR do-not-configure
+  )
+
+  FetchContent_MakeAvailable(namcore)
+
+  file(GLOB MILODIKFX_NAM_SOURCES
+    "${namcore_SOURCE_DIR}/NAM/*.cpp"
+    "${namcore_SOURCE_DIR}/NAM/*/*.cpp"
+  )
+
+  if(MILODIKFX_NAM_SOURCES)
+    # An OBJECT library, not STATIC: each NAM architecture registers its config
+    # parser through a static initialiser in an anonymous namespace, and a static
+    # archive would let the linker discard those object files as unreferenced,
+    # so get_dsp() would fail with "No config parser registered". OBJECT linking
+    # pulls every object file in, running the registrations.
+    add_library(milodikfx_nam OBJECT ${MILODIKFX_NAM_SOURCES})
+
+    target_include_directories(milodikfx_nam PUBLIC
+      "${namcore_SOURCE_DIR}"
+      "${namcore_SOURCE_DIR}/Dependencies/eigen"
+      "${namcore_SOURCE_DIR}/Dependencies/nlohmann"
+    )
+
+    target_compile_features(milodikfx_nam PUBLIC cxx_std_20)
+
+    target_compile_definitions(milodikfx_nam PUBLIC
+      NAM_SAMPLE_FLOAT      # float I/O so JUCE buffers pass straight through
+    )
+    target_compile_definitions(milodikfx_nam PRIVATE
+      EIGEN_MPL2_ONLY       # keep the AGPLv3 licence audit clean
+      NOMINMAX
+      WIN32_LEAN_AND_MEAN
+      _CRT_SECURE_NO_WARNINGS
+    )
+
+    if(MSVC)
+      # AVX2 confined to the NAM object files. The instructions only ever run
+      # once a model is loaded, and NamProcessor refuses to load one on a CPU
+      # without AVX2, so a pre-2013 machine can still run the binary.
+      target_compile_options(milodikfx_nam PRIVATE /arch:AVX2)
+      # Optimise in the shipping configs. /O2 is incompatible with Debug's
+      # default /RTC1, and Debug NAM speed is not a shipping number anyway (the
+      # perf tests use ratios and a tiny model, never absolute Debug timings).
+      target_compile_options(milodikfx_nam PRIVATE
+        $<$<NOT:$<CONFIG:Debug>>:/O2>
+        $<$<NOT:$<CONFIG:Debug>>:/fp:fast>)
+    endif()
+
+    set(MILODIKFX_HAS_NAM 1)
+    message(STATUS "MilodikFX: NAM ENABLED (${MILODIKFX_NAM_GIT_TAG})")
+  else()
+    message(WARNING "MilodikFX: NAM sources not found after fetch - building without NAM")
+  endif()
+else()
+  message(STATUS "MilodikFX: NAM disabled")
+endif()
+
+# Applies NAM to a target: links the lib and defines MILODIKFX_ENABLE_NAM so the
+# NamProcessor guts compile in. When NAM is off, the define is 0 and the stub
+# path is taken. Called for the app, the plugin, and the tests.
+function(milodikfx_apply_nam target)
+  if(MILODIKFX_HAS_NAM)
+    target_link_libraries(${target} PRIVATE milodikfx_nam)
+    target_compile_definitions(${target} PRIVATE MILODIKFX_ENABLE_NAM=1)
+  else()
+    target_compile_definitions(${target} PRIVATE MILODIKFX_ENABLE_NAM=0)
+  endif()
+endfunction()
+
+# ---------------------------------------------------------------------------
 # Shared DSP / engine sources, used by both the app and the tests
 # ---------------------------------------------------------------------------
 set(MILODIKFX_ENGINE_SOURCES
@@ -93,6 +199,10 @@ set(MILODIKFX_ENGINE_SOURCES
   src/dsp/GainProcessor.cpp
   src/dsp/InputTrimProcessor.h
   src/dsp/InputTrimProcessor.cpp
+  src/dsp/NamResampler.h
+  src/dsp/NamResampler.cpp
+  src/dsp/NamProcessor.h
+  src/dsp/NamProcessor.cpp
   src/dsp/DriveVoicing.h
   src/dsp/OverdriveProcessor.h
   src/dsp/OverdriveProcessor.cpp
@@ -126,6 +236,8 @@ set(MILODIKFX_ENGINE_SOURCES
   src/preset/PresetManager.cpp
   src/preset/IrLibrary.h
   src/preset/IrLibrary.cpp
+  src/preset/NamLibrary.h
+  src/preset/NamLibrary.cpp
   src/preset/SceneManager.h
   src/preset/SceneManager.cpp
   src/api/ParameterRegistry.h
@@ -199,6 +311,8 @@ target_sources(MilodikFX
     src/api/EffectsHandler.cpp
     src/api/IrHandler.h
     src/api/IrHandler.cpp
+    src/api/NamHandler.h
+    src/api/NamHandler.cpp
     src/api/LevelsHandler.h
     src/api/LevelsHandler.cpp
     src/api/TunerHandler.h
@@ -228,6 +342,8 @@ target_compile_definitions(MilodikFX
 if(MILODIKFX_HAS_EMBEDDED_UI)
   target_link_libraries(MilodikFX PRIVATE MilodikFX_UiData)
 endif()
+
+milodikfx_apply_nam(MilodikFX)
 
 if(MILODIKFX_ENABLE_ASIO)
   if(NOT EXISTS "${MILODIKFX_ASIO_SDK_PATH}/common/asio.h")
@@ -345,6 +461,8 @@ if(MILODIKFX_BUILD_PLUGIN)
       juce::juce_recommended_lto_flags
       juce::juce_recommended_warning_flags
   )
+
+  milodikfx_apply_nam(MilodikFX_Plugin)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -368,9 +486,17 @@ target_sources(MilodikFX_tests
     tests/UndoTests.cpp
     tests/InputTrimTests.cpp
     tests/DriveVoicingTests.cpp
+    tests/NamTests.cpp
     tests/PerformanceTests.cpp
     ${MILODIKFX_ENGINE_SOURCES}
 )
+
+# Point the NAM tests at the example models that came with the fetched core, so
+# no .nam files have to live in this repo.
+if(MILODIKFX_HAS_NAM)
+  target_compile_definitions(MilodikFX_tests PRIVATE
+    MILODIKFX_NAM_EXAMPLE_MODELS_DIR="${namcore_SOURCE_DIR}/example_models")
+endif()
 
 target_compile_definitions(MilodikFX_tests
   PRIVATE
@@ -394,6 +520,8 @@ target_link_libraries(MilodikFX_tests
 )
 
 target_include_directories(MilodikFX_tests PRIVATE src)
+
+milodikfx_apply_nam(MilodikFX_tests)
 
 enable_testing()
 

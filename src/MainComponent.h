@@ -7,6 +7,7 @@
 #include "api/DevicesHandler.h"
 #include "api/EffectsHandler.h"
 #include "api/IrHandler.h"
+#include "api/NamHandler.h"
 #include "api/LevelsHandler.h"
 #include "api/MidiHandler.h"
 #include "api/ParameterRegistry.h"
@@ -109,6 +110,7 @@ private:
     juce::PropertiesFile& settingsFile;
     milodikfx::preset::PresetManager presetManager;
     milodikfx::preset::IrLibrary irLibrary;
+    milodikfx::preset::NamLibrary namLibrary;
     milodikfx::api::ParameterRegistry registry;
     milodikfx::preset::SceneManager sceneManager { registry };
     milodikfx::api::UndoHistory undoHistory { registry };
@@ -159,6 +161,7 @@ private:
     milodikfx::dsp::OverdriveProcessor* overdriveProcessor = nullptr;
     milodikfx::dsp::EQProcessor* eqProcessor = nullptr;
     milodikfx::dsp::ToneStackProcessor* toneStackProcessor = nullptr;
+    milodikfx::dsp::NamProcessor* namProcessor = nullptr;
     milodikfx::dsp::CabinetProcessor* cabinetProcessor = nullptr;
     milodikfx::dsp::DelayProcessor* delayProcessor = nullptr;
     milodikfx::dsp::ReverbProcessor* reverbProcessor = nullptr;

@@ -6,6 +6,7 @@ import { EffectRack, EFFECT_ACCENTS } from './components/EffectRack';
 import { Knob } from './components/Knob';
 import { LevelMeter, ReductionMeter } from './components/LevelMeter';
 import { MidiMapping } from './components/MidiMapping';
+import { NamPanel } from './components/NamPanel';
 import { PresetControls } from './components/PresetControls';
 import { SceneGrid } from './components/SceneGrid';
 import { Sparkline } from './components/Sparkline';
@@ -650,6 +651,8 @@ export function App() {
           />
 
           <MidiMapping effects={effects} disabled={offline} />
+
+          <NamPanel disabled={offline} onLibraryChanged={() => void refreshEffects()} />
 
           <section className="panel" aria-label="Impulse response">
             <header className="panel__head">

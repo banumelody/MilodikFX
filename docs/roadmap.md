@@ -43,11 +43,11 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - P3-8 Metronome — `MetronomeProcessor` sebagai post-processor, di luar jalur bypass
 - P3-9 CPU sparkline
 
-**Belum:** P2-1 (NAM), P2-5 (multi-view), P4-4 (modifier), P4-5 (looper).
+**Belum:** P2-5 (multi-view), P4-4 (modifier), P4-5 (looper).
 
 **Kenapa empat itu belum, per 22 Jul 2026:**
 
-- **P2-1 NAM** — **status berubah 22 Jul 2026: GO, rencana lengkap di [`docs/nam-plan.md`](nam-plan.md).** Unknown penentunya (biaya CPU di 32 smp / 96 kHz) sudah diukur lewat spike di mesin pengembang: WaveNet A1-Standard hanya 8,8% anggaran blok (p99 14,3%) di build Release /MT /AVX2, MSVC terkompilasi bersih tanpa patch, load+prewarm ~25 ms. Estimasi turun dari "3–5 weekend, paling tidak pasti" menjadi ±3,5–4 hari kerja tanpa unknown penentu. Harness spike tercommit di `spike/nam-bench/` untuk direproduksi.
+- **P2-1 NAM — SELESAI (22 Jul 2026).** Diimplementasi penuh sesuai [`docs/nam-plan.md`](nam-plan.md): `NamProcessor` (head, di antara Contour dan Cabinet), `NamResampler`, `NamLibrary`, `/api/nam`, kartu rack + panel model. Terukur di Release ASIO 96 kHz / 32 smp: semua efek + model A1-Standard sungguhan = **~29% DSP** (>3x headroom). Handoff model tiga-atomic dengan reaper (tidak meniru plugin resmi yang men-free di callback audio), resampler CatmullRom (WindowedSinc 201-tap terlalu mahal — 46%), latensi diukur bukan diperkirakan. Diuji: 1,55 jt assertion backend (termasuk stress handoff konkuren, latency, perf), 151 test frontend, 45 E2E.
 - **P4-4 Modifier** — butuh jalur modulasi baru di thread audio yang menulis parameter per blok. Roadmap sendiri menuliskan "desain dulu sebelum koding", dan keputusan desainnya belum diambil.
 - **P4-5 Looper** — mandiri dan tidak menyentuh arsitektur lain, tapi bukan kebutuhan inti; paling akhir sejak awal.
 - **P2-5 Multi-view** — sidebar masih terbaca dalam satu layar, jadi tab Perform/Edit/Library/Settings belum menyelesaikan masalah nyata. Akan terasa perlu begitu panelnya bertambah lagi.

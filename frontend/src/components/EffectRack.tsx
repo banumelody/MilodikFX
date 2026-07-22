@@ -13,6 +13,7 @@ export const EFFECT_ACCENTS: Record<string, string> = {
   overdrive: '#ff8a3d',
   eq: '#28c76f',
   toneStack: '#00c2a8',
+  nam: '#ff7b54',
   cabinet: '#d98cff',
   delay: '#ffc93c',
   reverb: '#4dd0ff',

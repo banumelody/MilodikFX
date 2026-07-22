@@ -12,11 +12,13 @@
 #include "dsp/InputTrimProcessor.h"
 #include "dsp/MasterOutProcessor.h"
 #include "dsp/MetronomeProcessor.h"
+#include "dsp/NamProcessor.h"
 #include "dsp/NoiseGateProcessor.h"
 #include "dsp/OverdriveProcessor.h"
 #include "dsp/ReverbProcessor.h"
 #include "dsp/ToneStackProcessor.h"
 #include "preset/IrLibrary.h"
+#include "preset/NamLibrary.h"
 
 namespace milodikfx::dsp
 {
@@ -32,6 +34,10 @@ struct GuitarChain
     OverdriveProcessor* overdrive = nullptr;
     EQProcessor* eq = nullptr;
     ToneStackProcessor* toneStack = nullptr;
+
+    /** The amp head, between the tone shaping and the cabinet. */
+    NamProcessor* nam = nullptr;
+
     CabinetProcessor* cabinet = nullptr;
     DelayProcessor* delay = nullptr;
     ReverbProcessor* reverb = nullptr;
@@ -60,6 +66,9 @@ struct ChainExtras
 {
     /** Supplies the impulse responses the cabinet and reverb can load. */
     milodikfx::preset::IrLibrary* irLibrary = nullptr;
+
+    /** Supplies the NAM amp-head models the head stage can load. */
+    milodikfx::preset::NamLibrary* namLibrary = nullptr;
 
     /** Both must be set for the input-routing stage to be registered. */
     std::function<float()> getInputMode;

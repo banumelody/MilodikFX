@@ -116,7 +116,7 @@ Built by `milodikfx::dsp::buildGuitarChain` (`src/dsp/ChainFactory.*`), shared b
 plugin, in this fixed order:
 
 ```
-InputTrim -> NoiseGate -> CleanBoost -> Compressor -> Overdrive -> EQ -> Contour -> Cabinet -> Delay -> Reverb -> MasterOut
+InputTrim -> NoiseGate -> CleanBoost -> Compressor -> Overdrive -> EQ -> Contour -> NAM -> Cabinet -> Delay -> Reverb -> MasterOut
 ```
 
 `InputTrim` is ahead of the gate on purpose: with it in front, the gate threshold stays correct
@@ -206,6 +206,44 @@ an enabled effect is bit-identical to the pre-spillover code and the first note 
 delayed in full rather than fading in. Once the tail drops below -80 dB the block returns immediately,
 so a silent effect costs one atomic read. `spillover` is a per-effect toggle, default on.
 
+### NAM (amp head)
+
+`milodikfx::dsp::NamProcessor` (`src/dsp/NamProcessor.*`) runs a Neural Amp Modeler `.nam` capture — the
+amp head — between the tone shaping and the cabinet, where a real head sits between the pedals and the
+speaker. The cabinet IR loader models the speaker; NAM models what an IR fundamentally cannot, the way
+an amp's distortion changes with how hard you play.
+
+Built via FetchContent from a pinned NeuralAmpModelerCore commit into an **OBJECT** library
+(`milodikfx_nam`), not STATIC: each architecture self-registers its config parser through a static
+initialiser, and a static archive would let the linker discard those object files as unreferenced, so
+`get_dsp()` fails with "No config parser registered". `/arch:AVX2` and `NAM_SAMPLE_FLOAT` are scoped to
+that lib; the AVX2 code only runs once a model is loaded, and `NamProcessor::isAvailable()` refuses to
+load on a CPU without AVX2, so the portable build still runs on old hardware. Set
+`-DMILODIKFX_ENABLE_NAM=OFF` to build without it; `NamProcessor` becomes a passthrough stub.
+
+Realtime discipline, and where the reference plugin's approach is deliberately *not* copied:
+
+- A model is loaded (file read, JSON parse, weight allocation, prewarm) on the calling REST thread,
+  never the audio thread — the same rule as the IR loader. The loader builds a whole **Slot** (the model
+  plus a resampler already prepared for that model's rate) and publishes it with an atomic exchange.
+- The audio thread only ever does a pointer swap: it adopts a staged slot and moves the old one to a
+  single `retired` slot. Nothing is allocated or freed in the callback. The reference NAM plugin frees
+  the retired model *inside* its audio callback; MilodikFX reaps it from `MainComponent`'s timer instead.
+- `process()` is allocation-free once loaded (verified upstream). The model is `Reset()` with a max block
+  size the resampler will never exceed, so it never grows its buffers; in Release its `assert` is gone,
+  so exceeding it would be an out-of-bounds write, not a crash.
+
+Models run at their trained rate (48 kHz almost always), so `NamResampler` resamples the 96 kHz host
+block down and back. It uses a `juce::CatmullRomInterpolator`, not `WindowedSinc`: the latter's 201-tap
+kernel, run twice a block, cost more than the model itself (46 % of budget). CatmullRom is 4 taps,
+transparent enough for guitar, and drops the whole chain plus a Standard model to ~29 %. The resampler's
+reported latency is *measured* by pushing an impulse through at prepare time, not estimated, so the
+figure cannot drift from reality. `juce::dsp::ResamplingContainer` was rejected because it has `std::cerr`
+and `throw` reachable from its per-block path.
+
+Endpoints: `/api/nam` (library + availability). Models live in `Documents\MilodikFX\NamModels`; the
+`nam.namFile` text parameter chooses one, `nam.inputDb`/`nam.outputDb` gain-stage it.
+
 ### Audio device
 
 `milodikfx::audio::AudioDeviceController` (`src/audio/AudioDeviceController.*`) owns **every**
@@ -261,7 +299,7 @@ Measured delivery is ~22 Hz against a 33 ms target: Windows rounds a sleep up to
 granularity.
 
 Endpoints: `/api/effects`, `/api/parameters`, `/api/devices`, `/api/levels`, `/api/tuner`, `/api/ir`,
-`/api/midi`, `/api/scenes`, `/api/presets`, `/api/health`.
+`/api/nam`, `/api/midi`, `/api/scenes`, `/api/presets`, `/api/health`.
 
 ### Presets and scenes
 

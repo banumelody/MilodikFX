@@ -74,7 +74,9 @@ MainComponent::MainComponent (juce::PropertiesFile& settingsFileToUse)
       presetManager (juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
                          .getChildFile ("MilodikFX/Presets")),
       irLibrary (juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
-                     .getChildFile ("MilodikFX/ImpulseResponses"))
+                     .getChildFile ("MilodikFX/ImpulseResponses")),
+      namLibrary (juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
+                      .getChildFile ("MilodikFX/NamModels"))
 {
     log ("=== MainComponent constructor starting ===");
 
@@ -172,6 +174,7 @@ void MainComponent::buildChain()
     overdriveProcessor = chainProcessors.overdrive;
     eqProcessor = chainProcessors.eq;
     toneStackProcessor = chainProcessors.toneStack;
+    namProcessor = chainProcessors.nam;
     cabinetProcessor = chainProcessors.cabinet;
     delayProcessor = chainProcessors.delay;
     reverbProcessor = chainProcessors.reverb;
@@ -185,6 +188,7 @@ void MainComponent::buildRegistry()
     // the shared factory only adds it when these accessors are supplied.
     milodikfx::dsp::ChainExtras extras;
     extras.irLibrary = &irLibrary;
+    extras.namLibrary = &namLibrary;
     extras.getInputMode = [this] { return (float) inputMode.load (std::memory_order_relaxed); };
     extras.setInputMode = [this] (float v)
     {
@@ -457,6 +461,7 @@ void MainComponent::startServer()
                                    std::make_shared<ParametersHandler> (registry, "master", "volumeDb"));
     webServer->registerApiHandler ("/api/effects", std::make_shared<EffectsHandler> (registry));
     webServer->registerApiHandler ("/api/ir", std::make_shared<IrHandler> (irLibrary));
+    webServer->registerApiHandler ("/api/nam", std::make_shared<NamHandler> (namLibrary));
     webServer->registerApiHandler ("/api/levels", levelsHandler);
     webServer->registerApiHandler ("/api/tuner", std::make_shared<TunerHandler> (tunerAnalyzer));
     webServer->registerApiHandler ("/api/midi", std::make_shared<MidiHandler> (midiController));
@@ -747,6 +752,12 @@ void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
 void MainComponent::timerCallback()
 {
     saveSettingsIfNeeded (false);
+
+    // Free any NAM model the audio thread swapped out. The audio thread only
+    // ever moves the retired model to a slot; the reaper here deletes it off the
+    // message thread, so a model switch never allocates or frees in the callback.
+    if (namProcessor != nullptr)
+        namProcessor->collectGarbage();
 
     // Commit an undo step only once the chain has been still for a moment, so
     // a knob drag is one step rather than one per frame.

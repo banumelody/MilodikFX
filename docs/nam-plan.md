@@ -42,6 +42,20 @@ Kesimpulan yang dibawa angka ini:
 
 **Peringatan yang tetap berlaku:** angka Debug akan 10–100x lebih lambat (sifat Eigen tanpa optimasi) — unit test performa NAM harus pakai model LSTM/mini atau rasio, jangan gerbang absolut di Debug.
 
+### 2b. Angka setelah terintegrasi (bukan spike lagi) — terukur 22 Jul 2026
+
+Spike mengukur model telanjang di loop ketat (8,8% @16 frame). Angka setelah stage benar-benar ada di rantai, di Release ASIO 96 kHz / 32 smp / 4,33 ms:
+
+| Kondisi | %DSP |
+|---|---|
+| Semua efek nyala, NAM passthrough (tanpa model) | ~10% |
+| Semua efek nyala + **model A1-Standard sungguhan** | **~29%** |
+| Kasus terburuk (MIAB 8x + NAM Standard) | ~27–29% |
+
+Jadi model Standard menambah ~19% di atas baseline — lebih tinggi dari proyeksi optimis spike (~17–19% total), tapi **29% total masih menyisakan >3x headroom** dan bebas xrun. Perbedaan dari proyeksi datang dari resampler dan overhead integrasi, bukan model itu sendiri.
+
+**Keputusan resampler yang lahir dari pengukuran.** Percobaan pertama memakai `juce::WindowedSincInterpolator` (201 tap per sampel keluaran) dan totalnya melonjak ke **46%** — resampler-nya sendiri lebih mahal dari modelnya. Diganti ke `juce::CatmullRomInterpolator` (4 tap): total turun ke 29%, dan test korelasi round-trip (>0,98) tetap lolos, jadi kualitasnya cukup untuk sinyal gitar (plugin resmi pun cuma pakai Lanczos ~25 tap, bukan 200). Ini persis alasan todo #2 (audit resampler) ada — dan kenapa jalur JUCE dipilih di atas `ResamplingContainer` yang punya `std::cerr`/`throw` di jalur prosesnya.
+
 ## 3. Desain teknis
 
 ### 3.1 Posisi di chain
