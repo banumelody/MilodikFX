@@ -20,9 +20,25 @@ inline std::string toJsonString (const juce::var& value)
     return juce::JSON::toString (value, false).toStdString();
 }
 
+/**
+ * Single-line serialisation, for the high-frequency SSE streams. The stream
+ * writer still prefixes every line with `data:` as a safety net, but a payload
+ * that is one line to begin with is fewer bytes 22 times a second and needs no
+ * splitting at all.
+ */
+inline std::string toCompactJsonString (const juce::var& value)
+{
+    return juce::JSON::toString (value, true).toStdString();
+}
+
 inline HttpHandler::Response jsonResponse (int statusCode, const juce::var& value)
 {
     return { statusCode, "application/json", toJsonString (value) };
+}
+
+inline HttpHandler::Response jsonOkCompact (const juce::var& value)
+{
+    return { 200, "application/json", toCompactJsonString (value) };
 }
 
 inline HttpHandler::Response jsonError (int statusCode, const juce::String& message)

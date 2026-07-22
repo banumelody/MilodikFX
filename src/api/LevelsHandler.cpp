@@ -20,5 +20,8 @@ HttpHandler::Response LevelsHandler::handleGet (const std::string&, const std::s
     object->setProperty ("audioRunning", audioRunning.load (std::memory_order_relaxed));
     object->setProperty ("floorDb", kFloorDb);
 
-    return jsonOk (juce::var (object));
+    // Compact: this is the meter payload, delivered ~22 times a second down the
+    // SSE stream. One line is fewer bytes and skips the line-splitting the
+    // stream writer would otherwise do on a pretty-printed body.
+    return jsonOkCompact (juce::var (object));
 }

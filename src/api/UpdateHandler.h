@@ -82,20 +82,27 @@ public:
     {
         const bool force = query.find ("force") != std::string::npos;
 
-        std::lock_guard<std::mutex> lock (mutex);
+        // Serve a fresh-enough cache under the lock, then release it. The network
+        // fetch must NOT run while holding the lock: a second /api/update landing
+        // during a slow GitHub would otherwise queue behind it. Two callers may
+        // fetch at once instead -- independent reads, last write wins -- which is
+        // the right trade for a rare, loopback-only endpoint.
+        {
+            std::lock_guard<std::mutex> lock (mutex);
 
-        const auto now = juce::Time::getMillisecondCounter();
-
-        if (! force && haveCache && (now - cachedAtMs) < kCacheTtlMs)
-            return milodikfx::api::jsonOk (cached);
+            if (! force && haveCache
+                && (juce::Time::getMillisecondCounter() - cachedAtMs) < kCacheTtlMs)
+                return milodikfx::api::jsonOk (cached);
+        }
 
         bool ok = false;
         auto result = fetchLatest (ok);
 
         if (ok)
         {
+            std::lock_guard<std::mutex> lock (mutex);
             cached = result;
-            cachedAtMs = now;
+            cachedAtMs = juce::Time::getMillisecondCounter();
             haveCache = true;
         }
 
