@@ -715,6 +715,10 @@ sudah ada — yang belum adalah tingkat ketiganya (channel) dan postur panggungn
 
 ### P6-1. Channel A/B/C/D per efek — jantung adaptasinya
 
+> **Status: inti SELESAI di v0.17.0.** `ChannelStore` (`src/preset/ChannelStore.*`) menyimpan empat sound bernama A/B/C/D per efek; berpindah channel menyimpan sound yang aktif dulu lalu memuat yang dipilih (terasa live seperti FM9, tanpa mencegat tiap putaran knob). Persisten di preset (schema v4) **dan** settings file. API: `PUT /api/effects/<id>/channel {value}` (pindah) + `POST /api/effects/<id>/channel/save {value}` (simpan); `/api/effects` kini membawa `channel` (indeks aktif) + `channels` (empat nama) per efek. UI: tab A/B/C/D di tiap kartu efek yang punya bypass. Diuji: unit `ChannelStore` (auto-save-on-switch, round-trip JSON, edge case), 4 test frontend, 2 E2E (pindah channel + round-trip preset). **Yang belum:** tautan scene→channel (scene menyimpan indeks channel per efek dan memanggilnya saat recall) — dikerjakan bersama P6-5 karena keduanya soal memanggil channel dari kaki/otomasi. Analisis desain asli tetap di bawah.
+
+
+
 Setiap efek mendapat hingga **4 set parameter bernama** (A/B/C/D), disimpan di dalam preset; scene
 menyimpan *enable + pilihan channel* per efek. Satu preset lalu bisa memuat: scene 1 = drive A (crunch
 tipis) + delay A (slap pendek); scene 3 = drive B (gain penuh) + delay B (dotted-eighth panjang) —
@@ -874,7 +878,7 @@ settings tetap lewat message thread seperti sekarang. UI MIDI Learn mendapat dua
 | 36 | Tuner lewat SSE ✅ | P5-3 | ~2–3 jam | selesai (v0.16.0) |
 | 37 | UpdateHandler fetch di luar lock + SSE 1-baris ✅ | P5-4 | ~1–2 jam | selesai (v0.16.0) |
 | 38 | Oversampling default per voicing ✅ | P5-5 | ~2–3 jam | selesai (v0.16.0) |
-| 39 | Channel A/B/C/D per efek | P6-1 | ~1.5–2 weekend | — |
+| 39 | Channel A/B/C/D per efek ✅ (inti) | P6-1 | ~1.5–2 weekend | inti selesai (v0.17.0); tautan scene→channel menyusul di P6-5 |
 | 40 | Modifier (desain FM9, menggantikan P4-4) | P6-2 | ~1.5–2 weekend | — |
 | 41 | Perform view (menyerap P2-5) | P6-3 | ~1–1.5 weekend | setelah P6-1, P5-2 |
 | 42 | Spillover antar preset (verifikasi) ✅ | P6-4 | ~2–4 jam | selesai |
