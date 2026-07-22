@@ -148,10 +148,18 @@ Anything here carries its own clamp, because it adds level to an already-limited
 taps the input buffer *before* `audioEngine.processBlock`: pitch detection has to see the raw pickup,
 since a signal that has been through the overdrive has harmonics that mislead it.
 
-The audio thread only copies into a ring buffer. YIN over a 2048-sample window is around a million
-operations — running it inline would overrun a 32-sample callback's 0.67 ms budget several times over —
-so a worker thread analyses roughly ten times a second and publishes the result as plain atomics.
-Analysis stays off until `POST /api/tuner/enable`; the UI panel is what switches it on.
+The audio thread only copies into a ring buffer. YIN is around a million operations — running it inline
+would overrun a 32-sample callback's 0.67 ms budget several times over — so a worker thread analyses
+roughly ten times a second and publishes the result as plain atomics. Analysis stays off until
+`POST /api/tuner/enable`; the UI panel is what switches it on.
+
+The worker **decimates to a ~16 kHz analysis rate** (anti-alias biquad, then take every Nth sample)
+before running YIN. This reaches a five-string bass low B (B0, 30.9 Hz) and a four-string low E
+(E1, 41.2 Hz) — below the old 55 Hz floor and impossible for a 2048-sample host-rate window to resolve.
+It is also *cheaper*: finding a 31 Hz period at 96 kHz directly would need a ~6000-sample window and a
+YIN pass roughly ten times heavier, and it makes the cost the same at 44.1 or 192 kHz. The frequency
+floor is 27.5 Hz. The pure algorithm holds ±2 cents; through the full decimation path a couple of cents
+of bias is normal and well inside the ±5 the display calls in tune.
 
 #### Tempo
 
@@ -379,6 +387,12 @@ resources copy both depend on that.
 
 ## Docs
 
-`docs/prd.md` holds the product requirements and naming conventions. The `SPRINT_*` / `RELEASE_*` /
-`TEST_*` markdown files at the repo root are historical sprint reports (partly in Indonesian) that
-describe states the code has moved well past — treat them as changelog, not spec.
+- `README.md` — user-facing overview, download and build instructions, licence.
+- `docs/prd.md` holds the original product requirements and naming conventions. It predates most of the
+  current feature set (tuner, MIDI, scenes, NAM, the eight drive voicings) — treat it as the founding
+  spec, not a current inventory. `README.md` and this file are the up-to-date picture.
+- `docs/roadmap.md` — the living backlog, with each item's status and the design decisions behind it.
+- `docs/nam-plan.md` — the NAM (amp head) design and the measured numbers it was decided on.
+
+The old `SPRINT_*` / `RELEASE_*` / `TEST_*` reports and the Electron-era plans were removed; they
+described states the code moved well past. Release history lives in the GitHub Releases.

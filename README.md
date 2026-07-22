@@ -1,82 +1,111 @@
 # MilodikFX
 
-MilodikFX adalah aplikasi multi-effect gitar/bass berbasis DSP realtime (C++20 + JUCE) untuk Windows 11.
+MilodikFX adalah prosesor multi-efek gitar/bass realtime untuk Windows, dibuat untuk rig satu orang.
+Satu executable C++20/JUCE mandiri: menjalankan audio engine, menyajikan HTTP API loopback, dan
+menampilkan UI React **di dalam jendelanya sendiri** lewat Edge WebView2 — tanpa tab browser, tanpa
+proses UI terpisah. Bundle UI tertanam di dalam exe, jadi binernya berdiri sendiri.
 
-Status **v0.7.5 (Sprint 6 Complete):**
-- **DSP Chain:** Clean Boost → Overdrive → 3-Band EQ → Compressor → Reverb → Tone Stack (6 effects)
-- **Advanced Features:**
-  - Real-time CPU load monitoring (0–100%, visual warning @ 50%+)
-  - Smooth animations for parameter changes (100ms interpolation)
-  - Dark/Light/High Contrast themes with persistent preference
-  - Keyboard navigation (Tab/Shift+Tab, arrows, Page Up/Down)
-  - Comprehensive preset metadata (author, description, tags, timestamps)
-- **UI/UX Polished:**
-  - Proportional effect cards in responsive 2×3 grid
-  - Window maximized on startup with bounds persistence
-  - Smooth level meter animations with peak decay
-  - Modular UI components (Knob, Footswitch, EffectCard)
-- **Audio Performance:**
-  - Typical CPU load: 15–25% (all effects enabled at 44.1 kHz)
-  - Peak load <40% (includes reverb @ 8–12%)
-  - Lock-free thread-safe parameter updates
-- **Preset Management:** Save/Load/Delete with JSON, full backward compatibility
+Target kedua membangun rantai DSP yang sama sebagai **plugin VST3** plus wrapper JUCE Standalone.
+
+## Unduh
+
+Build siap pakai ada di [halaman Releases](https://github.com/banumelody/MilodikFX/releases):
+
+- **`MilodikFX-x.x.x-setup.exe`** — installer biasa, paling mudah dibagikan.
+- **`MilodikFX-x.x.x-portable.exe`** — exe tunggal tanpa dipasang; WASAPI (shared/exclusive/low-latency)
+  dan DirectSound. Jalan di Windows mana pun.
+- **`MilodikFX-x.x.x.exe`** — dengan dukungan ASIO, latensi paling rendah.
+
+Taruh di folder mana saja lalu jalankan. UI terbuka di jendelanya sendiri (butuh WebView2, sudah ada di
+Windows 10/11 modern).
+
+## Rantai sinyal
+
+```
+InputTrim → NoiseGate → CleanBoost → Compressor → Overdrive → EQ → Contour → NAM → Cabinet → Delay → Reverb → MasterOut
+```
+
+Semuanya untuk **gitar maupun bass**. Sorotan:
+
+- **Input Gain** di depan noise gate — samakan level tiap gitar/bass sekali, gate ikut menyesuaikan.
+- **Overdrive** dengan 8 voicing pedal (Tube Screamer, Bluesbreaker, Blues Driver, Transparent/Klon, OCD,
+  Dumble, Marshall-in-a-Box, Clean Boost); kontrol menyesuaikan tipe, plus asimetri + oversampling.
+- **Amp (NAM)** — kepala amp hasil capture Neural Amp Modeler (`.nam`), di antara tone shaping dan
+  cabinet. Melengkapi cabinet IR: IR memodelkan speaker, NAM memodelkan kepala amp-nya. Butuh CPU AVX2.
+- **Cabinet** analitik + dua slot impulse response yang bisa di-blend.
+- **Delay** dengan damping, ping-pong, dan sinkron tempo; **Reverb** algoritmik/konvolusi. Keduanya
+  punya spillover — ekornya tetap meluruh saat dimatikan, jadi pindah scene tidak memotong repeat.
+- **Metronome** dicampur setelah master (di luar bypass), berbagi satu tempo dengan delay.
+
+Fitur lain: **tuner kromatik** (gitar & bass 5-senar, sampai low B ≈ 31 Hz), **kontrol MIDI/footswitch**
+dengan MIDI Learn, **scene** 4 slot, **preset** dengan metadata + impor/ekspor, **undo/redo**, kurva
+respons EQ, dan metering lewat Server-Sent Events.
 
 ## Build (Windows)
-Prerequisites:
-- CMake 3.25+
-- Visual Studio 2022 Build Tools (MSVC)
 
-Configure + build:
+Frontend harus dibangun **sebelum** CMake configure, karena bundle-nya ditanam ke exe saat configure.
+
 ```powershell
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64
-cmake --build build --config Debug --parallel
+# Semuanya, termasuk installer bila Inno Setup ada:
+powershell -ExecutionPolicy Bypass -File scripts\build-release.ps1
+
+# ...atau manual:
+cd frontend; npm ci; npm run build; cd ..
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64   # JUCE, WebView2, NAM di-fetch saat pertama
+cmake --build build --config Release --parallel
+build\MilodikFX_artefacts\Release\MilodikFX.exe
 ```
 
-Run (Debug):
-- `build\MilodikFX_artefacts\Debug\MilodikFX.exe`
+Prasyarat: CMake 3.25+, Visual Studio 2022 (MSVC), Node.js untuk frontend. Koneksi internet dibutuhkan
+saat configure pertama (JUCE, WebView2, dan NeuralAmpModelerCore di-fetch via CMake).
 
-Tests (Debug):
+**ASIO (opsional, latensi terendah).** Pasang Steinberg ASIO SDK lalu set `ASIOSDK_DIR`; CMake
+mendeteksinya dan mengaktifkan ASIO otomatis. SDK tidak disertakan di repo (lisensi Steinberg mengizinkan
+pemakaian, bukan redistribusi). Tanpa SDK, engine jatuh ke WASAPI exclusive.
+
+**NAM (opsional).** Aktif secara default (`-DMILODIKFX_ENABLE_NAM=OFF` untuk mematikannya). Model
+membutuhkan CPU AVX2; di CPU lama, pemuatan model ditolak dengan pesan jelas dan aplikasi tetap jalan.
+
+Log dan settings ada di `%APPDATA%\MilodikFX\`. Preset, impulse response, dan model NAM ada di bawah
+`Documents\MilodikFX\`.
+
+## Tes
+
 ```powershell
+# Backend (JUCE UnitTest diagregasi jadi satu biner)
 cmake --build build --config Debug --target MilodikFX_tests
+build\MilodikFX_tests_artefacts\Debug\MilodikFX_tests.exe
 ctest --test-dir build -C Debug --output-on-failure
-```
-Catatan: `MilodikFX_Smoke_ASIO` akan skip jika build tidak mengaktifkan ASIO atau driver ASIO tidak terdeteksi. Jika driver ada dan ASIO aktif tapi tidak terpilih, test akan gagal.
 
-ASIO (opsional):
-- Install Steinberg ASIO SDK (local)
-- Set env `ASIOSDK_DIR` atau `ASIO_SDK_PATH`, atau isi `MILODIKFX_ASIO_SDK_PATH` di CMake
-- Jika SDK terdeteksi valid, `MILODIKFX_ENABLE_ASIO` akan auto ON
+# Frontend
+cd frontend
+npx vitest run       # catatan: `npm run test` masuk watch mode
+npm run type-check
+npm run lint
 
-```powershell
-# via env var (recommended)
-$env:ASIOSDK_DIR = "C:\\path\\to\\asiosdk"
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64
-
-# or explicit path
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DMILODIKFX_ASIO_SDK_PATH="C:\\path\\to\\asiosdk"
-
-# manual override (if needed)
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DMILODIKFX_ENABLE_ASIO=ON
+# End-to-end terhadap engine sungguhan
+powershell -ExecutionPolicy Bypass -File .github\scripts\run-local-e2e.ps1 [-Build]
 ```
 
-## Licence
+## Lisensi
 
-MilodikFX is licensed under the **GNU Affero General Public License v3.0** — see [LICENSE](LICENSE).
+MilodikFX berlisensi **GNU Affero General Public License v3.0** — lihat [LICENSE](LICENSE).
 
-That choice is not arbitrary. The binaries link the JUCE framework, whose modules are dual-licensed
-under AGPLv3 or a commercial JUCE licence; distributing a build without the commercial licence means
-the combined work is AGPLv3. Builds that also enable ASIO include Steinberg's ASIO SDK, offered under
-either a signed Steinberg agreement or GPLv3 — GPLv3 section 13 explicitly permits combining with
-AGPLv3 code, so the AGPLv3 release covers that too.
+Pilihan itu bukan sembarangan. Biner me-link JUCE, yang modul-modulnya dwi-lisensi AGPLv3 atau lisensi
+komersial JUCE; mendistribusikan build tanpa lisensi komersial berarti karya gabungannya AGPLv3. Build
+yang mengaktifkan ASIO menyertakan Steinberg ASIO SDK (perjanjian Steinberg atau GPLv3 — §13 GPLv3
+mengizinkan penggabungan dengan AGPLv3). NAM core (MIT), Eigen (MPL2), dan nlohmann/json (MIT) semuanya
+kompatibel dengan AGPLv3. Model `.nam` adalah data yang dimuat saat runtime, bukan kode ter-link, jadi
+lisensinya tidak menular ke aplikasi.
 
-Practically: you may use, modify and redistribute this, including commercially, provided you pass on
-the same freedoms and make the corresponding source available. The full source is in this repository.
+Praktisnya: kamu boleh memakai, memodifikasi, dan meredistribusikan ini — termasuk secara komersial —
+asalkan meneruskan kebebasan yang sama dan menyediakan sumbernya. Sumber lengkap ada di repo ini.
 
-Third-party components:
+Komponen pihak ketiga:
 
-- [JUCE](https://juce.com) — AGPLv3 / commercial, © Raw Material Software Limited
-- [Steinberg ASIO SDK](https://www.steinberg.net/developers/) — ASIO is a trademark and software of
-  Steinberg Media Technologies GmbH. Only present in builds made with `MILODIKFX_ENABLE_ASIO=ON`;
-  the SDK itself is not redistributed in this repository.
-- [Microsoft Edge WebView2](https://developer.microsoft.com/microsoft-edge/webview2/) — used at
-  runtime to render the interface.
+- [JUCE](https://juce.com) — AGPLv3 / komersial, © Raw Material Software Limited
+- [NeuralAmpModelerCore](https://github.com/sdatkinson/NeuralAmpModelerCore) — MIT, © Steven Atkinson
+- [Eigen](https://eigen.tuxfamily.org) — MPL2
+- [Steinberg ASIO SDK](https://www.steinberg.net/developers/) — hanya di build `MILODIKFX_ENABLE_ASIO=ON`;
+  SDK tidak diredistribusi di repo ini.
+- [Microsoft Edge WebView2](https://developer.microsoft.com/microsoft-edge/webview2/) — merender UI saat runtime.

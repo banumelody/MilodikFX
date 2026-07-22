@@ -30,6 +30,42 @@ std::vector<float> makeSine (double freqHz, int numSamples, double sampleRate = 
     return window;
 }
 
+/**
+ * Streams a continuous sine into the analyzer, block by block, until it locks
+ * on or the attempts run out.
+ *
+ * Phase-continuous on purpose: the analysis window now spans several pushed
+ * blocks, so repeating one fixed block would put a discontinuity every block
+ * boundary and hand YIN a signal no instrument produces.
+ */
+milodikfx::dsp::TunerReading feedUntilDetected (milodikfx::dsp::TunerAnalyzer& analyzer,
+                                                double freqHz,
+                                                double sampleRate,
+                                                int wantMidi,
+                                                int maxAttempts = 80)
+{
+    constexpr int kBlock = 1024;
+    milodikfx::dsp::TunerReading reading;
+    auto startSample = 0;
+
+    for (int attempt = 0; attempt < maxAttempts && reading.midiNote != wantMidi; ++attempt)
+    {
+        std::vector<float> block ((size_t) kBlock, 0.0f);
+
+        for (int i = 0; i < kBlock; ++i)
+            block[(size_t) i] = 0.5f * (float) std::sin (juce::MathConstants<double>::twoPi
+                                                         * freqHz * (double) (startSample + i) / sampleRate);
+
+        startSample += kBlock;
+
+        analyzer.pushSamples (block.data(), kBlock);
+        juce::Thread::sleep (20);
+        reading = analyzer.getReading();
+    }
+
+    return reading;
+}
+
 /** A crude plucked-string spectrum: fundamental plus decaying harmonics. */
 std::vector<float> makeHarmonicTone (double freqHz, int numSamples, int numHarmonics = 6)
 {
@@ -133,11 +169,13 @@ public:
             expectEquals (TunerAnalyzer::detectPitch (window.data(), 2048, 0.0), 0.0f);
         }
 
-        beginTest ("never reports a pitch outside the range a guitar can produce");
+        beginTest ("never reports a pitch outside the range an instrument can produce");
         {
-            // Below a 7-string B there is nothing to find, so it is refused.
-            const auto tooLow = makeSine (30.0, 2048);
-            expectEquals (TunerAnalyzer::detectPitch (tooLow.data(), 2048, kRate), 0.0f);
+            // Below a five-string bass low B there is nothing musical to find, so
+            // it is refused. Measured at the analysis rate the tuner really runs
+            // at, where a 20 Hz period is longer than the search reaches.
+            const auto tooLow = makeSine (20.0, 3072, 16000.0);
+            expectEquals (TunerAnalyzer::detectPitch (tooLow.data(), 3072, 16000.0), 0.0f);
 
             // Above the last fret, YIN latches onto a subharmonic instead --
             // 3 kHz comes back as 1 kHz. That is not a note any guitar plays and
@@ -147,8 +185,53 @@ public:
             const auto tooHigh = makeSine (3000.0, 2048);
             const auto detected = TunerAnalyzer::detectPitch (tooHigh.data(), 2048, kRate);
 
-            expect (detected == 0.0f || (detected >= 55.0f && detected <= 1400.0f),
-                    "reported " + juce::String (detected, 2) + " Hz, outside the guitar range");
+            expect (detected == 0.0f || (detected >= 27.5f && detected <= 1400.0f),
+                    "reported " + juce::String (detected, 2) + " Hz, outside the instrument range");
+        }
+
+        beginTest ("detects every open string of a five-string bass within 2 cents");
+        {
+            // B-E-A-D-G, low to high: the low B (B0, 30.9 Hz) is the note the old
+            // 55 Hz floor could never reach. Measured at the tuner's own analysis
+            // rate, where the window holds several periods of even the low B.
+            const struct { const char* name; double hz; } bass[] = {
+                { "B0", 30.8677 },
+                { "E1", 41.2034 },
+                { "A1", 55.0000 },
+                { "D2", 73.4162 },
+                { "G2", 97.9989 },
+            };
+
+            for (const auto& s : bass)
+            {
+                const auto window = makeSine (s.hz, 3072, 16000.0);
+                const auto detected = TunerAnalyzer::detectPitch (window.data(), 3072, 16000.0);
+
+                expect (detected > 0.0f, juce::String ("no pitch detected for ") + s.name);
+
+                const auto error = std::abs (centsBetween ((double) detected, s.hz));
+                expect (error < 2.0,
+                        juce::String (s.name) + ": detected " + juce::String (detected, 3)
+                            + " Hz, off by " + juce::String (error, 2) + " cents");
+            }
+        }
+
+        beginTest ("does not drop a bass low B an octave on a harmonically rich note");
+        {
+            // The octave error is worst on the lowest, most harmonic-rich notes.
+            // Built at the analysis rate: fundamental plus eight decaying harmonics.
+            std::vector<float> lowB (3072, 0.0f);
+            for (int h = 1; h <= 8; ++h)
+                for (int i = 0; i < 3072; ++i)
+                    lowB[(size_t) i] += (0.5f / (float) h)
+                                        * (float) std::sin (juce::MathConstants<double>::twoPi
+                                                            * 30.8677 * (double) h * (double) i / 16000.0);
+
+            const auto detected = TunerAnalyzer::detectPitch (lowB.data(), 3072, 16000.0);
+
+            expect (detected > 24.0f,
+                    "detected " + juce::String (detected, 2) + " Hz -- an octave below B0");
+            expect (std::abs (centsBetween ((double) detected, 30.8677)) < 12.0);
         }
 
         beginTest ("takes the shortest period, so a low note is never an octave out");
@@ -164,13 +247,17 @@ public:
             expect (std::abs (centsBetween ((double) detected, 82.4069)) < 10.0);
         }
 
-        beginTest ("names notes the way a guitarist would");
+        beginTest ("names notes the way a player would, guitar and bass");
         {
             expectEquals (TunerAnalyzer::describeNote (40), juce::String ("E2"));
             expectEquals (TunerAnalyzer::describeNote (45), juce::String ("A2"));
             expectEquals (TunerAnalyzer::describeNote (60), juce::String ("C4"));
             expectEquals (TunerAnalyzer::describeNote (69), juce::String ("A4"));
             expectEquals (TunerAnalyzer::describeNote (64), juce::String ("E4"));
+            // The bass range, down to a five-string low B.
+            expectEquals (TunerAnalyzer::describeNote (23), juce::String ("B0"));
+            expectEquals (TunerAnalyzer::describeNote (28), juce::String ("E1"));
+            expectEquals (TunerAnalyzer::describeNote (43), juce::String ("G2"));
             expect (TunerAnalyzer::describeNote (-1).isEmpty());
             expect (TunerAnalyzer::describeNote (500).isEmpty());
         }
@@ -199,21 +286,14 @@ public:
             analyzer.prepare (kRate);
             analyzer.setEnabled (true);
 
-            const auto window = makeSine (110.0, 2048);
-
-            // The worker wakes about ten times a second, so keep feeding it and
-            // give it a few chances rather than sleeping once and hoping.
-            milodikfx::dsp::TunerReading reading;
-
-            for (int attempt = 0; attempt < 40 && reading.midiNote < 0; ++attempt)
-            {
-                analyzer.pushSamples (window.data(), (int) window.size());
-                juce::Thread::sleep (25);
-                reading = analyzer.getReading();
-            }
+            // A continuous 110 Hz (A2) fed block by block.
+            const auto reading = feedUntilDetected (analyzer, 110.0, kRate, 45);
 
             expectEquals (reading.midiNote, 45); // A2
-            expect (std::abs (reading.cents) < 2.0f,
+            // Through the whole decimation + anti-alias path, a few cents of bias
+            // is fine -- the display calls anything within 5 cents in tune, and
+            // the pure algorithm is held to 2 cents separately above.
+            expect (std::abs (reading.cents) < 5.0f,
                     "expected in tune, got " + juce::String (reading.cents, 2) + " cents");
             expect (reading.confidence > 0.0f);
 
@@ -221,6 +301,23 @@ public:
             // screen looking live.
             analyzer.setEnabled (false);
             expectEquals (analyzer.getReading().midiNote, -1);
+        }
+
+        beginTest ("detects a bass low B through the whole decimation path at 96 kHz");
+        {
+            // End to end at the rig's actual rate: a B0 (30.9 Hz) pushed at
+            // 96 kHz has to survive the ring, the anti-alias filter and the
+            // decimation to come back as B0 (MIDI 23). This is the note the old
+            // tuner could not see at all.
+            TunerAnalyzer analyzer;
+            analyzer.prepare (96000.0);
+            analyzer.setEnabled (true);
+
+            const auto reading = feedUntilDetected (analyzer, 30.8677, 96000.0, 23);
+
+            expectEquals (reading.midiNote, 23); // B0
+            expect (std::abs (reading.cents) < 5.0f,
+                    "low B off by " + juce::String (reading.cents, 2) + " cents");
         }
 
         beginTest ("treats a silent input as no note rather than a bad reading");

@@ -6,10 +6,11 @@ namespace milodikfx::dsp
 {
 namespace
 {
-/** Lowest pitch worth looking for: below a 7-string B, with margin. */
-constexpr double kMinFrequencyHz = 55.0;
+/** Lowest pitch worth looking for: below a five-string bass low B (B0, 30.9 Hz),
+    with margin, so a slightly flat low B still reads rather than dropping out. */
+constexpr double kMinFrequencyHz = 27.5;
 
-/** Highest: well above the 24th fret on the top string. */
+/** Highest: well above the 24th fret on a guitar's top string. */
 constexpr double kMaxFrequencyHz = 1400.0;
 
 /** YIN's absolute threshold. Lower is stricter about what counts as a pitch. */
@@ -24,7 +25,10 @@ const char* const kNoteNames[] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G
 TunerAnalyzer::TunerAnalyzer()
     : juce::Thread ("MilodikFX Tuner")
 {
-    analysisWindow.resize (kWindowSize, 0.0f);
+    analysisWindow.resize (kAnalysisWindowSize, 0.0f);
+    hostScratch.resize (kRingSize, 0.0f);
+
+    prepare (48000.0);
     startThread (juce::Thread::Priority::low);
 }
 
@@ -35,7 +39,23 @@ TunerAnalyzer::~TunerAnalyzer()
 
 void TunerAnalyzer::prepare (double newSampleRate)
 {
-    sampleRate.store (newSampleRate > 0.0 ? newSampleRate : 48000.0, std::memory_order_relaxed);
+    const auto host = newSampleRate > 0.0 ? newSampleRate : 48000.0;
+    sampleRate.store (host, std::memory_order_relaxed);
+
+    // Decimate by the nearest integer factor to the target rate. The worker
+    // reads these plain (non-atomic) fields; prepare() is called from the audio
+    // setup on the message thread while analysis is idle, and the worst a race
+    // could do is one stale reading, which the next pass corrects.
+    decimation = juce::jlimit (1, kMaxDecimation,
+                               (int) std::lround (host / kTargetAnalysisRate));
+    analysisRate = host / (double) decimation;
+    spanHost = juce::jmin (kAnalysisWindowSize * decimation, kRingSize);
+
+    // Anti-alias below the decimated Nyquist before picking every Nth sample,
+    // or high-frequency content would fold down into the pitch range and
+    // mislead YIN. 0.42 of the analysis rate leaves the whole fundamental range
+    // and several harmonics while giving the filter room to roll off.
+    antiAliasCoeffs = biquad::makeLowPass (host, analysisRate * 0.42, 0.707);
 }
 
 void TunerAnalyzer::setEnabled (bool shouldEnable) noexcept
@@ -189,29 +209,31 @@ void TunerAnalyzer::run()
             continue;
 
         const auto end = writeIndex.load (std::memory_order_acquire);
-        const auto rate = sampleRate.load (std::memory_order_relaxed);
 
-        // Copy the most recent window out of the ring. A sample being rewritten
-        // underneath us costs at worst one bad reading, which the next pass
-        // corrects.
-        auto readIndex = end - kWindowSize;
+        const auto span = juce::jmax (1, spanHost);
+
+        // Copy the most recent span of host samples out of the ring. A sample
+        // being rewritten underneath us costs at worst one bad reading, which
+        // the next pass corrects; the ring's margin over the span makes even
+        // that vanishingly unlikely.
+        auto readIndex = end - span;
 
         while (readIndex < 0)
             readIndex += kRingSize;
 
         double sumSquares = 0.0;
 
-        for (int i = 0; i < kWindowSize; ++i)
+        for (int i = 0; i < span; ++i)
         {
             const auto s = ring[(size_t) readIndex];
-            analysisWindow[(size_t) i] = s;
+            hostScratch[(size_t) i] = s;
             sumSquares += (double) s * (double) s;
 
             if (++readIndex >= kRingSize)
                 readIndex = 0;
         }
 
-        const auto rms = (float) std::sqrt (sumSquares / (double) kWindowSize);
+        const auto rms = (float) std::sqrt (sumSquares / (double) span);
 
         if (rms < kSilenceRms)
         {
@@ -221,7 +243,21 @@ void TunerAnalyzer::run()
             continue;
         }
 
-        const auto hz = detectPitch (analysisWindow.data(), kWindowSize, rate);
+        // Anti-alias, then decimate to the analysis rate by taking every Nth
+        // filtered sample. A fresh filter each pass has a few-sample warm-up
+        // transient, negligible against a window of thousands.
+        BiquadState filterState;
+
+        for (int i = 0; i < span; ++i)
+            hostScratch[(size_t) i] = filterState.process (antiAliasCoeffs, hostScratch[(size_t) i]);
+
+        for (int k = 0; k < kAnalysisWindowSize; ++k)
+        {
+            const auto src = k * decimation;
+            analysisWindow[(size_t) k] = src < span ? hostScratch[(size_t) src] : 0.0f;
+        }
+
+        const auto hz = detectPitch (analysisWindow.data(), kAnalysisWindowSize, analysisRate);
 
         if (hz <= 0.0f)
         {
