@@ -45,7 +45,9 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - P3-8 Metronome — `MetronomeProcessor` sebagai post-processor, di luar jalur bypass
 - P3-9 CPU sparkline
 
-**Belum:** P2-5 (multi-view — diserap ke P6-3), P4-4 (modifier — didetailkan jadi P6-2), P4-5 (looper), P5-2–P5-5 (audit optimasi 22 Jul 2026), P6-1–P6-5 (adaptasi Fractal FM9).
+- P5-2..P5-5 Audit optimasi — **SELESAI (22 Jul 2026, v0.16.0)**. P5-2 memoisasi (Knob/Toggle/EffectRack/ChainStrip + panel samping di-`memo`, callback App di-`useCallback` supaya memo bertahan lintas frame meter 22 Hz). P5-3 tuner lewat SSE (`/api/tuner/stream`), menggantikan poll 60 ms yang membuka ~17 socket/detik. P5-4 `UpdateHandler` fetch di luar lock + payload SSE satu-baris (`jsonOkCompact`). P5-5 default oversampling per voicing saat memilih tipe dari dropdown (fuzz dapat headroom, clean boost tidak).
+
+**Belum:** P2-5 (multi-view — diserap ke P6-3), P4-4 (modifier — didetailkan jadi P6-2), P4-5 (looper), P6-1–P6-5 (adaptasi Fractal FM9).
 
 **Kenapa empat itu belum, per 22 Jul 2026:**
 
@@ -54,7 +56,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - **P4-5 Looper** — mandiri dan tidak menyentuh arsitektur lain, tapi bukan kebutuhan inti; paling akhir sejak awal.
 - **P2-5 Multi-view** — sidebar masih terbaca dalam satu layar, jadi tab Perform/Edit/Library/Settings belum menyelesaikan masalah nyata. Akan terasa perlu begitu panelnya bertambah lagi.
 
-**Rilis terbaru:** v0.15.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.15.0
+**Rilis terbaru:** v0.16.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.16.0
 
 **Catatan P4-1 yang lahir dari implementasi:** tiga hal yang hanya ketahuan lewat pengukuran, bukan pembacaan kode. (1) Split butuh dua filter sungguhan; mengurangi salinan low-pass *tampak* setara tapi menyisakan selisih fasa yang lalu kena gain penuh clipper — Tube Screamer terukur mendistorsi bass lebih keras daripada drive full-range, persis terbalik. (2) Tahap kaskade harus membagi gain; dua tahap gain penuh mengotakkan sinyal, DC blocker menengahkannya, dan harmonik genap — alasan utama memilih voicing asimetris — hilang sama sekali. (3) Test harmoniknya sempat mengukur kebocoran spektralnya sendiri; di luar bin analisis, fundamental menyebar di sekitar −43 dB, satu orde dengan harmonik yang diukur, sehingga kurva simetris tampak punya harmonik genap sebanyak yang asimetris. Tepat di bin, kurva simetris terbaca 0,000000.
 
@@ -865,10 +867,10 @@ settings tetap lewat message thread seperti sekarang. UI MIDI Learn mendapat dua
 | 32 | Looper sederhana | P4-5 | ~1–1.5 weekend | — |
 | 33 | Voicing Centaur + RAT + Big Muff ✅ | P4-1b | ~1–1.5 hari | selesai (v0.14.0) |
 | 34 | Update check + sponsor + credit + situs ✅ | P5-1 | ~0.5 weekend | selesai (v0.15.0) |
-| 35 | Memoisasi frontend (render 22 Hz) | P5-2 | ~2–4 jam | — |
-| 36 | Tuner lewat SSE | P5-3 | ~2–3 jam | — |
-| 37 | UpdateHandler fetch di luar lock + SSE 1-baris | P5-4 | ~1–2 jam | — |
-| 38 | Oversampling default per voicing | P5-5 | ~2–3 jam | — |
+| 35 | Memoisasi frontend (render 22 Hz) ✅ | P5-2 | ~2–4 jam | selesai (v0.16.0) |
+| 36 | Tuner lewat SSE ✅ | P5-3 | ~2–3 jam | selesai (v0.16.0) |
+| 37 | UpdateHandler fetch di luar lock + SSE 1-baris ✅ | P5-4 | ~1–2 jam | selesai (v0.16.0) |
+| 38 | Oversampling default per voicing ✅ | P5-5 | ~2–3 jam | selesai (v0.16.0) |
 | 39 | Channel A/B/C/D per efek | P6-1 | ~1.5–2 weekend | — |
 | 40 | Modifier (desain FM9, menggantikan P4-4) | P6-2 | ~1.5–2 weekend | — |
 | 41 | Perform view (menyerap P2-5) | P6-3 | ~1–1.5 weekend | setelah P6-1, P5-2 |
