@@ -47,7 +47,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 
 **Kenapa empat itu belum, per 22 Jul 2026:**
 
-- **P2-1 NAM** — riset teknisnya lengkap (lihat entry-nya di bawah), tapi ini dependensi eksternal dengan submodule, tanpa target CMake sendiri, dan belum pernah diuji upstream di MSVC. Estimasi 3–5 weekend dan yang paling tidak pasti dari seluruh roadmap. Mengerjakannya setengah jalan lalu menandainya selesai bukan pilihan yang jujur.
+- **P2-1 NAM** — **status berubah 22 Jul 2026: GO, rencana lengkap di [`docs/nam-plan.md`](nam-plan.md).** Unknown penentunya (biaya CPU di 32 smp / 96 kHz) sudah diukur lewat spike di mesin pengembang: WaveNet A1-Standard hanya 8,8% anggaran blok (p99 14,3%) di build Release /MT /AVX2, MSVC terkompilasi bersih tanpa patch, load+prewarm ~25 ms. Estimasi turun dari "3–5 weekend, paling tidak pasti" menjadi ±3,5–4 hari kerja tanpa unknown penentu. Harness spike tercommit di `spike/nam-bench/` untuk direproduksi.
 - **P4-4 Modifier** — butuh jalur modulasi baru di thread audio yang menulis parameter per blok. Roadmap sendiri menuliskan "desain dulu sebelum koding", dan keputusan desainnya belum diambil.
 - **P4-5 Looper** — mandiri dan tidak menyentuh arsitektur lain, tapi bukan kebutuhan inti; paling akhir sejak awal.
 - **P2-5 Multi-view** — sidebar masih terbaca dalam satu layar, jadi tab Perform/Edit/Library/Settings belum menyelesaikan masalah nyata. Akan terasa perlu begitu panelnya bertambah lagi.
