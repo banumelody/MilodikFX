@@ -1,6 +1,6 @@
 {
   "name": "milodikfx-frontend",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "type": "module",
   "description": "MilodikFX UI - rendered by the engine's own window via WebView2",
   "author": "MilodikFX Contributors",

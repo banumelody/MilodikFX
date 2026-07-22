@@ -17,7 +17,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 **Selesai:**
 
 - P0-1 IR Loader — `IrEngine`, `IrLibrary`, `IrHandler`, parameter teks di registry
-- P0-2 Tuner — `TunerAnalyzer` (YIN di thread latar), `/api/tuner`, `TunerDisplay.tsx`
+- P0-2 Tuner — `TunerAnalyzer` (YIN di thread latar), `/api/tuner`, `TunerDisplay.tsx`. **Diperluas 22 Jul 2026:** dukungan bass 5-senar (sampai low B ≈ 31 Hz) lewat dekimasi ke ~16 kHz sebelum YIN — sekaligus optimasi (mencari periode 31 Hz di 96 kHz langsung ~10x lebih mahal) dan membuat biayanya independen dari sample rate device.
 - P0-3 MIDI / Footswitch — `MidiController`, `/api/midi`, `MidiMapping.tsx` dengan MIDI Learn
 - P1-1 Kurva EQ + metering SSE — `services/biquad.ts`, `ToneCurve.tsx`, `/api/levels/stream`
 - P2-3 Scene — `SceneManager` (enabled-only), `/api/scenes`, `SceneGrid.tsx`
