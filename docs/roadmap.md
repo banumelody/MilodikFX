@@ -43,7 +43,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - P3-8 Metronome — `MetronomeProcessor` sebagai post-processor, di luar jalur bypass
 - P3-9 CPU sparkline
 
-**Belum:** P2-5 (multi-view), P4-4 (modifier), P4-5 (looper).
+**Belum:** P2-5 (multi-view), P4-1b (voicing Centaur/RAT/Big Muff — analisis selesai, lihat entry-nya), P4-4 (modifier), P4-5 (looper).
 
 **Kenapa empat itu belum, per 22 Jul 2026:**
 
@@ -533,6 +533,47 @@ Latar: pertanyaan "butuh amp simulator tidak?" dan "fitur Fractal mana yang bisa
 
 **Effort:** ±2 weekend, dipecah tiga batch sesuai urutan di atas.
 
+### P4-1b. Voicing tambahan: Centaur, RAT, Big Muff (analisis 22 Jul 2026)
+
+**Pertanyaan:** bisa tidak menambah klon Centaur, Pro Co RAT, dan Big Muff? **Bisa** — dan cocoknya sebagai **tiga voicing baru di blok Overdrive** (`drive.type` 9/10/11), bukan stage chain baru. Alasannya berlapis: aturan satu-prosesor-per-tipe `findProcessor<T>` menutup opsi stage terpisah tanpa perombakan; posisi blok Overdrive di rantai (setelah kompresor, sebelum EQ/amp/NAM) persis tempat ketiga pedal ini di pedalboard nyata — fuzz → amp bersih (NAM) → cab adalah rig Big Muff klasik, dan urutannya sudah benar; dan tabel `DriveVoicing` memang dibangun supaya menambah pedal = menambah baris data. Enum-nya append-only, jadi preset lama aman.
+
+Ketiganya genre berbeda (transparent OD / distortion / fuzz) tapi secara sinyal bentuknya sama: pre-EQ → nonlinearitas → post-EQ — persis yang dimodelkan tabel. Karena RAT dan Muff bukan "overdrive", kartu-nya layak di-relabel **"Overdrive" → "Drive"** sekalian (murah, hanya label; id `overdrive` tetap demi preset/settings).
+
+**Apa yang SUDAH ada di tabel** (tidak perlu diubah):
+- **Trik Klon** — `cleanBlend * amount` (blend bersih naik dengan gain, meniru pot dual-gang Centaur) sudah terpasang dan dipakai tipe Transparent. Komentarnya di kode bahkan bernama "The Klon trick".
+- **Kaskade 2 tahap** dengan pembagian gain `sqrt` (dipakai MIAB/Blues Driver) — persis dua tahap clipping Big Muff.
+- DC blocker, level-matching, crossfade drive-nol, oversampling per tipe.
+
+**Ekstensi engine yang dibutuhkan** (data di tabel, bukan cabang per pedal — doktrin yang sama):
+
+1. **Dua kurva klip baru** di `ClipCurve`:
+   - `germanium` (Centaur): hard clip ambang rendah dengan lutut membulat — mulai terdistorsi lebih awal tapi halus; beda karakter dari `hardKnee` (MOSFET) yang dipakai Transparent.
+   - `hardClip` (RAT): dioda silikon ke ground setelah op-amp — lebih keras dari `hardKnee`, sumber karakter "serak" RAT.
+2. **Tiga field tabel baru**:
+   - `preEmphasisHz/Db` (RAT): jaringan gain LM308 menguatkan mid/treble **sebelum** klip; tabel sekarang hanya punya presence **setelah** klip. Tanpa ini RAT cuma jadi "OCD dengan gain lebih".
+   - `toneMode` (`lpSweep` | `midScoopTilt`) (Big Muff): tone Muff bukan sweep LPF tapi **tilt scoop-mid** — campuran LPF ~1 kHz + HPF ~1 kHz dengan notch dalam di jam 12. `VoiceState` sudah punya biquad state cadangan (bass/treble hanya dipakai MIAB/Transparent), jadi sisi HPF tilt bisa memakai state yang ada — tidak ada anggota baru, tidak ada alokasi baru.
+   - `toneReversed` (RAT): knob Filter RAT terbalik — CW = makin gelap. Satu bool, arah sweep dibalik saat membangun koefisien.
+
+**Spesifikasi per voicing:**
+
+| Voicing | Knob (nama asli) | Kunci karakter |
+|---|---|---|
+| **Centaur** | Gain, Treble, Output | Kurva `germanium`; blend bersih naik dengan Gain (mekanisme yang sudah ada); split rendah (~100 Hz) sehingga low tetap di jalur bersih; Treble shelf post. Low gain ≈ boost bersih berkilau; high gain tetap "transparan" karena blend. |
+| **RAT** | Distortion, Filter (terbalik), Volume | `driveMax` ~120 (terbesar di tabel); pre-emphasis high-shelf sebelum `hardClip`; Filter = LPF post arah terbalik. Di Distortion penuh menyerempet fuzz — memang begitu aslinya. |
+| **Big Muff** | Sustain, Tone, Volume | Dua tahap kaskade gain besar (`stages=2`); Tone = `midScoopTilt` (notch mid di jam 12); split sangat rendah/0 sehingga low end besar ikut terdistorsi — ciri fuzz. |
+
+**Catatan kejujuran soal Centaur:** tipe **Transparent yang ada memang sudah "Timmy/Klon-style"** — tumpang tindihnya nyata. Keputusannya: Transparent **tetap** (preset lama bergantung padanya; karakternya condong Timmy dengan Bass/Treble cut), Centaur ditambah sebagai tipe tersendiri dengan kurva germanium dan hanya 3 knob seperti aslinya. Dua entri yang mirip lebih jujur daripada mengubah bunyi tipe yang sudah dipakai preset.
+
+**Aliasing:** hard clip dan fuzz menghasilkan harmonik tinggi jauh lebih banyak dari soft clip — ketiganya paling rentan aliasing di antara semua voicing. Default oversampling 2x yang ada sudah menolong; sarankan 4x di deskripsi. Test performa yang ada ("tidak ada voicing boleh 3x lebih mahal dari yang lain") otomatis mencakup tipe baru karena loop-nya `type < numTypes`.
+
+**Test** (pola spektral/linearitas yang sama dengan P4-1, semua di bin analisis):
+- Centaur: gain rendah ≈ bersih (rasio harmonik-3 < batas); linearitas jalur bersih tetap ~3,0 saat input di-tripel-kan pada nada rendah; blend naik dengan gain.
+- RAT: rasio harmonik ganjil >> Tube Screamer pada drive setara (hard vs soft clip); Filter CW terukur menggelapkan; pre-emphasis terukur (harmonik nada mid > harmonik nada rendah relatif fundamental).
+- Big Muff: notch mid terukur di Tone jam 12 (magnitudo 1 kHz jauh di bawah 250 Hz dan 4 kHz); "sustain" = kompresi terukur (fundamental loud/quiet << 3,0 — kebalikan test split TS); DC nol (dua tahap + blocker).
+- Semua: test level-match, finite, oversampling, dan crossfade drive-nol yang ada otomatis memuat 3 tipe baru. E2E yang meng-assert `type.max == 8` diubah ke 11; `DRIVE_CONTROLS` + `ENUM_OPTIONS` di UI ditambah tiga entri.
+
+**Urutan pengerjaan:** Centaur dulu (hanya butuh kurva baru — terkecil), lalu RAT (pre-emphasis + toneReversed + hardClip), lalu Big Muff (toneMode tilt — mekanisme terakhir). **Effort:** ±1–1,5 hari total. Tidak bergantung apa pun; bisa dikerjakan kapan saja.
+
 ### P4-2. Spillover ekor Delay/Reverb (adaptasi paling bernilai dari Fractal)
 
 **Masalah:** mematikan Delay/Reverb (langsung, via scene, atau footswitch) memotong ekornya seketika — `processBlock` early-return saat disabled. Di Fractal, ekor dibiarkan berbunyi (spillover); justru fitur inilah yang membuat pindah scene terdengar mulus di tengah lagu.
@@ -591,6 +632,7 @@ Satu slot rekam/overdub/undo di akhir chain (post-master, seperti metronome). Ma
 | 30 | Dual IR + blend di cabinet | P4-3 | ~0.5–1 weekend | — |
 | 31 | Modifier (envelope/LFO → parameter) | P4-4 | ~1.5–2 weekend | desain dulu; setelah P4-1/P4-2 |
 | 32 | Looper sederhana | P4-5 | ~1–1.5 weekend | — |
+| 33 | Voicing Centaur + RAT + Big Muff | P4-1b | ~1–1.5 hari | — |
 
 Total estimasi kalau semua dikerjakan: kira-kira 27–35 weekend, dengan catatan NAM adalah yang paling tidak pasti dan bisa melar jauh dari estimasi tergantung hasil tahap riset.
 
