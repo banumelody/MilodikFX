@@ -88,6 +88,18 @@ npm run lint
 powershell -ExecutionPolicy Bypass -File .github\scripts\run-local-e2e.ps1 [-Build]
 ```
 
+## Dukung proyek ini ☕
+
+MilodikFX gratis dan sumber terbuka — dikerjakan satu orang di sela-sela waktu, tanpa iklan dan tanpa
+langganan. Kalau ia menghemat uangmu dari beli pedal atau plugin, atau sekadar bikin latihan dan rekaman
+lebih asyik, pertimbangkan **mentraktir satu kopi**. Dukungan sekecil apa pun bikin voicing berikutnya,
+perbaikan bug, dan rilis baru terus jalan.
+
+> ☕ **[Jadi sponsor / traktir kopi lewat GitHub Sponsors](https://github.com/sponsors/banumelody)**
+
+Nggak harus banyak — segelas kopi pun sudah bikin ngoding sampai larut terasa lebih ringan, dan jadi
+alasan buat merilis fitur berikutnya lebih cepat. Terima kasih sudah memakai MilodikFX! 🙌
+
 ## Lisensi
 
 MilodikFX berlisensi **GNU Affero General Public License v3.0** — lihat [LICENSE](LICENSE).
