@@ -1486,6 +1486,48 @@ input[type='text']:disabled {
   background: rgba(255, 201, 60, 0.2);
 }
 
+/* ------------------------------------------------------- Modifiers */
+.rack__modknob {
+  position: relative;
+  display: flex;
+}
+
+.rack__modtag {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--accent);
+  color: #0a0c11;
+  pointer-events: none;
+}
+
+.modform {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.modform__range {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.field--inline {
+  flex: 1 1 80px;
+  min-width: 80px;
+}
+
+.field--inline input {
+  width: 100%;
+}
+
 /* ------------------------------------------------------- Perform view */
 .topbar__view {
   display: inline-flex;

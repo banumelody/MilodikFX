@@ -457,6 +457,40 @@ export const importPreset = (name: string, data: string) =>
     body: JSON.stringify({ name, data }),
   });
 
+export type ModifierSource = 'lfoSine' | 'lfoTriangle' | 'lfoSquare' | 'envelope';
+
+export interface Modifier {
+  slot: number;
+  active: boolean;
+  effect: string;
+  parameter: string;
+  source: ModifierSource;
+  low: number;
+  high: number;
+  rateHz: number;
+}
+
+export interface ModifiersState {
+  modifiers: Modifier[];
+}
+
+export interface ModifierRequest {
+  effect: string;
+  parameter: string;
+  source: ModifierSource;
+  low: number;
+  high: number;
+  rateHz: number;
+}
+
+export const getModifiers = () => request<ModifiersState>('/modifiers');
+
+export const setModifier = (slot: number, body: ModifierRequest) =>
+  request<ModifiersState>(`/modifiers/${slot}`, { method: 'PUT', body: JSON.stringify(body) });
+
+export const clearModifier = (slot: number) =>
+  request<ModifiersState>(`/modifiers/${slot}`, { method: 'DELETE' });
+
 export interface HistoryState {
   canUndo: boolean;
   canRedo: boolean;

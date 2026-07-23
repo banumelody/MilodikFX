@@ -7,6 +7,7 @@ import { EffectRack, EFFECT_ACCENTS } from './components/EffectRack';
 import { Knob } from './components/Knob';
 import { LevelMeter, ReductionMeter } from './components/LevelMeter';
 import { MidiMapping } from './components/MidiMapping';
+import { ModulationPanel } from './components/ModulationPanel';
 import { NamPanel } from './components/NamPanel';
 import { PerformView } from './components/PerformView';
 import { PresetControls } from './components/PresetControls';
@@ -21,6 +22,7 @@ import {
   getDevices,
   getEffects,
   getHistory,
+  getModifiers,
   getPresets,
   getUpdate,
   importPreset,
@@ -132,9 +134,24 @@ export function App() {
   );
   const flushTimer = useRef<number | null>(null);
 
+  const [modulatedParams, setModulatedParams] = useState<Set<string>>(() => new Set());
+
   const refreshEffects = useCallback(async () => {
     const response = await getEffects();
     setEffects(response.effects);
+  }, []);
+
+  // Which parameters a modifier currently owns, as "<effect>.<parameter>" keys.
+  // The rack shows these knobs inert, since the modifier writes them each block.
+  const refreshModifiers = useCallback(async () => {
+    try {
+      const state = await getModifiers();
+      setModulatedParams(
+        new Set(state.modifiers.filter((m) => m.active).map((m) => `${m.effect}.${m.parameter}`)),
+      );
+    } catch {
+      /* the connection banner already reports an unreachable engine */
+    }
   }, []);
 
   const refreshDevices = useCallback(async () => {
@@ -158,7 +175,7 @@ export function App() {
 
     const bootstrap = async () => {
       try {
-        await Promise.all([refreshEffects(), refreshDevices(), refreshPresets()]);
+        await Promise.all([refreshEffects(), refreshDevices(), refreshPresets(), refreshModifiers()]);
         if (!cancelled) setConnection('online');
       } catch (error) {
         if (!cancelled) {
@@ -172,7 +189,12 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [refreshEffects, refreshDevices, refreshPresets]);
+  }, [refreshEffects, refreshDevices, refreshPresets, refreshModifiers]);
+
+  const handleModifiersChanged = useCallback(() => {
+    void refreshModifiers();
+    void refreshEffects();
+  }, [refreshModifiers, refreshEffects]);
 
   // The update check is deliberately separate from bootstrap: it reaches out to
   // GitHub, which may be slow or blocked, and its failure must never colour the
@@ -764,6 +786,7 @@ export function App() {
               onParameterChange={handleParameterChange}
               onEnabledChange={toggleEffect}
               onChannelSelect={handleChannelSelect}
+              modulatedParams={modulatedParams}
             />
           ))}
         </div>
@@ -806,6 +829,12 @@ export function App() {
           <MidiMapping effects={effects} disabled={offline} />
 
           <NamPanel disabled={offline} onLibraryChanged={refreshEffectsVoid} />
+
+          <ModulationPanel
+            effects={rackEffects}
+            disabled={offline}
+            onModifiersChanged={handleModifiersChanged}
+          />
 
           <section className="panel" aria-label="Impulse response">
             <header className="panel__head">

@@ -807,6 +807,32 @@ describe('MilodikFX UI against a live engine', () => {
     cy.request('POST', '/api/presets/delete', { name: 'ChannelRoundTrip' });
   });
 
+  it('sweeps a parameter with a modifier and restores it on clear', () => {
+    cy.request('POST', '/api/effects/overdrive/enabled', { enabled: true });
+
+    cy.request('PUT', '/api/modifiers/0', {
+      effect: 'overdrive',
+      parameter: 'drivePct',
+      source: 'lfoSine',
+      low: 0,
+      high: 100,
+      rateHz: 3,
+    });
+
+    cy.request('/api/modifiers').then(({ body }) => {
+      const mod = body.modifiers.find((m: { slot: number }) => m.slot === 0);
+      expect(mod.active, 'the modifier is active').to.be.true;
+      expect(mod.effect).to.eq('overdrive');
+      expect(mod.parameter).to.eq('drivePct');
+      expect(mod.source).to.eq('lfoSine');
+    });
+
+    cy.request('DELETE', '/api/modifiers/0');
+    cy.request('/api/modifiers').then(({ body }) => {
+      expect(body.modifiers.find((m: { slot: number }) => m.slot === 0).active).to.be.false;
+    });
+  });
+
   it('switches into the Perform view and back to Edit', () => {
     cy.reload();
 

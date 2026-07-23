@@ -295,6 +295,22 @@ describe('EffectRack drive voicings', () => {
     expect(screen.getByRole('slider', { name: 'Drive' })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Tipe' })).toBeInTheDocument();
   });
+
+  it('marks a modulated knob inert with a MOD tag', () => {
+    // A modifier writes the parameter every block, so its knob would fight the
+    // sweep -- it is shown disabled with a tag instead.
+    render(
+      <EffectRack
+        effect={overdrive}
+        onParameterChange={vi.fn()}
+        onEnabledChange={vi.fn()}
+        modulatedParams={new Set(['overdrive.drivePct'])}
+      />,
+    );
+
+    expect(screen.getByRole('slider', { name: 'Drive' })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByText('MOD')).toBeInTheDocument();
+  });
 });
 
 describe('EffectRack channels', () => {

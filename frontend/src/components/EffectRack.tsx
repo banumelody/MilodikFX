@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { Fragment, memo } from 'react';
 
 import { Knob } from './Knob';
 import { Toggle } from './Toggle';
@@ -150,6 +150,8 @@ export interface EffectRackProps {
   onEnabledChange: (effectId: string, enabled: boolean) => void;
   /** Selects a channel (A/B/C/D). Absent when the engine does not track them. */
   onChannelSelect?: (effectId: string, index: number) => void;
+  /** "<effect>.<parameter>" keys a modifier currently owns; those knobs go inert. */
+  modulatedParams?: Set<string>;
   disabled?: boolean;
   /** Only affects where the tone curve puts Nyquist; harmless when unknown. */
   sampleRate?: number;
@@ -169,6 +171,7 @@ function EffectRackBase({
   onParameterChange,
   onEnabledChange,
   onChannelSelect,
+  modulatedParams,
   disabled = false,
   sampleRate,
 }: EffectRackProps) {
@@ -357,9 +360,12 @@ function EffectRackBase({
               ),
             ) !== override.whenNot;
 
-          return (
+          // A modifier owns this parameter: it writes it every block, so the
+          // knob would fight the sweep. Show it inert with a MOD tag instead.
+          const modulated = modulatedParams?.has(`${effect.id}.${parameter.id}`) ?? false;
+
+          const knob = (
             <Knob
-              key={parameter.id}
               value={Number(parameter.value)}
               min={parameter.min}
               max={parameter.max}
@@ -368,10 +374,19 @@ function EffectRackBase({
               label={parameter.label}
               unit={parameter.unit}
               accent={accent}
-              disabled={inactive || overridden}
+              disabled={inactive || overridden || modulated}
               format={(value) => formatValue(parameter, value)}
               onChange={(value) => onParameterChange(effect.id, parameter.id, value)}
             />
+          );
+
+          return modulated ? (
+            <div key={parameter.id} className="rack__modknob" title="Dikendalikan modifier">
+              {knob}
+              <span className="rack__modtag">MOD</span>
+            </div>
+          ) : (
+            <Fragment key={parameter.id}>{knob}</Fragment>
           );
         })}
       </div>
