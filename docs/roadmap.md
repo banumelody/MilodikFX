@@ -49,7 +49,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 
 - P6-1 Channel A/B/C/D + P6-4 spillover antar-preset + P6-5 MIDI/scene→channel — **SELESAI (v0.17.0–v0.18.0)**. Channel per efek (`ChannelStore`), scene kini juga menyimpan+memanggil channel per efek, dan MIDI bisa memetakan CC ke scene/channel (footswitch panggil scene). Sisa FM9: P6-2 (modifier) dan P6-3 (perform view).
 
-**Belum:** P4-5 (looper — mandiri, selalu paling akhir). Seluruh adaptasi FM9 (P6-1..P6-5) dan audit optimasi (P5-2..P5-5) sudah terkirim.
+**Belum:** P4-5 (looper — mandiri, selalu paling akhir), P7-1..P7-6 (audit ketiga 23 Jul 2026 + kompatibilitas M-Vave Chocolate). Seluruh adaptasi FM9 (P6-1..P6-5) dan audit optimasi (P5-2..P5-5) sudah terkirim.
 
 **Kenapa empat itu belum, per 22 Jul 2026:**
 
@@ -850,6 +850,107 @@ settings tetap lewat message thread seperti sekarang. UI MIDI Learn mendapat dua
 
 ---
 
+## P7. Audit ketiga (23 Jul 2026) + kompatibilitas M-Vave Chocolate
+
+Audit pasca-gelombang FM9 (v0.16.0–v0.20.0). Yang sehat dicatat dulu supaya jujur: DSP tetap ~7,6%
+all-on, suite backend 1,82 jt assertion hijau, frontend 181 test, E2E 51 test, UI sudah di-memo, dan
+tidak ada temuan realtime baru — `ModulationEngine` menulis lewat closure `set` (bukan setter registry),
+jadi tidak ada spam undo/settings dari sapuan LFO. Temuan yang tersisa adalah soal **sinkronisasi UI,
+perangkat wireless, dan tepi-tepi modifier** — plus satu permintaan kompatibilitas.
+
+### P7-1. UI tidak ikut bergerak saat MIDI mengubah chain
+
+**Temuan:** perubahan yang datang dari MIDI — CC menggeser parameter, footswitch memanggil scene atau
+channel — **tidak pernah sampai ke layar**. UI hanya mem-poll `/api/history` (1,5 dt); daftar efek dan
+scene tidak di-refetch. `PerformView` mengambil scene sekali saat mount dan hanya me-refresh setelah
+recall-nya sendiri. Padahal justru kombinasi paling panggung — footswitch + Perform view di layar —
+membuat tombol scene raksasa **tidak menyala** saat scene dipanggil dari kaki.
+
+**Rencana:** versi keadaan yang murah: engine menaikkan satu counter atomic (`chainVersion`) pada setiap
+mutasi (registry `onChanged`, scene recall, channel recall, mapping berubah) dan menumpangkannya ke
+payload meter SSE yang sudah mengalir ~22 Hz. UI menyimpan versi terakhir; saat berubah, refetch
+`/api/effects` + `/api/scenes` (debounce ~200 ms). Tidak ada koneksi baru, tidak ada polling baru.
+**Effort:** ~0.5 weekend. **Prioritas tertinggi audit ini** — prasyarat nyata untuk footswitch apa pun,
+termasuk Chocolate.
+
+### P7-2. MIDI auto-reconnect
+
+**Temuan:** device MIDI dibuka **sekali saat startup** (`loadMidiSettings`); tidak ada rescan. Komentar
+di kode mengklaim mapping "starts working again when it comes back" — mapping-nya memang bertahan, tapi
+device-nya **tidak dibuka ulang** sampai user membuka panel MIDI dan memilihnya lagi. Untuk controller
+USB yang selalu tercolok ini jarang terasa; untuk **wireless yang auto-sleep** (Chocolate tidur sendiri
+untuk hemat baterai) ini berarti rig mati setiap kali pedal bangun.
+
+**Rencana:** rescan ringan di timer `MainComponent` (mis. tiap 3–5 dt, hanya ketika ada nama device
+tersimpan yang belum terbuka): kalau nama itu muncul di `listDevices()`, buka ulang otomatis dan log.
+`listDevices` murah dan timer sudah ada. **Effort:** 2–3 jam + test.
+
+### P7-3. Nilai sapuan modifier ikut tersimpan
+
+**Temuan (tepi yang jujur):** persistensi membaca nilai *live* — `saveSettings` menulis
+`dsp.<efek>.<param>` dari `parameter.get()`, `captureState` untuk preset juga, dan `commitActive`
+channel juga. Saat modifier aktif, yang tertulis adalah **nilai sapuan sesaat itu** (posisi LFO waktu
+save), bukan nilai dasar pra-modulasi yang disimpan `restoreValue`. Dampak kecil (modifier ikut
+di-restore dan menyapu lagi), tapi: preset yang di-save saat tremolo aktif menyimpan volume acak, dan
+menghapus modifier setelah restart memulihkan ke nilai acak itu.
+
+**Rencana:** `ModulationEngine` mendapat `getRestoreValue(effectId, parameterId)`; jalur capture
+(settings/preset/channel) menanyakan dulu — kalau parameter sedang dimodulasi, tulis nilai restore-nya,
+bukan nilai live. **Effort:** ~2–3 jam + test.
+
+### P7-4. Sisa halus Perform & modifier (dikumpulkan)
+
+Follow-up yang sudah dicatat di P6 dan tetap berlaku: huruf channel di tombol scene Perform, 8 knob
+pin per preset, model base+offset modifier, sumber pedal ekspresi (butuh nilai per-CC dari
+`MidiController`), LFO sync tempo. Tidak mendesak; dikerjakan saat terasa kurang.
+
+### P7-5. Kebersihan dependensi frontend
+
+`npm audit`: 12 vulnerability (5 moderate, 5 high, 2 critical) — semuanya di tooling dev (Vite 4 dan
+turunannya), bukan runtime; UI dilayani engine sendiri di loopback, bukan dari internet. Tetap layak
+dibersihkan: upgrade Vite 4 → 6 + ikutannya. **Effort:** ~0.5 weekend (paling lama menyesuaikan config
+dan memverifikasi emit filename stabil `assets/index.js` yang ditanam exe).
+
+### P7-6. Kompatibilitas M-Vave Chocolate / Chocolate Plus
+
+**Fakta perangkat** (dari spesifikasi resmi/manual): keduanya footswitch MIDI 4 tombol yang
+dikonfigurasi lewat app CubeSuite (CC/PC per tombol, bank, short/long press). **Chocolate**: BLE MIDI
+(wireless). **Chocolate Plus**: BLE MIDI + **USB MIDI** + TRS MIDI 3,5 mm, layar kecil, baterai 300 mAh.
+
+**Kabar baik yang perlu ditulis dulu: lewat USB, Chocolate Plus sudah kompatibel hari ini.** Ia muncul
+sebagai MIDI input biasa di Windows → panel MIDI MilodikFX melihatnya → MIDI Learn → injak switch →
+terpasang ke scene/channel/parameter (P6-5). PC → preset juga sudah jalan. Tidak ada kode baru yang
+dibutuhkan untuk jalur ini.
+
+**Gap nyata: BLE MIDI di Windows** — dan ini jalur utama Chocolate original. Backend MIDI default JUCE
+di Windows (MME/WinMM) **tidak melihat device BLE MIDI** sama sekali; dipair pun tidak muncul di
+`listDevices()`. Rencana bertingkat:
+
+1. **`JUCE_USE_WINRT_MIDI=1`** — JUCE 8.0.14 (yang kita pakai) punya backend WinRT MIDI yang bisa
+   melihat device BLE yang sudah dipair di Settings Windows. Statusnya masih berlabel eksperimental di
+   JUCE, jadi: jadikan **opsi build** (`MILODIKFX_WINRT_MIDI`, default ON di build rilis) + fallback
+   otomatis ke MME kalau inisialisasi WinRT gagal. Diuji dengan hardware nyata sebelum diklaim.
+2. **P7-2 auto-reconnect wajib menyertainya** — BLE putus-nyambung (jarak, auto-sleep); tanpa
+   reconnect, dukungan BLE cuma enak di menit pertama.
+3. **Dokumentasi fallback** — untuk Windows yang WinRT-nya bermasalah: loopMIDI + MIDIberry
+   (workaround komunitas yang terbukti), ditulis di README.
+
+**Quick-setup di panel MIDI:** wizard "Pasang M-Vave / footswitch 4 tombol" — bukan tabel CC hardcoded
+(CC default pabrik bervariasi antar firmware dan bisa diubah user lewat CubeSuite), melainkan **learn
+berurutan**: "injak switch 1… 2… 3… 4…" → keempatnya terpasang ke scene 1–4 mode toggle dalam satu
+alur. Lebih tahan banting daripada menebak CC, dan berguna untuk footswitch 4-tombol merk apa pun.
+
+**Batas kejujuran:** saya tidak memegang unitnya. Dispatch dan wizard bisa diuji lewat
+`handleIncomingMidiMessage` (pola test MIDI yang ada), tapi verifikasi BLE end-to-end (pairing WinRT,
+sleep/wake, jarak) butuh hardware di tangan user — item ini selesai *setelah* diuji di unit nyata.
+
+**Effort:** WinRT flag + fallback ~0.5 weekend; wizard learn-4 ~0.5 weekend; (P7-2 dihitung terpisah).
+
+**Urutan disarankan:** P7-1 (sinkronisasi UI — fondasi footswitch) → P7-2 (reconnect) → P7-6 (WinRT +
+wizard) → P7-3 (nilai modifier) → P7-5 (Vite) → P7-4 (halus-halus).
+
+---
+
 ## Ringkasan Urutan
 
 | # | Item | Tier | Effort | Ketergantungan |
@@ -897,6 +998,12 @@ settings tetap lewat message thread seperti sekarang. UI MIDI Learn mendapat dua
 | 41 | Perform view (menyerap P2-5) ✅ (inti) | P6-3 | ~1–1.5 weekend | inti selesai (v0.19.0); pinned knobs menyusul |
 | 42 | Spillover antar preset (verifikasi) ✅ | P6-4 | ~2–4 jam | selesai |
 | 43 | MIDI → scene & channel ✅ | P6-5 | ~0.5 weekend | selesai (v0.18.0) |
+| 44 | Sinkronisasi UI saat MIDI mengubah chain | P7-1 | ~0.5 weekend | — |
+| 45 | MIDI auto-reconnect | P7-2 | ~2–3 jam | — |
+| 46 | Nilai modifier: simpan base, bukan sapuan | P7-3 | ~2–3 jam | — |
+| 47 | Perform/modifier halus (pin, channel di scene, dst.) | P7-4 | bervariasi | — |
+| 48 | Upgrade Vite + dependensi frontend | P7-5 | ~0.5 weekend | — |
+| 49 | M-Vave Chocolate: WinRT BLE MIDI + wizard learn-4 | P7-6 | ~1 weekend | setelah P7-1, P7-2; butuh hardware untuk verifikasi |
 
 Total estimasi kalau semua dikerjakan: kira-kira 27–35 weekend, dengan catatan NAM adalah yang paling tidak pasti dan bisa melar jauh dari estimasi tergantung hasil tahap riset.
 
