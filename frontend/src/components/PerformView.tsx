@@ -1,7 +1,14 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { recordLabel, useLooper } from '../hooks/useLooper';
 import { getScenes, recallScene, setTunerEnabled, subscribeTuner } from '../services/api';
-import type { Levels, ParameterDescriptor, ScenesState, TunerReading } from '../services/api';
+import type {
+  EffectDescriptor,
+  Levels,
+  ParameterDescriptor,
+  ScenesState,
+  TunerReading,
+} from '../services/api';
 
 /** Taps further apart than this start a new measurement. */
 const TAP_TIMEOUT_MS = 2000;
@@ -22,6 +29,8 @@ const IDLE_TUNER: TunerReading = {
 
 export interface PerformViewProps {
   levels: Levels;
+  /** For the channel-letter badges on the scene buttons. */
+  effects: EffectDescriptor[];
   presets: string[];
   selectedPreset: string;
   onLoadPreset: (name: string) => void;
@@ -68,6 +77,7 @@ function BigMeter({ label, db }: { label: string; db: number }) {
  */
 function PerformViewBase({
   levels,
+  effects,
   presets,
   selectedPreset,
   onLoadPreset,
@@ -84,6 +94,36 @@ function PerformViewBase({
   const [scenes, setScenes] = useState<ScenesState | null>(null);
   const [tunerOn, setTunerOn] = useState(false);
   const [reading, setReading] = useState<TunerReading>(IDLE_TUNER);
+
+  const { info: looper, act: looperAct } = useLooper(!offline);
+
+  // Short labels and channel counts, so a scene button can badge which channel
+  // each multi-channel effect lands on -- "OD·B", "DL·A".
+  const effectMeta = useMemo(() => {
+    const map = new Map<string, { short: string; count: number }>();
+    for (const effect of effects)
+      map.set(effect.id, {
+        short: effect.label.slice(0, 2),
+        count: Array.isArray(effect.channels) ? effect.channels.length : 0,
+      });
+    return map;
+  }, [effects]);
+
+  // Only the channels worth calling out: an effect on channel B/C/D, not the
+  // default A every block sits on until you move it.
+  const badgesFor = useCallback(
+    (scene: ScenesState['scenes'][number]) => {
+      const channels = scene.channels ?? {};
+      const badges: { key: string; short: string; letter: string }[] = [];
+      for (const [effectId, index] of Object.entries(channels)) {
+        const meta = effectMeta.get(effectId);
+        if (!meta || meta.count <= 1 || index <= 0) continue;
+        badges.push({ key: effectId, short: meta.short, letter: String.fromCharCode(65 + index) });
+      }
+      return badges;
+    },
+    [effectMeta],
+  );
 
   const taps = useRef<number[]>([]);
   const inFlight = useRef(false);
@@ -193,12 +233,15 @@ function PerformViewBase({
       } else if (event.key === 't' || event.key === 'T') {
         event.preventDefault();
         tap();
+      } else if (event.key === 'r' || event.key === 'R') {
+        event.preventDefault();
+        if (!offline) looperAct('record');
       }
     };
 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [recall, changePreset, tap]);
+  }, [recall, changePreset, tap, looperAct, offline]);
 
   const tempo = Math.round(Number(bpm?.value ?? 120));
   const detected = tunerOn && reading.detected;
@@ -273,10 +316,51 @@ function PerformViewBase({
             >
               <span className="perform__scene-num">{scene.index + 1}</span>
               <span className="perform__scene-name">{scene.name}</span>
+              {badgesFor(scene).length > 0 ? (
+                <span className="perform__scene-channels">
+                  {badgesFor(scene).map((badge) => (
+                    <span key={badge.key} className="perform__chan-badge">
+                      {badge.short}
+                      <b>{badge.letter}</b>
+                    </span>
+                  ))}
+                </span>
+              ) : null}
             </button>
           ))}
         </div>
       )}
+
+      <div className="perform__looper" role="group" aria-label="Looper">
+        <button
+          type="button"
+          className={`perform__loop-btn${looper && (looper.state === 'recording' || looper.state === 'overdubbing') ? ' perform__loop-btn--rec' : ''}`}
+          disabled={offline}
+          onClick={() => looperAct('record')}
+        >
+          <span className="perform__loop-dot" aria-hidden="true" />
+          {recordLabel(looper?.state)}
+        </button>
+        <button
+          type="button"
+          className="perform__loop-btn perform__loop-btn--ghost"
+          disabled={offline || looper?.state === 'empty'}
+          onClick={() => looperAct('stop')}
+        >
+          Stop
+        </button>
+        <button
+          type="button"
+          className="perform__loop-btn perform__loop-btn--ghost"
+          disabled={offline || !looper?.hasLoop}
+          onClick={() => looperAct('clear')}
+        >
+          Hapus
+        </button>
+        <div className="perform__loop-bar" aria-hidden="true">
+          <span style={{ width: `${Math.min(100, Math.max(0, (looper?.position ?? 0) * 100))}%` }} />
+        </div>
+      </div>
 
       <div className="perform__bottom">
         <div className="perform__meters">
@@ -317,7 +401,7 @@ function PerformViewBase({
 
       <p className="perform__hint">
         Angka <kbd>1</kbd>–<kbd>4</kbd> pindah scene · <kbd>←</kbd> <kbd>→</kbd> ganti preset ·{' '}
-        <kbd>T</kbd> tap tempo · <kbd>Esc</kbd> bisu · <kbd>B</kbd> bypass
+        <kbd>T</kbd> tap tempo · <kbd>R</kbd> looper · <kbd>Esc</kbd> bisu · <kbd>B</kbd> bypass
       </p>
     </div>
   );

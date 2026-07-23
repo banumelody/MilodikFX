@@ -133,6 +133,15 @@ describe('MidiMapping', () => {
     expect(screen.getByRole('option', { name: 'Overdrive — Drive' })).toBeInTheDocument();
   });
 
+  it('offers looper actions as footswitch targets', async () => {
+    // A looper is a footswitch device; binding record/stop to a pedal is the
+    // whole point, so those actions have to be assignable here.
+    await renderPanel();
+
+    expect(screen.getByRole('option', { name: 'Looper — Rekam / Overdub' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Looper — Stop' })).toBeInTheDocument();
+  });
+
   it('leaves out a stage that is always in the path', async () => {
     await renderPanel();
 

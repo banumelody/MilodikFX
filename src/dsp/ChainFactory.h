@@ -10,6 +10,7 @@
 #include "dsp/EQProcessor.h"
 #include "dsp/GainProcessor.h"
 #include "dsp/InputTrimProcessor.h"
+#include "dsp/LooperProcessor.h"
 #include "dsp/MasterOutProcessor.h"
 #include "dsp/MetronomeProcessor.h"
 #include "dsp/NamProcessor.h"
@@ -45,6 +46,9 @@ struct GuitarChain
 
     /** Sits after the master stage, outside the bypass path. */
     MetronomeProcessor* metronome = nullptr;
+
+    /** Also after the master stage: the loop plays on across a global bypass. */
+    LooperProcessor* looper = nullptr;
 };
 
 /**

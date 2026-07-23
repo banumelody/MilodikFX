@@ -8,7 +8,11 @@ const SOURCES: { value: ModifierSource; label: string }[] = [
   { value: 'lfoTriangle', label: 'LFO Segitiga' },
   { value: 'lfoSquare', label: 'LFO Kotak' },
   { value: 'envelope', label: 'Envelope (dinamika)' },
+  { value: 'expression', label: 'Pedal ekspresi' },
 ];
+
+/** Note divisions an LFO can lock to the tempo. Index matches the engine's enum. */
+const SYNC_DIVISIONS = ['Bebas', '1/1', '1/2', '1/4', '1/8', '1/8.', '1/8T', '1/16'];
 
 interface Target {
   key: string;
@@ -68,6 +72,8 @@ function ModulationPanelBase({ effects, disabled = false, onModifiersChanged }: 
   const [low, setLow] = useState(0);
   const [high, setHigh] = useState(100);
   const [rate, setRate] = useState(2);
+  const [syncDivision, setSyncDivision] = useState(0);
+  const [expressionCc, setExpressionCc] = useState(11);
 
   const inFlight = useRef(false);
   const changedRef = useRef(onModifiersChanged);
@@ -109,6 +115,10 @@ function ModulationPanelBase({ effects, disabled = false, onModifiersChanged }: 
   const freeSlot = modifiers.find((m) => !m.active)?.slot ?? -1;
   const busy = disabled || state == null;
 
+  const isLfo = source !== 'envelope' && source !== 'expression';
+  const isExpression = source === 'expression';
+  const selected = byKey.get(targetKey);
+
   const add = useCallback(() => {
     const target = byKey.get(targetKey);
     if (!target || freeSlot < 0) return;
@@ -122,13 +132,12 @@ function ModulationPanelBase({ effects, disabled = false, onModifiersChanged }: 
           low,
           high,
           rateHz: rate,
+          syncDivision: isLfo ? syncDivision : 0,
+          expressionCc: source === 'expression' ? expressionCc : -1,
         }),
       true,
     );
-  }, [byKey, targetKey, freeSlot, source, low, high, rate, run]);
-
-  const isLfo = source !== 'envelope';
-  const selected = byKey.get(targetKey);
+  }, [byKey, targetKey, freeSlot, source, low, high, rate, syncDivision, expressionCc, isLfo, run]);
 
   return (
     <section className="panel" aria-label="Modifier">
@@ -138,8 +147,9 @@ function ModulationPanelBase({ effects, disabled = false, onModifiersChanged }: 
       </header>
 
       <p className="panel__hint">
-        LFO atau envelope menyapu satu parameter antara dua nilai — tremolo, auto-wah. Knob yang
-        dimodulasi jadi nonaktif; hapus modifier untuk mengembalikannya.
+        LFO, envelope, atau pedal ekspresi menyapu satu parameter antara dua nilai — tremolo,
+        auto-wah, wah. LFO bisa dikunci ke tempo. Knob yang dimodulasi tetap aktif: ia menyetel titik
+        tengah sapuan (tag <b>MOD</b>); hapus modifier untuk melepaskannya.
       </p>
 
       {active.length > 0 ? (
@@ -227,6 +237,23 @@ function ModulationPanelBase({ effects, disabled = false, onModifiersChanged }: 
             </label>
             {isLfo ? (
               <label className="field field--inline">
+                <span className="field__label">Sync</span>
+                <select
+                  aria-label="Sync"
+                  value={syncDivision}
+                  disabled={busy}
+                  onChange={(event) => setSyncDivision(Number(event.target.value))}
+                >
+                  {SYNC_DIVISIONS.map((label, index) => (
+                    <option key={label} value={index}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {isLfo && syncDivision === 0 ? (
+              <label className="field field--inline">
                 <span className="field__label">Rate (Hz)</span>
                 <input
                   type="number"
@@ -237,6 +264,21 @@ function ModulationPanelBase({ effects, disabled = false, onModifiersChanged }: 
                   step={0.1}
                   disabled={busy}
                   onChange={(event) => setRate(Number(event.target.value))}
+                />
+              </label>
+            ) : null}
+            {isExpression ? (
+              <label className="field field--inline">
+                <span className="field__label">CC pedal</span>
+                <input
+                  type="number"
+                  aria-label="CC pedal"
+                  value={expressionCc}
+                  min={0}
+                  max={127}
+                  step={1}
+                  disabled={busy}
+                  onChange={(event) => setExpressionCc(Number(event.target.value))}
                 />
               </label>
             ) : null}

@@ -58,6 +58,17 @@ bool ParameterRegistry::setParameter (const std::string& effectId,
         return false;
 
     const auto clamped = juce::jlimit (parameter->minValue, parameter->maxValue, value);
+
+    // A modifier owns this parameter: redirect the turn to its centre rather than
+    // writing an atomic the audio thread overwrites every block. The knob stays
+    // live, and what it sets is the value the sweep rides on.
+    if (modulatedWriteHook && modulatedWriteHook (effectId, parameterId, clamped))
+    {
+        outApplied = clamped;
+        notifyChanged();
+        return true;
+    }
+
     parameter->set (clamped);
 
     // Read back rather than trusting the clamp: the processor may narrow it further.
@@ -143,7 +154,16 @@ juce::var ParameterRegistry::effectToVar (const EffectDescriptor& effect) const
         else
         {
             p->setProperty ("type", parameter.isBoolean ? "bool" : "float");
-            p->setProperty ("value", parameter.get ? parameter.get() : parameter.defaultValue);
+
+            // While a modifier owns this parameter, get() is a swept sample; show
+            // the centre the knob sets instead, so it does not jitter on refresh.
+            float base = 0.0f;
+            const auto value = (! parameter.isBoolean && baseValueProvider
+                                && baseValueProvider (effect.id, parameter.id, base))
+                                   ? base
+                                   : (parameter.get ? parameter.get() : parameter.defaultValue);
+
+            p->setProperty ("value", value);
         }
 
         parameters.add (juce::var (p));

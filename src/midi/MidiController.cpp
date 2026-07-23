@@ -233,6 +233,11 @@ void MidiController::handleIncomingMidiMessage (juce::MidiInput*, const juce::Mi
     lastCc.store (cc, std::memory_order_relaxed);
     lastCcValue.store (value, std::memory_order_relaxed);
 
+    // Keep every controller's latest value so an expression pedal on this CC can
+    // drive a modifier from the audio thread without any lookup back through here.
+    if (cc >= 0 && cc < kNumControllers)
+        controllerValues[(size_t) cc].store (value, std::memory_order_relaxed);
+
     Mapping target;
     auto learned = false;
 
@@ -294,6 +299,17 @@ void MidiController::applyControlChange (int ccNumber, int value)
         if (value >= kSwitchThreshold && onChannelSelect)
             postToMessageThread ([callback = onChannelSelect, effectId = target.effectId, index = target.index]
                                  { callback (effectId, index); });
+
+        return;
+    }
+
+    if (target.kind == MappingKind::looper)
+    {
+        // Looper actions touch the audio-thread processor only through an atomic
+        // request, so this could run inline; posted anyway to stay uniform with
+        // the other press-triggered kinds and to keep dispatch off the MIDI thread.
+        if (value >= kSwitchThreshold && onLooperAction)
+            postToMessageThread ([callback = onLooperAction, action = target.index] { callback (action); });
 
         return;
     }

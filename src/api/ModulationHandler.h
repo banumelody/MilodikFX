@@ -11,13 +11,16 @@
 /**
  * /api/modifiers
  *
- *   GET    /api/modifiers          every slot: {slot, active, effect, parameter, source, low, high, rateHz}
- *   PUT    /api/modifiers/<slot>   { effect, parameter, source, low, high, rateHz }
+ *   GET    /api/modifiers          every slot, including source/low/high/rateHz,
+ *                                   expressionCc, syncDivision, baseOffset, base
+ *   PUT    /api/modifiers/<slot>   { effect, parameter, source, low, high, rateHz,
+ *                                    expressionCc?, syncDivision? }
  *   DELETE /api/modifiers/<slot>
  *
- * A modifier sweeps one numeric parameter between `low` and `high` with an LFO
- * or the envelope of the input. Source is a string: lfoSine | lfoTriangle |
- * lfoSquare | envelope.
+ * A modifier sweeps one numeric parameter with an LFO, the envelope of the input,
+ * or an expression pedal. Source is a string: lfoSine | lfoTriangle | lfoSquare |
+ * envelope | expression. `syncDivision` locks an LFO to the tempo (0 = free);
+ * `expressionCc` is the CC an expression source follows.
  */
 class ModulationHandler final : public HttpHandler
 {
@@ -66,20 +69,30 @@ public:
         if (target == nullptr)
             return jsonError (404, "Unknown effect or parameter");
 
-        double low = 0.0, high = 0.0, rate = 1.0;
+        double low = 0.0, high = 0.0, rate = 1.0, expressionCc = -1.0, syncDivision = 0.0;
         readNumber (parsed, "low", low);
         readNumber (parsed, "high", high);
 
         if (! readNumber (parsed, "rateHz", rate))
             rate = 1.0;
 
-        const auto source = parseSource (parsed["source"].toString());
+        readNumber (parsed, "expressionCc", expressionCc);
+        readNumber (parsed, "syncDivision", syncDivision);
+
+        milodikfx::dsp::ModulationEngine::Config config;
+        config.source = parseSource (parsed["source"].toString());
+        config.low = (float) low;
+        config.high = (float) high;
+        config.rateHz = (float) rate;
+        config.expressionCc = (int) expressionCc;
+        config.syncDivision = (int) syncDivision;
+        // baseOffset defaults to 0: a fresh modifier sweeps exactly low..high, and
+        // the knob shifts it from there.
 
         if (! engine_.setModifier (slot, target,
                                    // Store under the registry's own casing so the
                                    // reported binding matches the effect list.
-                                   registry_.findEffect (effectId)->id, target->id,
-                                   source, (float) low, (float) high, (float) rate))
+                                   registry_.findEffect (effectId)->id, target->id, config))
             return jsonError (400, "That parameter cannot be modulated (a switch or a file is not sweepable)");
 
         if (onChanged)
@@ -114,6 +127,7 @@ private:
             case milodikfx::dsp::ModulationEngine::Source::lfoTriangle: return "lfoTriangle";
             case milodikfx::dsp::ModulationEngine::Source::lfoSquare:   return "lfoSquare";
             case milodikfx::dsp::ModulationEngine::Source::envelope:    return "envelope";
+            case milodikfx::dsp::ModulationEngine::Source::expression:  return "expression";
             default:                                                    return "lfoSine";
         }
     }
@@ -127,6 +141,7 @@ private:
         if (v == "lfotriangle") return Source::lfoTriangle;
         if (v == "lfosquare")   return Source::lfoSquare;
         if (v == "envelope")    return Source::envelope;
+        if (v == "expression")  return Source::expression;
 
         return Source::lfoSine;
     }
@@ -165,6 +180,10 @@ private:
             object->setProperty ("low", info.low);
             object->setProperty ("high", info.high);
             object->setProperty ("rateHz", info.rateHz);
+            object->setProperty ("expressionCc", info.expressionCc);
+            object->setProperty ("syncDivision", info.syncDivision);
+            object->setProperty ("baseOffset", info.baseOffset);
+            object->setProperty ("base", info.base);
 
             modifiers.add (juce::var (object));
         }

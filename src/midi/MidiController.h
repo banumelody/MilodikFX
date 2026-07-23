@@ -32,7 +32,10 @@ enum class MappingKind
     scene = 1,
 
     /** A channel (A/B/C/D) of one effect, selected on press. */
-    channel = 2
+    channel = 2,
+
+    /** A looper action (record/stop/clear), fired on press. */
+    looper = 3
 };
 
 struct Mapping
@@ -41,7 +44,7 @@ struct Mapping
 
     juce::String effectId;    // parameter and channel
     juce::String parameterId; // parameter only
-    int index = -1;           // scene slot, or channel index
+    int index = -1;           // scene slot, channel index, or looper action
 
     MappingMode mode = MappingMode::continuous;
 
@@ -52,6 +55,7 @@ struct Mapping
             case MappingKind::parameter: return effectId.isNotEmpty() && parameterId.isNotEmpty();
             case MappingKind::scene:     return index >= 0;
             case MappingKind::channel:   return effectId.isNotEmpty() && index >= 0;
+            case MappingKind::looper:    return index >= 0;
         }
 
         return false;
@@ -110,6 +114,19 @@ public:
     int getLastControllerNumber() const noexcept { return lastCc.load (std::memory_order_relaxed); }
     int getLastControllerValue() const noexcept { return lastCcValue.load (std::memory_order_relaxed); }
 
+    /**
+     * The last value seen on one controller, as 0..1. This is what an expression
+     * pedal drives a modifier with -- read on the audio thread, written on the
+     * MIDI thread, so it is a plain relaxed atomic. Unknown or unseen CCs read 0.
+     */
+    float getControllerValue01 (int cc) const noexcept
+    {
+        if (cc < 0 || cc >= kNumControllers)
+            return 0.0f;
+
+        return (float) controllerValues[(size_t) cc].load (std::memory_order_relaxed) / 127.0f;
+    }
+
     /** Fired on the message thread when a program change selects a preset. */
     std::function<void (int programNumber)> onProgramChange;
 
@@ -118,6 +135,9 @@ public:
 
     /** Fired on the message thread when a mapped footswitch selects a channel. */
     std::function<void (juce::String effectId, int channelIndex)> onChannelSelect;
+
+    /** Fired when a mapped footswitch triggers a looper action (0=rec,1=stop,2=clear). */
+    std::function<void (int action)> onLooperAction;
 
     /** Fired on the message thread after a mapped parameter has been written. */
     std::function<void()> onParameterChanged;
@@ -159,6 +179,10 @@ private:
 
     std::atomic<int> lastCc { -1 };
     std::atomic<int> lastCcValue { 0 };
+
+    // Every controller's last value, so an expression pedal on any CC can drive a
+    // modifier. Written on the MIDI thread, read on the audio thread.
+    std::array<std::atomic<int>, kNumControllers> controllerValues {};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MidiController)
 };

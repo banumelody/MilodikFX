@@ -1912,6 +1912,186 @@ input[type='text']:disabled {
   color: var(--text-dim);
 }
 
+/* A modulated knob stays live under base + offset; the MOD tag is a hint, not a
+   lock, so it reads a touch softer than the old inert one. */
+.rack__modknob--live .rack__modtag {
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+}
+
+/* ------------------------------------------------------- Looper */
+.looper__state {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+}
+
+.looper__state--recording,
+.looper__state--overdubbing {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.looper__state--playing {
+  border-color: var(--good);
+  color: var(--good);
+}
+
+.looper__progress {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  margin: 10px 0 8px;
+}
+
+.looper__bar {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.1s linear;
+}
+
+.looper__bar--rec {
+  background: var(--bad);
+}
+
+.looper__meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.looper__controls {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+  align-items: center;
+}
+
+.looper__rec.looper__rec--on {
+  background: var(--bad);
+  border-color: var(--bad);
+  color: #150a0d;
+}
+
+.looper__level {
+  display: flex;
+  justify-content: center;
+}
+
+/* Looper strip on the Perform screen. */
+.perform__looper {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.perform__loop-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg-raised);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+
+.perform__loop-btn--ghost {
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+.perform__loop-btn:hover:not(:disabled) {
+  border-color: #34405a;
+}
+
+.perform__loop-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.perform__loop-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.perform__loop-btn--rec {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.perform__loop-btn--rec .perform__loop-dot {
+  background: var(--bad);
+  box-shadow: 0 0 10px var(--bad);
+  animation: looper-blink 1s steps(2, start) infinite;
+}
+
+@keyframes looper-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.perform__loop-bar {
+  flex: 1;
+  min-width: 60px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.perform__loop-bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.1s linear;
+}
+
+/* Channel-letter badges on the Perform scene buttons. */
+.perform__scene-channels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.perform__chan-badge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+  padding: 1px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--bg-sunken);
+}
+
+.perform__chan-badge b {
+  color: var(--accent);
+  margin-left: 2px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition-duration: 0.01ms !important;

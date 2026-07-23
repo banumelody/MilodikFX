@@ -9,6 +9,27 @@ vi.mock('../../services/api', () => ({
   recallScene: vi.fn(),
   setTunerEnabled: vi.fn(() => Promise.resolve({})),
   subscribeTuner: vi.fn(() => () => {}),
+  getLooper: vi.fn(() =>
+    Promise.resolve({
+      state: 'empty',
+      hasLoop: false,
+      loopSeconds: 0,
+      position: 0,
+      level: 100,
+      maxSeconds: 60,
+    }),
+  ),
+  looperAction: vi.fn(() =>
+    Promise.resolve({
+      state: 'recording',
+      hasLoop: false,
+      loopSeconds: 0,
+      position: 0,
+      level: 100,
+      maxSeconds: 60,
+    }),
+  ),
+  setLooperLevel: vi.fn(),
 }));
 
 import { getScenes, recallScene, setTunerEnabled } from '../../services/api';
@@ -52,6 +73,7 @@ const bpm: ParameterDescriptor = {
 function renderPerform(overrides: Partial<Parameters<typeof PerformView>[0]> = {}) {
   const props = {
     levels,
+    effects: [],
     presets: ['Rock', 'Jazz', 'Metal'],
     selectedPreset: 'Jazz',
     onLoadPreset: vi.fn(),
@@ -131,6 +153,40 @@ describe('PerformView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Mute' }));
     expect(props.onToggleMute).toHaveBeenCalled();
+  });
+
+  it('badges a scene button with the channel letter of a multi-channel effect', async () => {
+    vi.mocked(getScenes).mockResolvedValue({
+      active: 0,
+      scenes: [
+        { index: 0, name: 'Clean', enabled: { overdrive: true }, channels: { overdrive: 1 }, populated: true },
+        { index: 1, name: 'Crunch', enabled: {}, populated: true },
+        { index: 2, name: 'Lead', enabled: {}, populated: true },
+        { index: 3, name: 'Solo', enabled: {}, populated: true },
+      ],
+    });
+
+    renderPerform({
+      effects: [
+        {
+          id: 'overdrive',
+          label: 'Overdrive',
+          description: '',
+          enabled: true,
+          toggleable: true,
+          parameters: [],
+          channels: ['A', 'B', 'C', 'D'],
+        },
+      ],
+    });
+
+    await screen.findByText('Clean');
+
+    // Effect abbreviation "Ov" plus the channel letter "B" (index 1).
+    await waitFor(() => {
+      const badge = document.querySelector('.perform__chan-badge');
+      expect(badge?.textContent).toBe('OvB');
+    });
   });
 
   it('switches the tuner on, replacing the scene grid', async () => {

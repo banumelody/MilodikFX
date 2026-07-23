@@ -161,6 +161,11 @@ GuitarChain buildGuitarChain (DSPChainManager& chain)
     result.metronome = dynamic_cast<MetronomeProcessor*> (
         chain.addPostProcessor (std::make_unique<MetronomeProcessor>()));
 
+    // The looper is post-master too, so the loop keeps playing through a bypass
+    // and is not distorted by the amp and cabinet it would run through in-chain.
+    result.looper = dynamic_cast<LooperProcessor*> (
+        chain.addPostProcessor (std::make_unique<LooperProcessor>()));
+
     return result;
 }
 

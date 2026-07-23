@@ -75,6 +75,7 @@ private:
     static constexpr const char* kKeyMidiDevice = "midi.device";
     static constexpr const char* kKeyScenes = "ui.scenes";
     static constexpr const char* kKeyChannels = "ui.channels";
+    static constexpr const char* kKeyLooperLevel = "looper.level";
 
     void buildChain();
     void buildRegistry();
@@ -181,6 +182,7 @@ private:
     milodikfx::dsp::DelayProcessor* delayProcessor = nullptr;
     milodikfx::dsp::ReverbProcessor* reverbProcessor = nullptr;
     milodikfx::dsp::MasterOutProcessor* masterOutProcessor = nullptr;
+    milodikfx::dsp::LooperProcessor* looperProcessor = nullptr;
 
     // Analyses the post-input signal without being part of the chain, so it
     // reads what the pickup sends rather than what the overdrive makes of it.

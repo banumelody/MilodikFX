@@ -19,6 +19,14 @@ const LEARN_POLL_MS = 250;
 /** Scene slots this build has; matches SceneManager::kNumScenes. */
 const NUM_SCENES = 4;
 
+/** Looper footswitch actions; index matches the engine's onLooperAction. */
+const LOOPER_ACTIONS = [
+  { index: 0, label: 'Rekam / Overdub' },
+  { index: 1, label: 'Stop' },
+  { index: 2, label: 'Hapus' },
+  { index: 3, label: 'Main' },
+];
+
 interface MidiMappingProps {
   effects: EffectDescriptor[];
   disabled?: boolean;
@@ -38,6 +46,7 @@ function keyForMapping(mapping: {
   index?: number;
 }): string {
   if (mapping.kind === 'scene') return `scene.${mapping.index}`;
+  if (mapping.kind === 'looper') return `looper.${mapping.index}`;
   if (mapping.kind === 'channel') return `channel.${mapping.effect}.${mapping.index}`;
   return `param.${mapping.effect}.${mapping.parameter}`;
 }
@@ -58,6 +67,14 @@ function collectAssignable(effects: EffectDescriptor[]): Assignable[] {
       key: `scene.${i}`,
       label: `Scene ${i + 1}`,
       target: { kind: 'scene', index: i, mode: 'toggle' },
+    });
+  }
+
+  for (const action of LOOPER_ACTIONS) {
+    result.push({
+      key: `looper.${action.index}`,
+      label: `Looper — ${action.label}`,
+      target: { kind: 'looper', index: action.index, mode: 'toggle' },
     });
   }
 
@@ -150,6 +167,8 @@ function MidiMappingBase({ effects, disabled = false }: MidiMappingProps) {
       // A mapping whose target has since gone (an effect renamed, say) still
       // needs a readable line rather than a blank one.
       if (mapping.kind === 'scene') return `Scene ${(mapping.index ?? 0) + 1}`;
+      if (mapping.kind === 'looper')
+        return `Looper — ${LOOPER_ACTIONS.find((a) => a.index === mapping.index)?.label ?? mapping.index}`;
       if (mapping.kind === 'channel') return `${mapping.effect} — Channel ${mapping.index}`;
       return `${mapping.effect} — ${mapping.parameter}`;
     },

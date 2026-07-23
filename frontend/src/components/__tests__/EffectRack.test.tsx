@@ -296,9 +296,9 @@ describe('EffectRack drive voicings', () => {
     expect(screen.getByRole('combobox', { name: 'Tipe' })).toBeInTheDocument();
   });
 
-  it('marks a modulated knob inert with a MOD tag', () => {
-    // A modifier writes the parameter every block, so its knob would fight the
-    // sweep -- it is shown disabled with a tag instead.
+  it('keeps a modulated knob live with a MOD tag (base + offset)', () => {
+    // A modifier owns this parameter, but under base + offset the knob still sets
+    // the centre the sweep rides on -- so it stays interactive, tagged MOD.
     render(
       <EffectRack
         effect={overdrive}
@@ -308,7 +308,7 @@ describe('EffectRack drive voicings', () => {
       />,
     );
 
-    expect(screen.getByRole('slider', { name: 'Drive' })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('slider', { name: 'Drive' })).not.toHaveAttribute('aria-disabled', 'true');
     expect(screen.getByText('MOD')).toBeInTheDocument();
   });
 });

@@ -6,6 +6,7 @@ import { DeviceSettings } from './components/DeviceSettings';
 import { EffectRack, EFFECT_ACCENTS } from './components/EffectRack';
 import { Knob } from './components/Knob';
 import { LevelMeter, ReductionMeter } from './components/LevelMeter';
+import { LooperPanel } from './components/LooperPanel';
 import { MidiMapping } from './components/MidiMapping';
 import { ModulationPanel } from './components/ModulationPanel';
 import { NamPanel } from './components/NamPanel';
@@ -774,6 +775,7 @@ export function App() {
       {view === 'perform' ? (
         <PerformView
           levels={levels}
+          effects={rackEffects}
           presets={presets}
           selectedPreset={selectedPreset}
           onLoadPreset={handlePresetLoad}
@@ -861,6 +863,8 @@ export function App() {
           <MidiMapping effects={effects} disabled={offline} />
 
           <NamPanel disabled={offline} onLibraryChanged={refreshEffectsVoid} />
+
+          <LooperPanel disabled={offline} />
 
           <ModulationPanel
             effects={rackEffects}

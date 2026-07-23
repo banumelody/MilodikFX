@@ -27,6 +27,7 @@ juce::String kindString (MappingKind kind)
     {
         case MappingKind::scene:   return "scene";
         case MappingKind::channel: return "channel";
+        case MappingKind::looper:  return "looper";
         default:                   return "parameter";
     }
 }
@@ -48,6 +49,11 @@ Mapping parseMapping (const juce::var& parsed)
     {
         mapping.kind = MappingKind::channel;
         mapping.effectId = parsed["effect"].toString().trim();
+        mapping.index = index;
+    }
+    else if (kind == "looper")
+    {
+        mapping.kind = MappingKind::looper;
         mapping.index = index;
     }
     else

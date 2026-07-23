@@ -360,8 +360,10 @@ function EffectRackBase({
               ),
             ) !== override.whenNot;
 
-          // A modifier owns this parameter: it writes it every block, so the
-          // knob would fight the sweep. Show it inert with a MOD tag instead.
+          // A modifier owns this parameter, but the knob stays live: it sets the
+          // centre the sweep rides on (base + offset). The value the engine
+          // reports for a modulated parameter is that centre, so the knob does
+          // not chase the sweep; a MOD tag marks that it is being modulated.
           const modulated = modulatedParams?.has(`${effect.id}.${parameter.id}`) ?? false;
 
           const knob = (
@@ -374,14 +376,18 @@ function EffectRackBase({
               label={parameter.label}
               unit={parameter.unit}
               accent={accent}
-              disabled={inactive || overridden || modulated}
+              disabled={inactive || overridden}
               format={(value) => formatValue(parameter, value)}
               onChange={(value) => onParameterChange(effect.id, parameter.id, value)}
             />
           );
 
           return modulated ? (
-            <div key={parameter.id} className="rack__modknob" title="Dikendalikan modifier">
+            <div
+              key={parameter.id}
+              className="rack__modknob rack__modknob--live"
+              title="Modifier aktif — knob menyetel titik tengah sapuan"
+            >
               {knob}
               <span className="rack__modtag">MOD</span>
             </div>

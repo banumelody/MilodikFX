@@ -22,6 +22,10 @@ const emptySlots: ModifiersState = {
     low: 0,
     high: 0,
     rateHz: 1,
+    expressionCc: -1,
+    syncDivision: 0,
+    baseOffset: 0,
+    base: 0,
   })),
 };
 
@@ -77,10 +81,44 @@ describe('ModulationPanel', () => {
     await waitFor(() => expect(onModifiersChanged).toHaveBeenCalled());
   });
 
+  it('offers an expression-pedal source with a CC field', async () => {
+    renderPanel();
+    await screen.findByRole('option', { name: 'Overdrive — Drive' });
+
+    fireEvent.change(screen.getByLabelText('Parameter'), { target: { value: 'overdrive.drivePct' } });
+    fireEvent.change(screen.getByLabelText('Sumber'), { target: { value: 'expression' } });
+
+    // The CC field appears for an expression source; the Sync field does not.
+    fireEvent.change(screen.getByLabelText('CC pedal'), { target: { value: '7' } });
+    expect(screen.queryByLabelText('Sync')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tambah modifier' }));
+    await waitFor(() => expect(setModifier).toHaveBeenCalled());
+
+    const [, body] = vi.mocked(setModifier).mock.calls[0];
+    expect(body.source).toBe('expression');
+    expect(body.expressionCc).toBe(7);
+  });
+
+  it('locks an LFO to the tempo through the sync division', async () => {
+    renderPanel();
+    await screen.findByRole('option', { name: 'Overdrive — Drive' });
+
+    fireEvent.change(screen.getByLabelText('Parameter'), { target: { value: 'overdrive.drivePct' } });
+    // lfoSine is the default source, so the Sync field is present.
+    fireEvent.change(screen.getByLabelText('Sync'), { target: { value: '3' } }); // 1/4
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tambah modifier' }));
+    await waitFor(() => expect(setModifier).toHaveBeenCalled());
+
+    const [, body] = vi.mocked(setModifier).mock.calls[0];
+    expect(body.syncDivision).toBe(3);
+  });
+
   it('lists an active modifier and can clear it', async () => {
     vi.mocked(getModifiers).mockResolvedValue({
       modifiers: [
-        { slot: 0, active: true, effect: 'overdrive', parameter: 'drivePct', source: 'lfoSine', low: 0, high: 100, rateHz: 2 },
+        { slot: 0, active: true, effect: 'overdrive', parameter: 'drivePct', source: 'lfoSine', low: 0, high: 100, rateHz: 2, expressionCc: -1, syncDivision: 0, baseOffset: 0, base: 50 },
         ...emptySlots.modifiers.slice(1),
       ],
     });

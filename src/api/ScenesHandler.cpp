@@ -45,6 +45,15 @@ HttpHandler::Response ScenesHandler::describeState() const
 
         object->setProperty ("enabled", juce::var (flags));
 
+        // Which channel each effect lands on, so the stage view can badge the
+        // scene buttons with the letters. Empty when no channel store is attached.
+        auto* channels = new juce::DynamicObject();
+
+        for (const auto& [effectId, channelIndex] : scene.channels)
+            channels->setProperty (juce::Identifier (effectId), channelIndex);
+
+        object->setProperty ("channels", juce::var (channels));
+
         array.add (juce::var (object));
     }
 

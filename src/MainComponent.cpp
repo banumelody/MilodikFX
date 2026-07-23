@@ -3,6 +3,7 @@
 #include "api/HealthHandler.h"
 #include "api/UpdateHandler.h"
 #include "api/ModulationHandler.h"
+#include "api/LooperHandler.h"
 
 #include <cmath>
 
@@ -110,6 +111,21 @@ MainComponent::MainComponent (juce::PropertiesFile& settingsFileToUse)
     };
     registry.baseValueProvider = baseValueOf;
     channelStore.setBaseValueProvider (baseValueOf);
+
+    // Turning a modulated knob shifts the modifier's centre rather than fighting
+    // the sweep the audio thread writes. Absorbed here; the atomic is left alone.
+    registry.modulatedWriteHook = [this] (const std::string& effectId, const std::string& parameterId, float value)
+    {
+        return modulationEngine.setBase (effectId, parameterId, value);
+    };
+
+    // An expression source reads a live MIDI CC. The provider is set once and
+    // never reassigned, so the audio thread only ever calls it.
+    modulationEngine.expressionProvider = [this] (int cc)
+    {
+        return midiController.getControllerValue01 (cc);
+    };
+
     loadSettingsIntoRegistry();
     buildMidi();
 
@@ -202,6 +218,7 @@ void MainComponent::buildChain()
     delayProcessor = chainProcessors.delay;
     reverbProcessor = chainProcessors.reverb;
     masterOutProcessor = chainProcessors.masterOut;
+    looperProcessor = chainProcessors.looper;
 }
 
 void MainComponent::buildRegistry()
@@ -301,6 +318,23 @@ void MainComponent::buildMidi()
         }
     };
 
+    // A footswitch under the looper. The action only sets an atomic the audio
+    // thread reads, but the UI still needs to catch up (record light, state).
+    midiController.onLooperAction = [this] (int action)
+    {
+        if (looperProcessor == nullptr)
+            return;
+
+        using Action = milodikfx::dsp::LooperProcessor::Action;
+        const auto mapped = action == 1 ? Action::stop
+                          : action == 2 ? Action::clear
+                          : action == 3 ? Action::play
+                                        : Action::record;
+
+        looperProcessor->requestAction (mapped);
+        bumpChainVersion();
+    };
+
     loadMidiSettings();
 }
 
@@ -327,6 +361,11 @@ void MainComponent::loadMidiSettings()
         {
             mapping.kind = milodikfx::midi::MappingKind::channel;
             mapping.effectId = effect;
+            mapping.index = settingsFile.getIntValue (prefix + "index", -1);
+        }
+        else if (kindStr == "looper")
+        {
+            mapping.kind = milodikfx::midi::MappingKind::looper;
             mapping.index = settingsFile.getIntValue (prefix + "index", -1);
         }
         else
@@ -403,6 +442,15 @@ void MainComponent::saveMidiSettings()
             settingsFile.setValue (prefix + "index", mapping.index);
 
             for (const auto* suffix : { "parameter", "mode" })
+                if (settingsFile.containsKey (prefix + suffix))
+                    settingsFile.removeValue (prefix + suffix);
+        }
+        else if (mapping.kind == milodikfx::midi::MappingKind::looper)
+        {
+            settingsFile.setValue (prefix + "kind", "looper");
+            settingsFile.setValue (prefix + "index", mapping.index);
+
+            for (const auto* suffix : { "effect", "parameter", "mode" })
                 if (settingsFile.containsKey (prefix + suffix))
                     settingsFile.removeValue (prefix + suffix);
         }
@@ -485,6 +533,11 @@ void MainComponent::loadSettingsIntoRegistry()
         channelStore.resetToCurrent();
     }
 
+    // The looper's playback level survives a restart; the recorded loop itself
+    // is deliberately not persisted (it is a live, throwaway phrase).
+    if (looperProcessor != nullptr && settingsFile.containsKey (kKeyLooperLevel))
+        looperProcessor->setLevelPercent ((float) settingsFile.getDoubleValue (kKeyLooperLevel, 100.0));
+
     // Modifiers (tremolo, auto-wah) come back too. They reference a parameter by
     // id, so they load after the registry is built and its values restored.
     using Source = milodikfx::dsp::ModulationEngine::Source;
@@ -507,13 +560,20 @@ void MainComponent::loadSettingsIntoRegistry()
         const auto source = sourceStr == "lfoTriangle" ? Source::lfoTriangle
                           : sourceStr == "lfoSquare"   ? Source::lfoSquare
                           : sourceStr == "envelope"    ? Source::envelope
+                          : sourceStr == "expression"  ? Source::expression
                                                        : Source::lfoSine;
 
+        milodikfx::dsp::ModulationEngine::Config config;
+        config.source = source;
+        config.low = (float) settingsFile.getDoubleValue (prefix + "low", 0.0);
+        config.high = (float) settingsFile.getDoubleValue (prefix + "high", 0.0);
+        config.rateHz = (float) settingsFile.getDoubleValue (prefix + "rate", 1.0);
+        config.expressionCc = settingsFile.getIntValue (prefix + "expressionCc", -1);
+        config.syncDivision = settingsFile.getIntValue (prefix + "syncDivision", 0);
+        config.baseOffset = (float) settingsFile.getDoubleValue (prefix + "baseOffset", 0.0);
+
         modulationEngine.setModifier (slot, target,
-                                      effectId.toStdString(), parameterId.toStdString(), source,
-                                      (float) settingsFile.getDoubleValue (prefix + "low", 0.0),
-                                      (float) settingsFile.getDoubleValue (prefix + "high", 0.0),
-                                      (float) settingsFile.getDoubleValue (prefix + "rate", 1.0));
+                                      effectId.toStdString(), parameterId.toStdString(), config);
     }
 }
 
@@ -592,6 +652,9 @@ void MainComponent::saveSettingsIfNeeded (bool force)
     settingsFile.setValue (kKeyScenes, juce::JSON::toString (sceneManager.toVar(), true));
     settingsFile.setValue (kKeyChannels, juce::JSON::toString (channelStore.toVar(), true));
 
+    if (looperProcessor != nullptr)
+        settingsFile.setValue (kKeyLooperLevel, (double) looperProcessor->getLevelPercent());
+
     for (int slot = 0; slot < milodikfx::dsp::ModulationEngine::kMaxModifiers; ++slot)
     {
         const auto prefix = "modifier." + juce::String (slot) + ".";
@@ -599,7 +662,8 @@ void MainComponent::saveSettingsIfNeeded (bool force)
 
         if (! info.active)
         {
-            for (const auto* suffix : { "effect", "parameter", "source", "low", "high", "rate" })
+            for (const auto* suffix : { "effect", "parameter", "source", "low", "high", "rate",
+                                        "expressionCc", "syncDivision", "baseOffset" })
                 if (settingsFile.containsKey (prefix + suffix))
                     settingsFile.removeValue (prefix + suffix);
 
@@ -609,6 +673,7 @@ void MainComponent::saveSettingsIfNeeded (bool force)
         const auto sourceName = info.source == (int) milodikfx::dsp::ModulationEngine::Source::lfoTriangle ? "lfoTriangle"
                               : info.source == (int) milodikfx::dsp::ModulationEngine::Source::lfoSquare   ? "lfoSquare"
                               : info.source == (int) milodikfx::dsp::ModulationEngine::Source::envelope    ? "envelope"
+                              : info.source == (int) milodikfx::dsp::ModulationEngine::Source::expression  ? "expression"
                                                                                                            : "lfoSine";
 
         settingsFile.setValue (prefix + "effect", juce::String (info.effectId));
@@ -617,6 +682,9 @@ void MainComponent::saveSettingsIfNeeded (bool force)
         settingsFile.setValue (prefix + "low", info.low);
         settingsFile.setValue (prefix + "high", info.high);
         settingsFile.setValue (prefix + "rate", info.rateHz);
+        settingsFile.setValue (prefix + "expressionCc", info.expressionCc);
+        settingsFile.setValue (prefix + "syncDivision", info.syncDivision);
+        settingsFile.setValue (prefix + "baseOffset", info.baseOffset);
     }
 
     settingsFile.saveIfNeeded();
@@ -709,6 +777,13 @@ void MainComponent::startServer()
     auto modulationHandler = std::make_shared<ModulationHandler> (registry, modulationEngine);
     modulationHandler->onChanged = [this] { markSettingsDirty(); };
     webServer->registerApiHandler ("/api/modifiers", modulationHandler);
+
+    if (looperProcessor != nullptr)
+    {
+        auto looperHandler = std::make_shared<LooperHandler> (*looperProcessor);
+        looperHandler->onChanged = [this] { markSettingsDirty(); };
+        webServer->registerApiHandler ("/api/looper", looperHandler);
+    }
 
     // Meters over one held-open connection instead of a fresh HTTP request every
     // 100 ms, which on a thread-per-connection server meant a thread per poll.
@@ -938,7 +1013,11 @@ void MainComponent::audioDeviceIOCallbackWithContext (const float* const* inputC
     tunerAnalyzer.pushSamples (left, samples);
 
     // Modifiers write their swept values into the parameter atomics just before
-    // the chain reads them. The input magnitude feeds the envelope follower.
+    // the chain reads them. The input magnitude feeds the envelope follower, and
+    // a tempo-locked LFO needs the current BPM (one atomic read from the metronome).
+    if (chainProcessors.metronome != nullptr)
+        modulationEngine.setBpm (chainProcessors.metronome->getBpm());
+
     modulationEngine.process (inputPeak, samples);
 
     audioEngine.processBlock (view);

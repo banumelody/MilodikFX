@@ -125,6 +125,8 @@ export interface Scene {
   name: string;
   /** effectId -> on. Absent means the scene says nothing about that effect. */
   enabled: Record<string, boolean>;
+  /** effectId -> channel index (0-3) the scene recalls. Empty when unused. */
+  channels?: Record<string, number>;
   /** False for a slot nothing has been stored in yet. */
   populated: boolean;
 }
@@ -341,7 +343,7 @@ export function subscribeTuner(
 
 export type MidiMappingMode = 'continuous' | 'toggle';
 
-export type MidiMappingKind = 'parameter' | 'scene' | 'channel';
+export type MidiMappingKind = 'parameter' | 'scene' | 'channel' | 'looper';
 
 export interface MidiMapping {
   /** -1 for the pending learn target, which has no controller yet. */
@@ -463,7 +465,7 @@ export const importPreset = (name: string, data: string) =>
     body: JSON.stringify({ name, data }),
   });
 
-export type ModifierSource = 'lfoSine' | 'lfoTriangle' | 'lfoSquare' | 'envelope';
+export type ModifierSource = 'lfoSine' | 'lfoTriangle' | 'lfoSquare' | 'envelope' | 'expression';
 
 export interface Modifier {
   slot: number;
@@ -474,6 +476,14 @@ export interface Modifier {
   low: number;
   high: number;
   rateHz: number;
+  /** The CC an expression source follows; -1 when unset. */
+  expressionCc: number;
+  /** 0 = free rate; otherwise a note division an LFO locks to the tempo. */
+  syncDivision: number;
+  /** How far the knob has shifted the sweep centre from the midpoint. */
+  baseOffset: number;
+  /** The sweep centre the knob shows, midpoint(low,high) + baseOffset. */
+  base: number;
 }
 
 export interface ModifiersState {
@@ -487,6 +497,8 @@ export interface ModifierRequest {
   low: number;
   high: number;
   rateHz: number;
+  expressionCc?: number;
+  syncDivision?: number;
 }
 
 export const getModifiers = () => request<ModifiersState>('/modifiers');
@@ -496,6 +508,31 @@ export const setModifier = (slot: number, body: ModifierRequest) =>
 
 export const clearModifier = (slot: number) =>
   request<ModifiersState>(`/modifiers/${slot}`, { method: 'DELETE' });
+
+export type LooperState = 'empty' | 'recording' | 'playing' | 'overdubbing' | 'stopped';
+
+export interface LooperInfo {
+  state: LooperState;
+  hasLoop: boolean;
+  /** Length of the recorded loop in seconds. */
+  loopSeconds: number;
+  /** Playback position through the loop, 0..1. */
+  position: number;
+  /** Playback level, 0..100. */
+  level: number;
+  /** The longest loop the engine can hold, in seconds. */
+  maxSeconds: number;
+}
+
+export type LooperAction = 'record' | 'stop' | 'play' | 'clear';
+
+export const getLooper = () => request<LooperInfo>('/looper');
+
+export const looperAction = (action: LooperAction) =>
+  request<LooperInfo>(`/looper/${action}`, { method: 'POST', body: '{}' });
+
+export const setLooperLevel = (value: number) =>
+  request<LooperInfo>('/looper/level', { method: 'PUT', body: JSON.stringify({ value }) });
 
 export interface HistoryState {
   canUndo: boolean;

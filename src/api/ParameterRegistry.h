@@ -111,6 +111,17 @@ public:
      */
     std::function<bool (const std::string&, const std::string&, float&)> baseValueProvider;
 
+    /**
+     * Optional intercept for writing a numeric parameter a modifier owns. When a
+     * modifier is sweeping a parameter the audio thread writes its atomic every
+     * block, so a knob turn there would be fought and lost. This lets the app
+     * redirect the turn into the modifier's *centre* instead: given the clamped
+     * value, it returns true when it has absorbed the write, and `setParameter`
+     * then skips the processor store. Returns false for an unmodulated parameter,
+     * which is written normally.
+     */
+    std::function<bool (const std::string&, const std::string&, float)> modulatedWriteHook;
+
 private:
     void notifyChanged() const;
 
