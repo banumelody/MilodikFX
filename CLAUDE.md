@@ -400,6 +400,26 @@ parameter mapping.
 physical controller, and `tests/MidiTests.cpp` drives it directly. What is *not* covered is whether a
 given footswitch really sends 127/0 — that needs hardware.
 
+Three more things the MIDI path does, all aimed at footswitches like the M-Vave Chocolate:
+
+- **The UI has to hear about MIDI-driven changes.** A footswitch recalling a scene, or a CC moving a
+  parameter, is a change the UI did not make — so nothing would otherwise tell it to redraw, and the
+  giant Perform scene buttons would not light up. `LevelsHandler` carries a `chainVersion` counter in
+  the meter payload (already streaming ~22 Hz); `MainComponent::bumpChainVersion()` nudges it from the
+  MIDI callbacks (CC-parameter, scene, channel, program change) and *only* those — a UI knob drag must
+  not bump it, or every client would refetch and fight the drag. The UI watches the number and refetches
+  `/api/effects` + `/api/scenes` (debounced) when it moves.
+- **Auto-reconnect.** The device is opened once at startup; a wireless pedal that sleeps or drops would
+  otherwise stay dead until the panel was reopened. `MainComponent`'s timer rescans every ~4 s and
+  reopens the *desired* device (`desiredMidiDevice`, persisted as `midi.device`, not the currently-open
+  name) the moment `listDevices()` reports it back.
+- **Bluetooth LE.** JUCE's default WinMM backend cannot see BLE MIDI at all. `MILODIKFX_WINRT_MIDI`
+  (CMake, default ON) sets `JUCE_USE_WINRT_MIDI=1` so paired BLE devices appear alongside USB ones; it
+  is a build option with a WinMM fallback because JUCE marks WinRT MIDI experimental. The
+  **learn-4 wizard** in the MIDI panel is pure frontend: it arms scene-learn for slots 1–4 in turn,
+  advancing as each press binds, so any 4-button footswitch is set up without hardcoding its (firmware-
+  and user-variable) CC numbers. BLE end-to-end is unverified here — it needs the real hardware.
+
 ### Frontend
 
 `main.tsx` -> `App.tsx` -> the components under `components/` (EffectRack, Knob, Toggle, ChainStrip,

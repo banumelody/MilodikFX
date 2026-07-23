@@ -38,10 +38,19 @@ Semuanya untuk **gitar maupun bass**. Sorotan:
   punya spillover — ekornya tetap meluruh saat dimatikan, jadi pindah scene tidak memotong repeat.
 - **Metronome** dicampur setelah master (di luar bypass), berbagi satu tempo dengan delay.
 
-Fitur lain: **tuner kromatik** (gitar & bass 5-senar, sampai low B ≈ 31 Hz), **kontrol MIDI/footswitch**
-dengan MIDI Learn, **scene** 4 slot, **preset** dengan metadata + impor/ekspor, **undo/redo**, kurva
-respons EQ, metering lewat Server-Sent Events, dan **pengecekan update otomatis** — aplikasi memeriksa
-GitHub Releases saat dibuka dan memunculkan pemberitahuan bila ada versi baru.
+Fitur kontrol ala rig panggung: **channel A/B/C/D** per efek (empat sound bernama tiap blok), **scene**
+4 slot yang membawa channel tiap efek, **Perform view** (layar besar untuk manggung — tombol scene
+raksasa, tuner besar, pintasan keyboard), dan **modifier** (LFO atau envelope menyapu parameter —
+tremolo, auto-wah).
+
+**Kontrol MIDI/footswitch** dengan MIDI Learn ke parameter, scene, atau channel; **wizard 4-tombol**
+memasang footswitch (mis. M-Vave Chocolate) ke Scene 1–4 sekali jalan; **USB dan Bluetooth LE MIDI**
+(lewat backend WinRT); dan **auto-reconnect** — controller wireless yang tidur nyambung lagi sendiri.
+
+Fitur lain: **tuner kromatik** (gitar & bass 5-senar, sampai low B ≈ 31 Hz), **preset** dengan metadata
++ impor/ekspor, **undo/redo**, kurva respons EQ, metering lewat Server-Sent Events, dan **pengecekan
+update otomatis** — aplikasi memeriksa GitHub Releases saat dibuka dan memunculkan pemberitahuan bila
+ada versi baru.
 
 Situs: **https://banumelody.github.io/MilodikFX/**
 

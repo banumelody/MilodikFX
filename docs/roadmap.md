@@ -49,7 +49,9 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 
 - P6-1 Channel A/B/C/D + P6-4 spillover antar-preset + P6-5 MIDI/scene→channel — **SELESAI (v0.17.0–v0.18.0)**. Channel per efek (`ChannelStore`), scene kini juga menyimpan+memanggil channel per efek, dan MIDI bisa memetakan CC ke scene/channel (footswitch panggil scene). Sisa FM9: P6-2 (modifier) dan P6-3 (perform view).
 
-**Belum:** P4-5 (looper — mandiri, selalu paling akhir), P7-1..P7-6 (audit ketiga 23 Jul 2026 + kompatibilitas M-Vave Chocolate). Seluruh adaptasi FM9 (P6-1..P6-5) dan audit optimasi (P5-2..P5-5) sudah terkirim.
+- P7-1..P7-3, P7-6 Audit ketiga + M-Vave Chocolate — **SELESAI (v0.21.0)**. Sinkronisasi UI lewat `chainVersion` di payload meter (footswitch → tombol scene Perform ikut menyala); MIDI auto-reconnect di timer (pedal wireless yang tidur nyambung sendiri); persistensi menyimpan nilai base modifier, bukan sapuan; WinRT MIDI (BLE) sebagai opsi build default ON + wizard learn-4 untuk footswitch (mis. M-Vave Chocolate).
+
+**Belum:** P4-5 (looper — mandiri, selalu paling akhir), P7-4 (halus-halus Perform/modifier), P7-5 (upgrade Vite — ditunda, dev-tooling saja). Seluruh adaptasi FM9 (P6-1..P6-5) dan audit optimasi (P5-2..P5-5) sudah terkirim.
 
 **Kenapa empat itu belum, per 22 Jul 2026:**
 
@@ -58,7 +60,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - **P4-5 Looper** — mandiri dan tidak menyentuh arsitektur lain, tapi bukan kebutuhan inti; paling akhir sejak awal.
 - **P2-5 Multi-view** — sidebar masih terbaca dalam satu layar, jadi tab Perform/Edit/Library/Settings belum menyelesaikan masalah nyata. Akan terasa perlu begitu panelnya bertambah lagi.
 
-**Rilis terbaru:** v0.20.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.20.0
+**Rilis terbaru:** v0.21.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.21.0
 
 **Catatan P4-1 yang lahir dari implementasi:** tiga hal yang hanya ketahuan lewat pengukuran, bukan pembacaan kode. (1) Split butuh dua filter sungguhan; mengurangi salinan low-pass *tampak* setara tapi menyisakan selisih fasa yang lalu kena gain penuh clipper — Tube Screamer terukur mendistorsi bass lebih keras daripada drive full-range, persis terbalik. (2) Tahap kaskade harus membagi gain; dua tahap gain penuh mengotakkan sinyal, DC blocker menengahkannya, dan harmonik genap — alasan utama memilih voicing asimetris — hilang sama sekali. (3) Test harmoniknya sempat mengukur kebocoran spektralnya sendiri; di luar bin analisis, fundamental menyebar di sekitar −43 dB, satu orde dengan harmonik yang diukur, sehingga kurva simetris tampak punya harmonik genap sebanyak yang asimetris. Tepat di bin, kurva simetris terbaca 0,000000.
 
@@ -998,12 +1000,12 @@ wizard) → P7-3 (nilai modifier) → P7-5 (Vite) → P7-4 (halus-halus).
 | 41 | Perform view (menyerap P2-5) ✅ (inti) | P6-3 | ~1–1.5 weekend | inti selesai (v0.19.0); pinned knobs menyusul |
 | 42 | Spillover antar preset (verifikasi) ✅ | P6-4 | ~2–4 jam | selesai |
 | 43 | MIDI → scene & channel ✅ | P6-5 | ~0.5 weekend | selesai (v0.18.0) |
-| 44 | Sinkronisasi UI saat MIDI mengubah chain | P7-1 | ~0.5 weekend | — |
-| 45 | MIDI auto-reconnect | P7-2 | ~2–3 jam | — |
-| 46 | Nilai modifier: simpan base, bukan sapuan | P7-3 | ~2–3 jam | — |
+| 44 | Sinkronisasi UI saat MIDI mengubah chain ✅ | P7-1 | ~0.5 weekend | selesai (v0.21.0) |
+| 45 | MIDI auto-reconnect ✅ | P7-2 | ~2–3 jam | selesai (v0.21.0) |
+| 46 | Nilai modifier: simpan base, bukan sapuan ✅ | P7-3 | ~2–3 jam | selesai (v0.21.0) |
 | 47 | Perform/modifier halus (pin, channel di scene, dst.) | P7-4 | bervariasi | — |
-| 48 | Upgrade Vite + dependensi frontend | P7-5 | ~0.5 weekend | — |
-| 49 | M-Vave Chocolate: WinRT BLE MIDI + wizard learn-4 | P7-6 | ~1 weekend | setelah P7-1, P7-2; butuh hardware untuk verifikasi |
+| 48 | Upgrade Vite + dependensi frontend | P7-5 | ~0.5 weekend | ditunda (dev-tooling saja, hindari risiko embed) |
+| 49 | M-Vave Chocolate: WinRT BLE MIDI + wizard learn-4 ✅ (inti) | P7-6 | ~1 weekend | selesai (v0.21.0); BLE end-to-end butuh hardware user |
 
 Total estimasi kalau semua dikerjakan: kira-kira 27–35 weekend, dengan catatan NAM adalah yang paling tidak pasti dan bisa melar jauh dari estimasi tergantung hasil tahap riset.
 

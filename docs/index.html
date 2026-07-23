@@ -4,9 +4,9 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>MilodikFX — multi-efek gitar & bass realtime untuk Windows</title>
-<meta name="description" content="MilodikFX: satu executable C++/JUCE mandiri untuk memproses gitar dan bass secara realtime di Windows — 11 voicing overdrive/distorsi/fuzz, amp head NAM, cabinet IR, tuner, delay/reverb, MIDI, dan latensi ASIO rendah." />
+<meta name="description" content="MilodikFX: satu executable C++/JUCE mandiri untuk memproses gitar dan bass secara realtime di Windows — 11 voicing overdrive/distorsi/fuzz, amp head NAM, cabinet IR, tuner, delay/reverb, channel A/B/C/D, scene, Perform view, modifier LFO/envelope, kontrol MIDI, dan latensi ASIO rendah." />
 <meta property="og:title" content="MilodikFX" />
-<meta property="og:description" content="Multi-efek gitar & bass realtime untuk Windows — satu exe mandiri, latensi ASIO rendah." />
+<meta property="og:description" content="Multi-efek gitar & bass realtime untuk Windows — satu exe mandiri, latensi ASIO rendah, kontrol lengkap ala rig panggung." />
 <meta property="og:type" content="website" />
 <style>
   :root {
@@ -229,26 +229,56 @@
           <p>Cabinet analitik plus dua slot impulse response yang bisa di-blend, untuk mencampur dua karakter speaker.</p>
         </div>
         <div class="feature" style="--hue: var(--sage)">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3"/><circle cx="4" cy="12" r="2"/><circle cx="12" cy="6" r="2"/><circle cx="20" cy="14" r="2"/></svg></span>
+          <h3>Gate, boost, comp, EQ &amp; contour</h3>
+          <p>Noise gate, clean boost, compressor dengan parallel mix, EQ tiga-band, dan contour — seluruh tone shaping sebelum dan sesudah amp.</p>
+        </div>
+        <div class="feature" style="--hue: var(--teal)">
           <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M9 3v8a3 3 0 006 0V3"/><path d="M12 14v7M9 21h6"/></svg></span>
           <h3>Tuner gitar &amp; bass</h3>
           <p>Kromatik, sampai low B bass 5-senar (≈ 31 Hz). Akurat dalam ±5 sen, dengan pemberitahuan pas/rendah/tinggi.</p>
         </div>
-        <div class="feature" style="--hue: var(--teal)">
-          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 12c2 0 2-5 4-5s2 10 4 10 2-10 4-10 2 5 4 5"/></svg></span>
-          <h3>Delay &amp; reverb spillover</h3>
-          <p>Ekor tetap meluruh saat efek dimatikan, jadi pergantian scene di tengah lagu tidak memotong repeat.</p>
-        </div>
         <div class="feature" style="--hue: var(--gold)">
-          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 3l8 4-8 4-8-4 8-4z"/><path d="M4 12l8 4 8-4M4 16.5l8 4 8-4"/></svg></span>
-          <h3>Channel, scene &amp; preset</h3>
-          <p>Empat channel A/B/C/D per efek, empat scene instan, dan preset penuh dengan metadata, impor/ekspor, dan undo/redo.</p>
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8 12a4 4 0 018 0M5 12a7 7 0 0114 0M11 12a1 1 0 012 0"/></svg></span>
+          <h3>Delay &amp; reverb spillover</h3>
+          <p>Delay dengan damping, ping-pong, dan sinkron tempo; reverb algoritmik/konvolusi. Ekor tetap meluruh saat dimatikan.</p>
         </div>
         <div class="feature" style="--hue: var(--sky)">
-          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1"/><circle cx="15.5" cy="10" r="1"/><circle cx="12" cy="8" r="1"/><circle cx="9.5" cy="15" r="1"/><circle cx="14.5" cy="15" r="1"/></svg></span>
-          <h3>Kontrol MIDI</h3>
-          <p>Footswitch dan controller dengan MIDI Learn — mode toggle untuk footswitch, continuous untuk pedal ekspresi.</p>
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></span>
+          <h3>Channel A/B/C/D per efek</h3>
+          <p>Tiap blok menyimpan empat sound bernama — Tube Screamer gain rendah di A, gain penuh di B — dipindah seketika, tanpa perlu dua blok. Ala Fractal FM9.</p>
         </div>
         <div class="feature" style="--hue: var(--coral)">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 3l8 4-8 4-8-4 8-4z"/><path d="M4 12l8 4 8-4M4 16.5l8 4 8-4"/></svg></span>
+          <h3>Scene, preset &amp; undo</h3>
+          <p>Empat scene instan yang membawa channel tiap efek; preset penuh dengan metadata, impor/ekspor; dan undo/redo penuh.</p>
+        </div>
+        <div class="feature" style="--hue: var(--rose)">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M8 10h2M14 10h2M11 13.5h2" /></svg></span>
+          <h3>Perform view</h3>
+          <p>Layar panggung: nama preset besar, empat tombol scene raksasa, meter LED, tuner besar. Pintasan keyboard 1–4 pindah scene, panah ganti preset.</p>
+        </div>
+        <div class="feature" style="--hue: var(--violet)">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 12c3-9 6-9 9 0s6 9 9 0"/></svg></span>
+          <h3>Modifier — LFO &amp; envelope</h3>
+          <p>Sumber menyapu parameter antara dua nilai: LFO ke Master jadi tremolo, envelope petikan ke Contour jadi auto-wah. Sampai empat sekaligus.</p>
+        </div>
+        <div class="feature" style="--hue: var(--sage)">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1"/><circle cx="15.5" cy="10" r="1"/><circle cx="12" cy="8" r="1"/><circle cx="9.5" cy="15" r="1"/><circle cx="14.5" cy="15" r="1"/></svg></span>
+          <h3>Kontrol MIDI + footswitch</h3>
+          <p>MIDI Learn ke parameter, scene, atau channel. Wizard 4-tombol memasang footswitch (mis. M-Vave Chocolate) ke Scene 1–4. USB &amp; Bluetooth LE MIDI.</p>
+        </div>
+        <div class="feature" style="--hue: var(--teal)">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M9 3h6l3 18H6z"/><path d="M12 7l4 9"/><circle cx="12" cy="17" r="1"/></svg></span>
+          <h3>Metronome &amp; tap tempo</h3>
+          <p>Satu tempo untuk seluruh app — metronome berdenting di situ, delay yang di-sync ikut. Tap tempo di mana saja.</p>
+        </div>
+        <div class="feature" style="--hue: var(--gold)">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 10-2.3 5.7M20 11V5m0 6h-6"/></svg></span>
+          <h3>Cek update otomatis</h3>
+          <p>Aplikasi memeriksa GitHub Releases saat dibuka dan memunculkan pemberitahuan bila ada versi baru. Perbandingan versi yang benar (0.9 vs 0.10).</p>
+        </div>
+        <div class="feature" style="--hue: var(--sky)">
           <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg></span>
           <h3>Latensi ASIO rendah</h3>
           <p>Dengan ASIO turun sampai 32 sampel; tanpa SDK jatuh mulus ke WASAPI. ~7,6% DSP dengan semua efek menyala.</p>
