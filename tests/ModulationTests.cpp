@@ -142,6 +142,30 @@ public:
             mod.clearModifier (1);
             expect (! mod.getModifier (1).active);
         }
+
+        beginTest ("Reports the base value for persistence while sweeping");
+        {
+            ModulationEngine mod;
+            mod.prepare (48000.0);
+
+            float applied = 0.0f;
+            registry.setParameter ("overdrive", "drivePct", 33.0f, applied);
+
+            mod.setModifier (0, drive, "overdrive", "drivePct", Source::lfoSine, 0.0f, 100.0f, 5.0f);
+            mod.process (0.0f, 512); // the live value has moved off 33
+
+            float base = 0.0f;
+            expect (mod.getBaseValue ("overdrive", "drivePct", base), "no base reported for a modulated param");
+            expectWithinAbsoluteError (base, 33.0f, 0.5f);
+
+            // A parameter no modifier owns has no override.
+            float other = 0.0f;
+            expect (! mod.getBaseValue ("delay", "mixPct", other));
+
+            mod.clearModifier (0);
+            expect (! mod.getBaseValue ("overdrive", "drivePct", base),
+                    "a cleared modifier should stop reporting a base");
+        }
     }
 };
 

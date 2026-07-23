@@ -19,6 +19,7 @@ HttpHandler::Response LevelsHandler::handleGet (const std::string&, const std::s
     object->setProperty ("bufferSize", currentBufferSize.load (std::memory_order_relaxed));
     object->setProperty ("audioRunning", audioRunning.load (std::memory_order_relaxed));
     object->setProperty ("floorDb", kFloorDb);
+    object->setProperty ("chainVersion", (int) chainVersion.load (std::memory_order_relaxed));
 
     // Compact: this is the meter payload, delivered ~22 times a second down the
     // SSE stream. One line is fewer bytes and skips the line-splitting the

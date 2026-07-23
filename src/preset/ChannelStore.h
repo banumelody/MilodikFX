@@ -73,6 +73,13 @@ public:
     /** Invoked after a mutation so settings can be marked dirty. */
     std::function<void()> onChanged;
 
+    /** Optional: supplies a parameter's base value when a modifier owns it, so a
+        channel does not capture a swept sample. Same shape as the registry's. */
+    void setBaseValueProvider (std::function<bool (const std::string&, const std::string&, float&)> provider)
+    {
+        baseValueProvider = std::move (provider);
+    }
+
 private:
     struct Channel
     {
@@ -95,6 +102,7 @@ private:
     void notifyChanged() const;
 
     milodikfx::api::ParameterRegistry& registry;
+    std::function<bool (const std::string&, const std::string&, float&)> baseValueProvider;
     std::map<std::string, EffectChannels> byEffect;
 };
 } // namespace milodikfx::preset

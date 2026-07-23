@@ -111,6 +111,22 @@ ModulationEngine::ModifierInfo ModulationEngine::getModifier (int slot) const
     return info;
 }
 
+bool ModulationEngine::getBaseValue (const std::string& effectId,
+                                     const std::string& parameterId,
+                                     float& out) const
+{
+    for (const auto& s : slots)
+    {
+        if (s.active.load (std::memory_order_acquire) && s.effectId == effectId && s.parameterId == parameterId)
+        {
+            out = s.restoreValue.load (std::memory_order_relaxed);
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void ModulationEngine::process (float inputLevel, int numSamples) noexcept
 {
     if (numSamples <= 0)

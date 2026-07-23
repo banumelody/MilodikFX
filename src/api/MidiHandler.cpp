@@ -157,6 +157,11 @@ HttpHandler::Response MidiHandler::handlePost (const std::string& path, const st
         if (error.isNotEmpty())
             return jsonError (400, error);
 
+        // Remember what the user picked so the app can keep it open across a
+        // wireless drop. Empty name = "none", which also stops reconnecting.
+        if (onDeviceChosen)
+            onDeviceChosen (name);
+
         return describeState();
     }
 

@@ -102,6 +102,15 @@ public:
     /** Invoked after any successful mutation so settings can be marked dirty. */
     std::function<void()> onChanged;
 
+    /**
+     * Optional override for what `captureState` records for a numeric parameter.
+     * When a modifier owns a parameter its live value is a swept sample; this
+     * lets the app substitute the base value the parameter will return to, so a
+     * preset saved mid-sweep stores something sensible. Returns true and writes
+     * `out` when it has an override for that parameter.
+     */
+    std::function<bool (const std::string&, const std::string&, float&)> baseValueProvider;
+
 private:
     void notifyChanged() const;
 

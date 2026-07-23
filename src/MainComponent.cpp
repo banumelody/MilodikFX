@@ -100,6 +100,16 @@ MainComponent::MainComponent (juce::PropertiesFile& settingsFileToUse)
     // Scenes recall channels too, so give the scene manager the channel store
     // before any settings or preset is restored into it.
     sceneManager.setChannelStore (&channelStore);
+
+    // Capturing a preset while a modifier is sweeping should store the value the
+    // parameter returns to, not the swept sample. Both the registry (presets) and
+    // the channel store consult this.
+    auto baseValueOf = [this] (const std::string& effectId, const std::string& parameterId, float& out)
+    {
+        return modulationEngine.getBaseValue (effectId, parameterId, out);
+    };
+    registry.baseValueProvider = baseValueOf;
+    channelStore.setBaseValueProvider (baseValueOf);
     loadSettingsIntoRegistry();
     buildMidi();
 
@@ -225,7 +235,13 @@ void MainComponent::buildRegistry()
 //==============================================================================
 void MainComponent::buildMidi()
 {
-    midiController.onParameterChanged = [this] { markSettingsDirty(); };
+    // A MIDI CC moved a parameter -- the UI has no other way to know, so nudge
+    // the chain version it watches on the meter stream.
+    midiController.onParameterChanged = [this]
+    {
+        markSettingsDirty();
+        bumpChainVersion();
+    };
 
     midiController.onLearned = [this] (int, milodikfx::midi::Mapping) { markSettingsDirty(); };
     midiController.onConfigurationChanged = [this] { markSettingsDirty(); };
@@ -259,6 +275,7 @@ void MainComponent::buildMidi()
         registry.applyState (state);
         presetsHandler->setSelectedName (name);
         markSettingsDirty();
+        bumpChainVersion();
 
         log ("MIDI program " + juce::String (program) + " loaded preset " + name);
     };
@@ -269,13 +286,19 @@ void MainComponent::buildMidi()
     midiController.onSceneRecall = [this] (int index)
     {
         if (sceneManager.recall (index))
+        {
             markSettingsDirty();
+            bumpChainVersion();
+        }
     };
 
     midiController.onChannelSelect = [this] (juce::String effectId, int index)
     {
         if (channelStore.recall (effectId.toStdString(), index))
+        {
             markSettingsDirty();
+            bumpChainVersion();
+        }
     };
 
     loadMidiSettings();
@@ -322,23 +345,28 @@ void MainComponent::loadMidiSettings()
     }
 
     const auto deviceName = settingsFile.getValue (kKeyMidiDevice, {});
+    desiredMidiDevice = deviceName;
 
     if (deviceName.isEmpty())
         return;
 
     // A controller that was unplugged since last run is not an error worth
-    // showing; the mapping stays and starts working again when it comes back.
+    // showing; the mapping stays, and the reconnect timer reopens the device
+    // the moment it reappears.
     const auto error = midiController.openDevice (deviceName);
 
     if (error.isNotEmpty())
-        log ("MIDI: " + error);
+        log ("MIDI: " + error + " (will keep trying to reconnect " + deviceName + ")");
     else
         log ("MIDI input opened: " + deviceName);
 }
 
 void MainComponent::saveMidiSettings()
 {
-    settingsFile.setValue (kKeyMidiDevice, midiController.getOpenDeviceName());
+    // The *desired* device, not the currently-open one: a controller that
+    // dropped since it was chosen must still be remembered and reconnected to on
+    // the next launch, rather than saved as "none".
+    settingsFile.setValue (kKeyMidiDevice, desiredMidiDevice);
 
     for (int cc = 0; cc < milodikfx::midi::MidiController::kNumControllers; ++cc)
     {
@@ -494,6 +522,33 @@ void MainComponent::markSettingsDirty()
     settingsDirty = true;
 }
 
+void MainComponent::bumpChainVersion()
+{
+    // The MIDI callbacks are wired in buildMidi, before the server (and the
+    // levels handler) exists; they only fire once MIDI arrives, by which time it
+    // does. Guard anyway.
+    if (levelsHandler != nullptr)
+        levelsHandler->bumpChainVersion();
+}
+
+void MainComponent::attemptMidiReconnect()
+{
+    if (desiredMidiDevice.isEmpty())
+        return;
+
+    // Already open as the device we want -- nothing to do.
+    if (midiController.isOpen() && midiController.getOpenDeviceName() == desiredMidiDevice)
+        return;
+
+    // Only when the OS actually reports it present, so we do not thrash on a
+    // controller that is unplugged or a wireless one still asleep.
+    if (! milodikfx::midi::MidiController::listDevices().contains (desiredMidiDevice))
+        return;
+
+    if (midiController.openDevice (desiredMidiDevice).isEmpty())
+        log ("MIDI reconnected: " + desiredMidiDevice);
+}
+
 void MainComponent::saveSettingsIfNeeded (bool force)
 {
     const auto now = juce::Time::getMillisecondCounter();
@@ -510,8 +565,19 @@ void MainComponent::saveSettingsIfNeeded (bool force)
                                effect.isEnabled ? effect.isEnabled() : true);
 
         for (const auto& parameter : effect.parameters)
-            if (parameter.get)
-                settingsFile.setValue (settingsKeyFor (effect.id, parameter.id), (double) parameter.get());
+        {
+            if (! parameter.get)
+                continue;
+
+            // If a modifier owns this parameter, persist the value it returns to,
+            // not the swept sample it happens to be on right now.
+            float base = 0.0f;
+            const auto value = modulationEngine.getBaseValue (effect.id, parameter.id, base)
+                                   ? base
+                                   : parameter.get();
+
+            settingsFile.setValue (settingsKeyFor (effect.id, parameter.id), (double) value);
+        }
     }
 
     settingsFile.setValue (kKeyAudioBufferPreference, desiredBufferSize);
@@ -624,7 +690,13 @@ void MainComponent::startServer()
     auto tunerHandler = std::make_shared<TunerHandler> (tunerAnalyzer);
     webServer->registerApiHandler ("/api/tuner", tunerHandler);
 
-    webServer->registerApiHandler ("/api/midi", std::make_shared<MidiHandler> (midiController));
+    auto midiHandler = std::make_shared<MidiHandler> (midiController);
+    midiHandler->onDeviceChosen = [this] (const juce::String& name)
+    {
+        desiredMidiDevice = name;
+        markSettingsDirty();
+    };
+    webServer->registerApiHandler ("/api/midi", midiHandler);
     webServer->registerApiHandler ("/api/presets", presetsHandler);
     webServer->registerApiHandler ("/api/scenes", scenesHandler);
 
@@ -955,5 +1027,14 @@ void MainComponent::timerCallback()
             historyDirty.store (false, std::memory_order_relaxed);
             undoHistory.commitIfChanged();
         }
+    }
+
+    // Every ~4 s, reopen the desired MIDI device if it dropped and came back.
+    // listDevices() is cheap; a wireless pedal that woke from sleep reconnects
+    // without the user touching the panel.
+    if (++midiRescanTicks >= 4)
+    {
+        midiRescanTicks = 0;
+        attemptMidiReconnect();
     }
 }

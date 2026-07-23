@@ -184,7 +184,14 @@ juce::var ParameterRegistry::captureState() const
             }
             else if (parameter.get)
             {
-                parameters->setProperty (juce::Identifier (parameter.id), parameter.get());
+                // A modifier owning this parameter makes get() a swept sample;
+                // store the value it will return to instead.
+                float base = 0.0f;
+                const auto value = (baseValueProvider && baseValueProvider (effect.id, parameter.id, base))
+                                       ? base
+                                       : parameter.get();
+
+                parameters->setProperty (juce::Identifier (parameter.id), value);
             }
         }
 

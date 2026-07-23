@@ -26,7 +26,12 @@ ChannelStore::Channel ChannelStore::captureEffect (const milodikfx::api::EffectD
         }
         else if (parameter.get)
         {
-            channel.params[parameter.id] = parameter.get();
+            // Do not bake a modifier's swept sample into a channel; store the
+            // value the parameter returns to.
+            float base = 0.0f;
+            channel.params[parameter.id]
+                = (baseValueProvider && baseValueProvider (effect.id, parameter.id, base)) ? base
+                                                                                           : parameter.get();
         }
     }
 

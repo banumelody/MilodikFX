@@ -55,6 +55,25 @@ public:
         audioRunning.store (running, std::memory_order_relaxed);
     }
 
+    /**
+     * Bumped whenever the chain changes in a way the UI did not initiate --
+     * a footswitch recalling a scene, a MIDI CC moving a parameter, a program
+     * change loading a preset. It rides along in the meter payload (already
+     * streaming ~22 Hz), so the UI can notice and refetch without a new
+     * connection or a new poll. Deliberately NOT bumped on ordinary parameter
+     * writes: a UI knob drag would otherwise tell every client to refetch and
+     * fight the drag it just made.
+     */
+    void bumpChainVersion() noexcept
+    {
+        chainVersion.fetch_add (1, std::memory_order_relaxed);
+    }
+
+    juce::uint32 getChainVersion() const noexcept
+    {
+        return chainVersion.load (std::memory_order_relaxed);
+    }
+
 private:
     // Silence floor, reported until the audio callback delivers the first block.
     // Keep in sync with MainComponent::kMeterFloorDb.
@@ -70,4 +89,5 @@ private:
     std::atomic<double> currentSampleRate { 0.0 };
     std::atomic<int> currentBufferSize { 0 };
     std::atomic<bool> audioRunning { false };
+    std::atomic<juce::uint32> chainVersion { 0 };
 };

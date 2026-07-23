@@ -88,6 +88,12 @@ private:
 
     void loadSettingsIntoRegistry();
     void markSettingsDirty();
+
+    /** Nudges the chain version the UI watches, once the levels handler exists. */
+    void bumpChainVersion();
+
+    /** Reopens the desired MIDI device if it is available but not currently open. */
+    void attemptMidiReconnect();
     void saveSettingsIfNeeded (bool force);
     void persistDeviceState();
 
@@ -125,6 +131,11 @@ private:
 
     // Declared after the registry it writes through, so it is torn down first.
     milodikfx::midi::MidiController midiController { registry };
+
+    // The MIDI device the user wants open, kept so a wireless controller that
+    // dropped (or was asleep at launch) can be reopened on its own.
+    juce::String desiredMidiDevice;
+    int midiRescanTicks = 0;
 
     std::unique_ptr<WebServer> webServer;
     int serverPort = 0;

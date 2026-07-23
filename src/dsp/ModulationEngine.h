@@ -84,6 +84,14 @@ public:
 
     ModifierInfo getModifier (int slot) const;
 
+    /**
+     * If a parameter is currently modulated, writes its pre-modulation ("base")
+     * value to `out` and returns true; otherwise returns false. Persistence uses
+     * this so saving while a modifier is sweeping stores the value the parameter
+     * will return to, not the swept sample it happened to be on. Control thread.
+     */
+    bool getBaseValue (const std::string& effectId, const std::string& parameterId, float& out) const;
+
     static bool isValidSlot (int slot) noexcept { return slot >= 0 && slot < kMaxModifiers; }
 
     /**
