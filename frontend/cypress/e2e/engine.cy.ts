@@ -807,6 +807,24 @@ describe('MilodikFX UI against a live engine', () => {
     cy.request('POST', '/api/presets/delete', { name: 'ChannelRoundTrip' });
   });
 
+  it('switches into the Perform view and back to Edit', () => {
+    cy.reload();
+
+    cy.contains('button', 'Perform').click();
+
+    // The four giant scene buttons are the main event of the perform screen.
+    cy.get('.perform__scene').should('have.length', 4);
+    cy.get('.perform__scene').first().click();
+
+    // The dense rack is not shown while performing.
+    cy.get('section[aria-label="Overdrive"]').should('not.exist');
+
+    // Back to Edit brings the rack back, and leaves the app there for the next
+    // test (the choice is remembered in localStorage).
+    cy.contains('button', 'Edit').click();
+    cy.get('section[aria-label="Overdrive"]').should('exist');
+  });
+
   it('binds a footswitch to a scene', () => {
     // The floor-rig case: a CC recalls a scene rather than moving a parameter.
     cy.request('PUT', '/api/midi/mappings/48', { kind: 'scene', index: 2 });

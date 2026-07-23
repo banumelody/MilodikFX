@@ -8,6 +8,7 @@ import { Knob } from './components/Knob';
 import { LevelMeter, ReductionMeter } from './components/LevelMeter';
 import { MidiMapping } from './components/MidiMapping';
 import { NamPanel } from './components/NamPanel';
+import { PerformView } from './components/PerformView';
 import { PresetControls } from './components/PresetControls';
 import { SceneGrid } from './components/SceneGrid';
 import { Sparkline } from './components/Sparkline';
@@ -52,6 +53,10 @@ type Connection = 'connecting' | 'online' | 'offline';
 /** Remembers the last release the user dismissed, so a newer one still shows. */
 const DISMISSED_UPDATE_KEY = 'milodikfx.update.dismissed';
 
+/** Which posture the app opens in: the dense Edit rack, or the big Perform screen. */
+const VIEW_KEY = 'milodikfx.view';
+type View = 'edit' | 'perform';
+
 /** Coalescing window for parameter writes, in ms. */
 const WRITE_INTERVAL_MS = 40;
 
@@ -95,6 +100,22 @@ export function App() {
       return '';
     }
   });
+  const [view, setView] = useState<View>(() => {
+    try {
+      return window.localStorage.getItem(VIEW_KEY) === 'perform' ? 'perform' : 'edit';
+    } catch {
+      return 'edit';
+    }
+  });
+
+  const chooseView = useCallback((next: View) => {
+    setView(next);
+    try {
+      window.localStorage.setItem(VIEW_KEY, next);
+    } catch {
+      /* private mode; it just opens in Edit next time */
+    }
+  }, []);
   const [deviceError, setDeviceError] = useState<string | null>(null);
   const [deviceBusy, setDeviceBusy] = useState(false);
   const [history, setHistory] = useState<HistoryState>({
@@ -565,6 +586,27 @@ export function App() {
           </div>
         </div>
 
+        <div className="topbar__view" role="tablist" aria-label="Tampilan">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === 'perform'}
+            className={`viewtab${view === 'perform' ? ' viewtab--active' : ''}`}
+            onClick={() => chooseView('perform')}
+          >
+            Perform
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === 'edit'}
+            className={`viewtab${view === 'edit' ? ' viewtab--active' : ''}`}
+            onClick={() => chooseView('edit')}
+          >
+            Edit
+          </button>
+        </div>
+
         <div className="topbar__meters">
           {/* Post-trim, because that is what the Input knob is dialled against
               and what the chain actually receives. The pre-trim figure is still
@@ -681,6 +723,23 @@ export function App() {
         onDismiss={dismissUpdate}
       />
 
+      {view === 'perform' ? (
+        <PerformView
+          levels={levels}
+          presets={presets}
+          selectedPreset={selectedPreset}
+          onLoadPreset={handlePresetLoad}
+          bpm={bpm}
+          onParameterChange={handleParameterChange}
+          isBypassed={isBypassed}
+          isMuted={isMuted}
+          onToggleBypass={toggleBypass}
+          onToggleMute={toggleMute}
+          offline={offline}
+          onScenesRecalled={refreshEffectsVoid}
+        />
+      ) : (
+        <>
       <ChainStrip
         effects={effects}
         disabled={offline}
@@ -801,6 +860,8 @@ export function App() {
           </section>
         </aside>
       </main>
+        </>
+      )}
 
       <AppFooter version={update?.current} />
     </div>

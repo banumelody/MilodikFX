@@ -383,8 +383,17 @@ given footswitch really sends 127/0 — that needs hardware.
 
 ### Frontend
 
-`main.tsx` -> `App.tsx` -> `components/{EffectRack, Knob, Toggle, LevelMeter, DeviceSettings, PresetControls}`
-plus `services/api.ts`. Nothing else exists; the dormant component tree was deleted.
+`main.tsx` -> `App.tsx` -> the components under `components/` (EffectRack, Knob, Toggle, ChainStrip,
+the meters, DeviceSettings, TunerDisplay, TempoPanel, SceneGrid, PresetControls, MidiMapping, NamPanel,
+UpdateBanner, AppFooter, PerformView) plus `services/api.ts`.
+
+`App` holds a **Perform | Edit** view toggle, remembered in localStorage. **Edit** is the dense rack —
+the default, unchanged. **Perform** (`PerformView`) is the stage-facing screen: big preset name with
+prev/next, big BPM + tap tempo, four giant scene buttons, wide In/Out LED meters, big Tuner/Bypass/Mute,
+and a large tuner that replaces the scene grid when on. Its keys (1–4 scenes, arrows presets, T tap) are
+scoped to when it is mounted; Esc (mute) and B (bypass) stay global in `App`. The heavy children are
+`memo`ised and `App`'s callbacks are `useCallback`-stable, so the ~22 Hz meter stream does not re-render
+the rack — the components take the same props across a meter frame.
 
 The UI is generated from the registry, so it cannot drift from the engine. Knob interaction is a
 **relative vertical drag** from the press point (shift = fine, wheel, double-click to default, full
