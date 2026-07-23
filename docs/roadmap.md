@@ -51,7 +51,11 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 
 - P7-1..P7-3, P7-6 Audit ketiga + M-Vave Chocolate — **SELESAI (v0.21.0)**. Sinkronisasi UI lewat `chainVersion` di payload meter (footswitch → tombol scene Perform ikut menyala); MIDI auto-reconnect di timer (pedal wireless yang tidur nyambung sendiri); persistensi menyimpan nilai base modifier, bukan sapuan; WinRT MIDI (BLE) sebagai opsi build default ON + wizard learn-4 untuk footswitch (mis. M-Vave Chocolate).
 
-**Belum:** P4-5 (looper — mandiri, selalu paling akhir), P7-4 (halus-halus Perform/modifier), P7-5 (upgrade Vite — ditunda, dev-tooling saja). Seluruh adaptasi FM9 (P6-1..P6-5) dan audit optimasi (P5-2..P5-5) sudah terkirim.
+- P7-4 Poles Perform & modifier + P4-5 Looper — **SELESAI (24 Jul 2026, v0.22.0).** Modifier kini base+offset (knob yang dimodulasi tetap aktif menyetel titik tengah sapuan; tulisan knob dialihkan ke `ModulationEngine::setBase` lewat `modulatedWriteHook`, listing efek melaporkan titik tengah lewat `baseValueProvider`), plus **sumber pedal ekspresi** (CC live lewat `expressionProvider`, di-set sekali) dan **LFO sync tempo** (rate dari BPM yang didorong per blok dari metronome). Tombol scene Perform mendapat **badge huruf channel**. **Looper** (`LooperProcessor`): single-loop post-master, rekam/tutup/overdub/main/stop/hapus lewat satu tombol konteks, buffer 60 dt dialokasikan di prepare (clear = reset panjang, bukan zero di audio thread), `/api/looper`, panel + strip Perform (tombol R), dan `MappingKind::looper` untuk footswitch. Diuji: 1,8 jt assertion backend (termasuk state machine + clamp looper, base+offset/expression/sync modifier), 190 test frontend, E2E. Sisa halus P7-4 (8 knob pin per preset) menyusul.
+
+- P7-5 Upgrade Vite — **DICOBA LALU DIURUNGKAN (24 Jul 2026).** Upgrade ke Vite 6 + Vitest 2 build bersih dengan nama file stabil, tapi (a) toolchain baru memecah 4 test drag Knob (jsdom/pointer-event berubah — koordinat hilang jadi NaN) dan (b) `npm audit` **tetap** melaporkan kerentanan: esbuild/vite yang rentan ikut ter-bundle di dalam Vitest 2, dan membersihkannya butuh Vitest 4 (breaking change lebih besar lagi). Nol nilai bagi pengguna (UI dilayani engine di loopback, bukan internet), risiko nyata ke pipeline embed exe — jadi diurungkan, tetap di Vite 4. Bukan ditunda karena malas: dicoba, terbukti destabilisasi tanpa mencapai tujuannya.
+
+**Belum:** P7-4 sisa (8 knob pin per preset), P2-5 (multi-view — terserap ke Perform/Edit; tab penuh menunggu sidebar terasa sesak), dan P7-5 (upgrade Vite — dicoba & diurungkan, lihat di atas). Seluruh adaptasi FM9 (P6-1..P6-5), audit optimasi (P5-2..P5-5), looper (P4-5), dan poles Perform/modifier (P7-4 inti) sudah terkirim.
 
 **Kenapa empat itu belum, per 22 Jul 2026:**
 
@@ -60,7 +64,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - **P4-5 Looper** — mandiri dan tidak menyentuh arsitektur lain, tapi bukan kebutuhan inti; paling akhir sejak awal.
 - **P2-5 Multi-view** — sidebar masih terbaca dalam satu layar, jadi tab Perform/Edit/Library/Settings belum menyelesaikan masalah nyata. Akan terasa perlu begitu panelnya bertambah lagi.
 
-**Rilis terbaru:** v0.21.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.21.0
+**Rilis terbaru:** v0.22.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.22.0
 
 **Catatan P4-1 yang lahir dari implementasi:** tiga hal yang hanya ketahuan lewat pengukuran, bukan pembacaan kode. (1) Split butuh dua filter sungguhan; mengurangi salinan low-pass *tampak* setara tapi menyisakan selisih fasa yang lalu kena gain penuh clipper — Tube Screamer terukur mendistorsi bass lebih keras daripada drive full-range, persis terbalik. (2) Tahap kaskade harus membagi gain; dua tahap gain penuh mengotakkan sinyal, DC blocker menengahkannya, dan harmonik genap — alasan utama memilih voicing asimetris — hilang sama sekali. (3) Test harmoniknya sempat mengukur kebocoran spektralnya sendiri; di luar bin analisis, fundamental menyebar di sekitar −43 dB, satu orde dengan harmonik yang diukur, sehingga kurva simetris tampak punya harmonik genap sebanyak yang asimetris. Tepat di bin, kurva simetris terbaca 0,000000.
 
@@ -988,7 +992,7 @@ wizard) → P7-3 (nilai modifier) → P7-5 (Vite) → P7-4 (halus-halus).
 | 29 | Tipe overdrive (8 tipe, 3 batch) | P4-1 | ~2 weekend | idealnya setelah P4-0 |
 | 30 | Dual IR + blend di cabinet | P4-3 | ~0.5–1 weekend | — |
 | 31 | Modifier (envelope/LFO → parameter) | P4-4 | ~1.5–2 weekend | desain dulu; setelah P4-1/P4-2 |
-| 32 | Looper sederhana | P4-5 | ~1–1.5 weekend | — |
+| 32 | Looper sederhana ✅ | P4-5 | ~1–1.5 weekend | selesai (v0.22.0); post-master, footswitch |
 | 33 | Voicing Centaur + RAT + Big Muff ✅ | P4-1b | ~1–1.5 hari | selesai (v0.14.0) |
 | 34 | Update check + sponsor + credit + situs ✅ | P5-1 | ~0.5 weekend | selesai (v0.15.0) |
 | 35 | Memoisasi frontend (render 22 Hz) ✅ | P5-2 | ~2–4 jam | selesai (v0.16.0) |
@@ -996,15 +1000,15 @@ wizard) → P7-3 (nilai modifier) → P7-5 (Vite) → P7-4 (halus-halus).
 | 37 | UpdateHandler fetch di luar lock + SSE 1-baris ✅ | P5-4 | ~1–2 jam | selesai (v0.16.0) |
 | 38 | Oversampling default per voicing ✅ | P5-5 | ~2–3 jam | selesai (v0.16.0) |
 | 39 | Channel A/B/C/D per efek ✅ | P6-1 | ~1.5–2 weekend | selesai (v0.17.0); tautan scene→channel di v0.18.0 |
-| 40 | Modifier (desain FM9, menggantikan P4-4) ✅ (inti) | P6-2 | ~1.5–2 weekend | inti selesai (v0.20.0); base+offset & expression menyusul |
-| 41 | Perform view (menyerap P2-5) ✅ (inti) | P6-3 | ~1–1.5 weekend | inti selesai (v0.19.0); pinned knobs menyusul |
+| 40 | Modifier (desain FM9, menggantikan P4-4) ✅ | P6-2 | ~1.5–2 weekend | inti v0.20.0; base+offset, expression, sync tempo v0.22.0 |
+| 41 | Perform view (menyerap P2-5) ✅ (inti) | P6-3 | ~1–1.5 weekend | inti v0.19.0; badge channel v0.22.0; pinned knobs menyusul |
 | 42 | Spillover antar preset (verifikasi) ✅ | P6-4 | ~2–4 jam | selesai |
 | 43 | MIDI → scene & channel ✅ | P6-5 | ~0.5 weekend | selesai (v0.18.0) |
 | 44 | Sinkronisasi UI saat MIDI mengubah chain ✅ | P7-1 | ~0.5 weekend | selesai (v0.21.0) |
 | 45 | MIDI auto-reconnect ✅ | P7-2 | ~2–3 jam | selesai (v0.21.0) |
 | 46 | Nilai modifier: simpan base, bukan sapuan ✅ | P7-3 | ~2–3 jam | selesai (v0.21.0) |
-| 47 | Perform/modifier halus (pin, channel di scene, dst.) | P7-4 | bervariasi | — |
-| 48 | Upgrade Vite + dependensi frontend | P7-5 | ~0.5 weekend | ditunda (dev-tooling saja, hindari risiko embed) |
+| 47 | Perform/modifier halus (channel badge, base+offset, expression, sync) ✅ (inti) | P7-4 | bervariasi | v0.22.0; sisa: 8 knob pin per preset |
+| 48 | Upgrade Vite + dependensi frontend | P7-5 | ~0.5 weekend | dicoba & diurungkan (v0.22.0): pecah test + vuln tetap ada tanpa Vitest 4 |
 | 49 | M-Vave Chocolate: WinRT BLE MIDI + wizard learn-4 ✅ (inti) | P7-6 | ~1 weekend | selesai (v0.21.0); BLE end-to-end butuh hardware user |
 
 Total estimasi kalau semua dikerjakan: kira-kira 27–35 weekend, dengan catatan NAM adalah yang paling tidak pasti dan bisa melar jauh dari estimasi tergantung hasil tahap riset.

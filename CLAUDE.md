@@ -134,10 +134,11 @@ type, so the chain may contain at most one processor of each type.
 #### Post-chain processors
 
 `DSPChainManager::addPostProcessor` registers something that runs *after* the chain **and after the
-bypass crossfade** — for signal mixed into the output rather than applied to the guitar. Only
-`MetronomeProcessor` uses it. A click routed through the chain would be distorted and cabinet-filtered,
-and would vanish the moment global bypass was pressed, which is exactly when you still want the beat.
-Anything here carries its own clamp, because it adds level to an already-limited signal.
+bypass crossfade** — for signal mixed into the output rather than applied to the guitar.
+`MetronomeProcessor` and `LooperProcessor` use it. A click routed through the chain would be distorted
+and cabinet-filtered, and would vanish the moment global bypass was pressed, which is exactly when you
+still want the beat; a loop is the same — you want it playing through a bypass. Anything here carries
+its own clamp, because it adds level to an already-limited signal.
 
 `findProcessor<T>()` scans both lists, so the one-per-type rule still holds across them.
 `getNumProcessors()` counts chain stages only.
@@ -187,22 +188,43 @@ These are not stylistic; each corresponds to a bug that shipped:
 
 ### Modifiers
 
-`milodikfx::dsp::ModulationEngine` (`src/dsp/ModulationEngine.*`) sweeps a parameter between two values
-with an LFO or the envelope of the input — a tremolo is the master level swept by an LFO, an auto-wah is
-the contour frequency swept by picking. It runs on the audio thread from `MainComponent`'s callback,
-just before the chain reads the parameters (the same spot the tuner taps the input), and is handed the
-block's input magnitude for the envelope follower.
+`milodikfx::dsp::ModulationEngine` (`src/dsp/ModulationEngine.*`) sweeps a parameter with an LFO, the
+envelope of the input, or an expression pedal — a tremolo is the master level swept by an LFO, an
+auto-wah is the contour frequency swept by picking, a wah is the same swept by a pedal. It runs on the
+audio thread from `MainComponent`'s callback, just before the chain reads the parameters (the same spot
+the tuner taps the input), and is handed the block's input magnitude for the envelope follower.
 
 It is *not* in the chain and touches no processor directly: it writes the swept value through the
 parameter's own `set` closure — the plain atomic store a MIDI CC does, not the registry setter with its
 notification. Four fixed slots, no allocation, no lock. The target is a `std::atomic<const
 ParameterDescriptor*>` published with release so the audio thread never reads a half-written descriptor;
 phase and envelope belong to the audio thread alone, reset through a `needsReset` flag the control
-thread raises but never clears; and switching a modifier off restores the pre-modulation value, done by
-the audio thread the first block the slot is inactive so it cannot race a write in flight. While a
-parameter is modulated its knob is inert in the UI (the modifier owns it) and returns when removed — a
-base-plus-offset model, where the knob still sets a centre, is a later refinement. `/api/modifiers`
-(GET/PUT/DELETE); modifiers persist in the settings file under `modifier.<slot>.*`.
+thread raises but never clears.
+
+**Base + offset.** The modulated knob is not inert: it sets the *centre* the sweep rides on.
+`effective = clamp(low + source*(high-low) + baseOffset)`, where `baseOffset` shifts the whole window
+and defaults to zero — so a modifier added with the panel's low/high sweeps exactly that range until the
+knob is turned. A knob turn on a modulated parameter is routed to `ModulationEngine::setBase` through
+the registry's `modulatedWriteHook` (the processor atomic is left to the audio thread); the effects
+listing reports the centre via `baseValueProvider` so the knob does not chase the sweep; and removing a
+modifier returns the parameter to that centre. **Tempo sync**: an LFO with a `syncDivision` derives its
+rate from the BPM `MainComponent` pushes each block from the metronome. **Expression**: the `expression`
+source reads a live CC through `expressionProvider`, a `std::function` set once at wiring time (never
+reassigned), so the audio thread only ever calls it — the same discipline as the `set` closures.
+`/api/modifiers` (GET/PUT/DELETE); modifiers persist under `modifier.<slot>.*` (source, low, high, rate,
+`expressionCc`, `syncDivision`, `baseOffset`).
+
+### Looper
+
+`milodikfx::dsp::LooperProcessor` (`src/dsp/LooperProcessor.*`) is a single-loop phrase looper, a
+post-processor like the metronome so the loop keeps playing across a global bypass and is not run
+through the amp and cabinet. One footswitch drives it: `record` is context-sensitive (start → close →
+overdub/play), with explicit `stop`, `play`, `clear`. The control thread only ever *requests* an action
+through an atomic that the audio thread applies at the top of a block; the record buffer is allocated
+once at prepare (60 s max), and `clear` just resets the length rather than zeroing megabytes on the
+audio thread. Its own clamp, since it runs after the limiter. `/api/looper` (GET + POST record/stop/
+play/clear + PUT level); a footswitch reaches it through `MappingKind::looper` (index = action), and the
+recorded loop is deliberately *not* persisted — only the playback level is.
 
 ### Drive voicings
 
@@ -326,7 +348,8 @@ Measured delivery is ~22 Hz against a 33 ms target: Windows rounds a sleep up to
 granularity.
 
 Endpoints: `/api/effects`, `/api/parameters`, `/api/devices`, `/api/levels`, `/api/tuner`, `/api/ir`,
-`/api/nam`, `/api/midi`, `/api/scenes`, `/api/presets`, `/api/modifiers`, `/api/health`, `/api/update`.
+`/api/nam`, `/api/midi`, `/api/scenes`, `/api/presets`, `/api/modifiers`, `/api/looper`, `/api/health`,
+`/api/update`.
 
 `/api/update` (`UpdateHandler`) reads the newest tag from GitHub Releases and compares it to the
 compiled-in `MILODIKFX_VERSION`, returning `{current, latest, updateAvailable, url}`; the UI raises a
@@ -383,10 +406,10 @@ snapshot. Extends the scene rule rather than breaking it — see above.
 Incoming messages arrive on JUCE's MIDI thread. Writing a parameter from there is safe (processors
 hold them as atomics); anything touching files — a program change selecting a preset — is posted to
 the message thread. A mapping's `kind` picks what it drives: a `parameter` (or an effect's `enabled`
-switch), a `scene` (recalled on press), or a `channel` of one effect (selected on press). Scene and
-channel recalls touch the scene/channel stores, which are not built for the MIDI thread, so they are
-posted to the message thread the same way a program change is — `onSceneRecall`/`onChannelSelect` in
-`MainComponent` do the actual recall there.
+switch), a `scene` (recalled on press), a `channel` of one effect (selected on press), or a `looper`
+action (record/stop/clear on press). Scene and channel recalls touch the scene/channel stores, which are
+not built for the MIDI thread, so they are posted to the message thread the same way a program change is
+— `onSceneRecall`/`onChannelSelect`/`onLooperAction` in `MainComponent` do the actual work there.
 
 Two mapping modes, and the difference matters: a footswitch sends 127 on press and 0 on release, so a
 `continuous` mapping would need the switch held down to keep the effect on. `toggle` acts on the press
@@ -424,7 +447,8 @@ Three more things the MIDI path does, all aimed at footswitches like the M-Vave 
 
 `main.tsx` -> `App.tsx` -> the components under `components/` (EffectRack, Knob, Toggle, ChainStrip,
 the meters, DeviceSettings, TunerDisplay, TempoPanel, SceneGrid, PresetControls, MidiMapping, NamPanel,
-UpdateBanner, AppFooter, PerformView) plus `services/api.ts`.
+ModulationPanel, LooperPanel, UpdateBanner, AppFooter, PerformView) plus `services/api.ts` and the
+`useLooper` hook.
 
 `App` holds a **Perform | Edit** view toggle, remembered in localStorage. **Edit** is the dense rack —
 the default, unchanged. **Perform** (`PerformView`) is the stage-facing screen: big preset name with

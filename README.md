@@ -37,15 +37,19 @@ Semuanya untuk **gitar maupun bass**. Sorotan:
 - **Delay** dengan damping, ping-pong, dan sinkron tempo; **Reverb** algoritmik/konvolusi. Keduanya
   punya spillover — ekornya tetap meluruh saat dimatikan, jadi pindah scene tidak memotong repeat.
 - **Metronome** dicampur setelah master (di luar bypass), berbagi satu tempo dengan delay.
+- **Looper**: rekam satu frasa lalu bermain di atasnya (overdub berlapis), dicampur setelah master jadi
+  loop tetap berbunyi walau bypass. Bisa dikendalikan lewat footswitch.
 
 Fitur kontrol ala rig panggung: **channel A/B/C/D** per efek (empat sound bernama tiap blok), **scene**
 4 slot yang membawa channel tiap efek, **Perform view** (layar besar untuk manggung — tombol scene
-raksasa, tuner besar, pintasan keyboard), dan **modifier** (LFO atau envelope menyapu parameter —
-tremolo, auto-wah).
+raksasa dengan huruf channel, tuner besar, kontrol looper, pintasan keyboard), dan **modifier** — LFO
+(bisa dikunci ke tempo), envelope, atau pedal ekspresi menyapu parameter (tremolo, auto-wah, wah);
+knob-nya tetap aktif menyetel titik tengah sapuan.
 
-**Kontrol MIDI/footswitch** dengan MIDI Learn ke parameter, scene, atau channel; **wizard 4-tombol**
-memasang footswitch (mis. M-Vave Chocolate) ke Scene 1–4 sekali jalan; **USB dan Bluetooth LE MIDI**
-(lewat backend WinRT); dan **auto-reconnect** — controller wireless yang tidur nyambung lagi sendiri.
+**Kontrol MIDI/footswitch** dengan MIDI Learn ke parameter, scene, channel, atau aksi looper;
+**wizard 4-tombol** memasang footswitch (mis. M-Vave Chocolate) ke Scene 1–4 sekali jalan; **USB dan
+Bluetooth LE MIDI** (lewat backend WinRT); dan **auto-reconnect** — controller wireless yang tidur
+nyambung lagi sendiri.
 
 Fitur lain: **tuner kromatik** (gitar & bass 5-senar, sampai low B ≈ 31 Hz), **preset** dengan metadata
 + impor/ekspor, **undo/redo**, kurva respons EQ, metering lewat Server-Sent Events, dan **pengecekan

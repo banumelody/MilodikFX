@@ -52,6 +52,27 @@
   .eyebrow { font-size: 12px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--gold); font-weight: 600; margin: 0 0 20px; }
   .muted { color: var(--text-dim); }
 
+  /* ---- language switch ---- */
+  .lang-switch {
+    position: fixed; top: 18px; right: 20px; z-index: 50;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-card) 82%, transparent);
+    border: 1px solid var(--line);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    font-family: var(--sans); font-size: 12px; font-weight: 600; letter-spacing: 0.08em;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.28);
+  }
+  .lang-switch button {
+    background: none; border: 0; cursor: pointer; font: inherit; letter-spacing: inherit;
+    color: var(--text-faint); padding: 2px 5px; border-radius: 6px;
+    transition: color 0.15s;
+  }
+  .lang-switch button:hover { color: var(--text-dim); }
+  .lang-switch button[aria-pressed="true"] { color: var(--gold); }
+  .lang-switch button:focus-visible { outline: 2px solid var(--gold-soft); outline-offset: 2px; }
+  .lang-switch .sep { color: var(--line); user-select: none; }
+
   /* ---- hero ---- */
   header.hero {
     position: relative; overflow: hidden;
@@ -178,6 +199,12 @@
 </style>
 </head>
 <body>
+  <div class="lang-switch" role="group" aria-label="Language / Bahasa">
+    <button type="button" data-lang="id" aria-pressed="true">ID</button>
+    <span class="sep" aria-hidden="true">|</span>
+    <button type="button" data-lang="en" aria-pressed="false">EN</button>
+  </div>
+
   <header class="hero">
     <div class="strings" aria-hidden="true">
       <i style="top:22%"></i><i style="top:35%"></i><i style="top:48%"></i>
@@ -186,8 +213,8 @@
     <div class="wrap">
       <div class="brand"><span class="mark">M</span><b>MilodikFX</b></div>
 
-      <h1>Rig gitar &amp; bass-mu, dalam <em>satu</em> aplikasi.</h1>
-      <p class="lead">
+      <h1 data-i18n-html="heroTitle">Rig gitar &amp; bass-mu, dalam <em>satu</em> aplikasi.</h1>
+      <p class="lead" data-i18n="heroLead">
         Multi-efek realtime untuk Windows. Satu executable mandiri menjalankan audio engine dan
         menampilkan antarmukanya di jendelanya sendiri — memproses gitar maupun bass dengan latensi
         ASIO serendah beberapa milidetik. Tanpa DAW, tanpa tab browser.
@@ -196,11 +223,11 @@
       <div class="cta">
         <a class="btn btn--gold" href="https://github.com/banumelody/MilodikFX/releases/latest">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l4-4m-4 4l-4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
-          Unduh versi terbaru
+          <span data-i18n="ctaDownload">Unduh versi terbaru</span>
         </a>
         <a class="btn btn--line" href="https://github.com/banumelody/MilodikFX">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-4 1.5-4-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 00-1.3-3.2 4.3 4.3 0 00-.1-3.2s-1-.3-3.4 1.3a11.7 11.7 0 00-6 0C6.9 2.3 5.9 2.6 5.9 2.6a4.3 4.3 0 00-.1 3.2A4.6 4.6 0 004.5 9c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21"/></svg>
-          Kode sumber
+          <span data-i18n="ctaSource">Kode sumber</span>
         </a>
       </div>
     </div>
@@ -208,80 +235,85 @@
 
   <section>
     <div class="wrap">
-      <p class="eyebrow">Rantai sinyal lengkap</p>
-      <h2>Semua yang biasanya berupa pedalboard, di dalam satu binari.</h2>
-      <p class="sub">Setiap kartu terikat ke parameter DSP yang hidup, jadi antarmukanya tidak pernah melenceng dari engine.</p>
+      <p class="eyebrow" data-i18n="feat_eyebrow">Rantai sinyal lengkap</p>
+      <h2 data-i18n="feat_h2">Semua yang biasanya berupa pedalboard, di dalam satu binari.</h2>
+      <p class="sub" data-i18n="feat_sub">Setiap kartu terikat ke parameter DSP yang hidup, jadi antarmukanya tidak pernah melenceng dari engine.</p>
 
       <div class="grid">
         <div class="feature" style="--hue: var(--coral)">
           <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="8"/><path d="M12 4v3M12 12l3.5 2" stroke-linecap="round"/></svg></span>
-          <h3>11 voicing overdrive</h3>
-          <p>Dari overdrive transparan sampai distorsi dan fuzz — Tube Screamer, OCD, Marshall-in-a-Box, Centaur, RAT, Big Muff. Kontrol menyesuaikan tipe.</p>
+          <h3 data-i18n="f1_h">11 voicing overdrive</h3>
+          <p data-i18n="f1_p">Dari overdrive transparan sampai distorsi dan fuzz — Tube Screamer, OCD, Marshall-in-a-Box, Centaur, RAT, Big Muff. Kontrol menyesuaikan tipe.</p>
         </div>
         <div class="feature" style="--hue: var(--rose)">
           <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="7" width="16" height="10" rx="2"/><path d="M8 7V5M16 7V5M8 17v2M16 17v2M4 12H2M22 12h-2" stroke-linecap="round"/></svg></span>
-          <h3>Amp head NAM</h3>
-          <p>Menjalankan capture Neural Amp Modeler (<code>.nam</code>) — memodelkan cara distorsi amp berubah mengikuti seberapa keras kamu bermain.</p>
+          <h3 data-i18n="f2_h">Amp head NAM</h3>
+          <p data-i18n-html="f2_p">Menjalankan capture Neural Amp Modeler (<code>.nam</code>) — memodelkan cara distorsi amp berubah mengikuti seberapa keras kamu bermain.</p>
         </div>
         <div class="feature" style="--hue: var(--violet)">
           <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="3" width="14" height="18" rx="2"/><circle cx="12" cy="9" r="3.2"/><circle cx="12" cy="16.5" r="1.2"/></svg></span>
-          <h3>Cabinet dua IR</h3>
-          <p>Cabinet analitik plus dua slot impulse response yang bisa di-blend, untuk mencampur dua karakter speaker.</p>
+          <h3 data-i18n="f3_h">Cabinet dua IR</h3>
+          <p data-i18n="f3_p">Cabinet analitik plus dua slot impulse response yang bisa di-blend, untuk mencampur dua karakter speaker.</p>
         </div>
         <div class="feature" style="--hue: var(--sage)">
           <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3"/><circle cx="4" cy="12" r="2"/><circle cx="12" cy="6" r="2"/><circle cx="20" cy="14" r="2"/></svg></span>
-          <h3>Gate, boost, comp, EQ &amp; contour</h3>
-          <p>Noise gate, clean boost, compressor dengan parallel mix, EQ tiga-band, dan contour — seluruh tone shaping sebelum dan sesudah amp.</p>
+          <h3 data-i18n="f4_h">Gate, boost, comp, EQ &amp; contour</h3>
+          <p data-i18n="f4_p">Noise gate, clean boost, compressor dengan parallel mix, EQ tiga-band, dan contour — seluruh tone shaping sebelum dan sesudah amp.</p>
         </div>
         <div class="feature" style="--hue: var(--teal)">
           <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M9 3v8a3 3 0 006 0V3"/><path d="M12 14v7M9 21h6"/></svg></span>
-          <h3>Tuner gitar &amp; bass</h3>
-          <p>Kromatik, sampai low B bass 5-senar (≈ 31 Hz). Akurat dalam ±5 sen, dengan pemberitahuan pas/rendah/tinggi.</p>
+          <h3 data-i18n="f5_h">Tuner gitar &amp; bass</h3>
+          <p data-i18n="f5_p">Kromatik, sampai low B bass 5-senar (≈ 31 Hz). Akurat dalam ±5 sen, dengan pemberitahuan pas/rendah/tinggi.</p>
         </div>
         <div class="feature" style="--hue: var(--gold)">
           <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8 12a4 4 0 018 0M5 12a7 7 0 0114 0M11 12a1 1 0 012 0"/></svg></span>
-          <h3>Delay &amp; reverb spillover</h3>
-          <p>Delay dengan damping, ping-pong, dan sinkron tempo; reverb algoritmik/konvolusi. Ekor tetap meluruh saat dimatikan.</p>
+          <h3 data-i18n="f6_h">Delay &amp; reverb spillover</h3>
+          <p data-i18n="f6_p">Delay dengan damping, ping-pong, dan sinkron tempo; reverb algoritmik/konvolusi. Ekor tetap meluruh saat dimatikan.</p>
         </div>
         <div class="feature" style="--hue: var(--sky)">
           <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></span>
-          <h3>Channel A/B/C/D per efek</h3>
-          <p>Tiap blok menyimpan empat sound bernama — Tube Screamer gain rendah di A, gain penuh di B — dipindah seketika, tanpa perlu dua blok. Ala Fractal FM9.</p>
+          <h3 data-i18n="f7_h">Channel A/B/C/D per efek</h3>
+          <p data-i18n="f7_p">Tiap blok menyimpan empat sound bernama — Tube Screamer gain rendah di A, gain penuh di B — dipindah seketika, tanpa perlu dua blok. Ala Fractal FM9.</p>
         </div>
         <div class="feature" style="--hue: var(--coral)">
           <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 3l8 4-8 4-8-4 8-4z"/><path d="M4 12l8 4 8-4M4 16.5l8 4 8-4"/></svg></span>
-          <h3>Scene, preset &amp; undo</h3>
-          <p>Empat scene instan yang membawa channel tiap efek; preset penuh dengan metadata, impor/ekspor; dan undo/redo penuh.</p>
+          <h3 data-i18n="f8_h">Scene, preset &amp; undo</h3>
+          <p data-i18n="f8_p">Empat scene instan yang membawa channel tiap efek; preset penuh dengan metadata, impor/ekspor; dan undo/redo penuh.</p>
         </div>
         <div class="feature" style="--hue: var(--rose)">
           <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M8 10h2M14 10h2M11 13.5h2" /></svg></span>
-          <h3>Perform view</h3>
-          <p>Layar panggung: nama preset besar, empat tombol scene raksasa, meter LED, tuner besar. Pintasan keyboard 1–4 pindah scene, panah ganti preset.</p>
+          <h3 data-i18n="f9_h">Perform view</h3>
+          <p data-i18n="f9_p">Layar panggung: nama preset besar, empat tombol scene raksasa, meter LED, tuner besar. Pintasan keyboard 1–4 pindah scene, panah ganti preset.</p>
         </div>
         <div class="feature" style="--hue: var(--violet)">
           <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 12c3-9 6-9 9 0s6 9 9 0"/></svg></span>
-          <h3>Modifier — LFO &amp; envelope</h3>
-          <p>Sumber menyapu parameter antara dua nilai: LFO ke Master jadi tremolo, envelope petikan ke Contour jadi auto-wah. Sampai empat sekaligus.</p>
+          <h3 data-i18n="f10_h">Modifier — LFO, envelope &amp; pedal ekspresi</h3>
+          <p data-i18n="f10_p">Sumber menyapu parameter: LFO ke Master jadi tremolo (bisa dikunci ke tempo), envelope petikan ke Contour jadi auto-wah, pedal ekspresi jadi wah. Knob tetap aktif menyetel titik tengah sapuan.</p>
         </div>
         <div class="feature" style="--hue: var(--sage)">
           <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1"/><circle cx="15.5" cy="10" r="1"/><circle cx="12" cy="8" r="1"/><circle cx="9.5" cy="15" r="1"/><circle cx="14.5" cy="15" r="1"/></svg></span>
-          <h3>Kontrol MIDI + footswitch</h3>
-          <p>MIDI Learn ke parameter, scene, atau channel. Wizard 4-tombol memasang footswitch (mis. M-Vave Chocolate) ke Scene 1–4. USB &amp; Bluetooth LE MIDI.</p>
+          <h3 data-i18n="f11_h">Kontrol MIDI + footswitch</h3>
+          <p data-i18n="f11_p">MIDI Learn ke parameter, scene, atau channel. Wizard 4-tombol memasang footswitch (mis. M-Vave Chocolate) ke Scene 1–4. USB &amp; Bluetooth LE MIDI.</p>
         </div>
         <div class="feature" style="--hue: var(--teal)">
           <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M9 3h6l3 18H6z"/><path d="M12 7l4 9"/><circle cx="12" cy="17" r="1"/></svg></span>
-          <h3>Metronome &amp; tap tempo</h3>
-          <p>Satu tempo untuk seluruh app — metronome berdenting di situ, delay yang di-sync ikut. Tap tempo di mana saja.</p>
+          <h3 data-i18n="f12_h">Metronome &amp; tap tempo</h3>
+          <p data-i18n="f12_p">Satu tempo untuk seluruh app — metronome berdenting di situ, delay yang di-sync ikut. Tap tempo di mana saja.</p>
         </div>
         <div class="feature" style="--hue: var(--gold)">
           <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 10-2.3 5.7M20 11V5m0 6h-6"/></svg></span>
-          <h3>Cek update otomatis</h3>
-          <p>Aplikasi memeriksa GitHub Releases saat dibuka dan memunculkan pemberitahuan bila ada versi baru. Perbandingan versi yang benar (0.9 vs 0.10).</p>
+          <h3 data-i18n="f13_h">Cek update otomatis</h3>
+          <p data-i18n="f13_p">Aplikasi memeriksa GitHub Releases saat dibuka dan memunculkan pemberitahuan bila ada versi baru. Perbandingan versi yang benar (0.9 vs 0.10).</p>
         </div>
         <div class="feature" style="--hue: var(--sky)">
           <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg></span>
-          <h3>Latensi ASIO rendah</h3>
-          <p>Dengan ASIO turun sampai 32 sampel; tanpa SDK jatuh mulus ke WASAPI. ~7,6% DSP dengan semua efek menyala.</p>
+          <h3 data-i18n="f14_h">Latensi ASIO rendah</h3>
+          <p data-i18n="f14_p">Dengan ASIO turun sampai 32 sampel; tanpa SDK jatuh mulus ke WASAPI. ~7,6% DSP dengan semua efek menyala.</p>
+        </div>
+        <div class="feature" style="--hue: var(--coral)">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 108-8"/><path d="M4 4v5h5"/><circle cx="12" cy="12" r="2.5"/></svg></span>
+          <h3 data-i18n="f15_h">Looper</h3>
+          <p data-i18n="f15_p">Rekam satu frasa lalu bermain di atasnya — overdub berlapis, dicampur setelah master jadi loop tetap berbunyi walau bypass. Kendali kaki lewat footswitch.</p>
         </div>
       </div>
     </div>
@@ -289,9 +321,9 @@
 
   <section>
     <div class="wrap">
-      <p class="eyebrow">Sebelas pedal, satu blok</p>
-      <h2>Voicing sebagai tabel data, bukan cabang kode per pedal.</h2>
-      <p class="sub">Preset lama tetap berbunyi persis sama karena urutan tipenya append-only.</p>
+      <p class="eyebrow" data-i18n="voice_eyebrow">Sebelas pedal, satu blok</p>
+      <h2 data-i18n="voice_h2">Voicing sebagai tabel data, bukan cabang kode per pedal.</h2>
+      <p class="sub" data-i18n="voice_sub">Preset lama tetap berbunyi persis sama karena urutan tipenya append-only.</p>
       <div class="pills">
         <span class="pill">Custom</span>
         <span class="pill">Tube Screamer</span>
@@ -311,22 +343,22 @@
 
   <section>
     <div class="wrap">
-      <p class="eyebrow">Spesifikasi minimum</p>
-      <h2>Ringan. Berjalan di komputer yang sudah kamu punya.</h2>
-      <p class="sub">Satu exe ~8 MB tanpa dependensi terpisah. Yang berikut ini cukup untuk menjalankan seluruh chain.</p>
+      <p class="eyebrow" data-i18n="spec_eyebrow">Spesifikasi minimum</p>
+      <h2 data-i18n="spec_h2">Ringan. Berjalan di komputer yang sudah kamu punya.</h2>
+      <p class="sub" data-i18n="spec_sub">Satu exe ~8 MB tanpa dependensi terpisah. Yang berikut ini cukup untuk menjalankan seluruh chain.</p>
 
       <div class="specs">
         <dl>
-          <div class="row"><dt>Sistem</dt><dd><b>Windows 10 atau 11</b>, 64-bit</dd></div>
-          <div class="row"><dt>Prosesor</dt><dd>x64 mana pun. Amp <b>NAM</b> membutuhkan <b>AVX2</b> (CPU sekitar 2013 ke atas)</dd></div>
-          <div class="row"><dt>Memori</dt><dd><b>4 GB</b> RAM</dd></div>
+          <div class="row"><dt data-i18n="spec_dt_system">Sistem</dt><dd data-i18n-html="spec_dd_system"><b>Windows 10 atau 11</b>, 64-bit</dd></div>
+          <div class="row"><dt data-i18n="spec_dt_cpu">Prosesor</dt><dd data-i18n-html="spec_dd_cpu">x64 mana pun. Amp <b>NAM</b> membutuhkan <b>AVX2</b> (CPU sekitar 2013 ke atas)</dd></div>
+          <div class="row"><dt data-i18n="spec_dt_mem">Memori</dt><dd data-i18n-html="spec_dd_mem"><b>4 GB</b> RAM</dd></div>
         </dl>
         <dl>
-          <div class="row"><dt>Penyimpanan</dt><dd>~<b>20 MB</b> ruang kosong</dd></div>
-          <div class="row"><dt>Audio</dt><dd>Interface apa pun. <b>ASIO</b> untuk latensi terendah; <b>WASAPI</b>/DirectSound sebagai fallback</dd></div>
-          <div class="row"><dt>Runtime</dt><dd><b>Edge WebView2</b> — sudah terpasang di Windows 10/11 modern</dd></div>
+          <div class="row"><dt data-i18n="spec_dt_storage">Penyimpanan</dt><dd data-i18n-html="spec_dd_storage">~<b>20 MB</b> ruang kosong</dd></div>
+          <div class="row"><dt data-i18n="spec_dt_audio">Audio</dt><dd data-i18n-html="spec_dd_audio">Interface apa pun. <b>ASIO</b> untuk latensi terendah; <b>WASAPI</b>/DirectSound sebagai fallback</dd></div>
+          <div class="row"><dt data-i18n="spec_dt_runtime">Runtime</dt><dd data-i18n-html="spec_dd_runtime"><b>Edge WebView2</b> — sudah terpasang di Windows 10/11 modern</dd></div>
         </dl>
-        <p class="note">
+        <p class="note" data-i18n-html="spec_note">
           Tanpa AVX2, hanya amp NAM yang dinonaktifkan dengan pesan jelas — seluruh efek lain (overdrive,
           cabinet IR, delay, reverb, tuner, dan sisanya) tetap berjalan penuh. Versi <b>portable</b> tidak
           perlu dipasang dan berjalan di Windows mana pun lewat WASAPI/DirectSound.
@@ -337,28 +369,28 @@
 
   <section>
     <div class="wrap">
-      <p class="eyebrow">Unduh</p>
-      <h2>Pilih rasa yang cocok.</h2>
-      <p class="sub">Taruh di folder mana saja lalu jalankan — antarmukanya terbuka di jendelanya sendiri.</p>
+      <p class="eyebrow" data-i18n="dl_eyebrow">Unduh</p>
+      <h2 data-i18n="dl_h2">Pilih rasa yang cocok.</h2>
+      <p class="sub" data-i18n="dl_sub">Taruh di folder mana saja lalu jalankan — antarmukanya terbuka di jendelanya sendiri.</p>
       <div class="dl">
         <div class="flavour" style="--hue: var(--sage)">
-          <div class="tag">Paling mudah</div>
+          <div class="tag" data-i18n="dl1_tag">Paling mudah</div>
           <h3>Installer</h3>
-          <p><code>MilodikFX-x.x.x-setup.exe</code> — pasang seperti aplikasi biasa, dengan ASIO.</p>
+          <p data-i18n-html="dl1_p"><code>MilodikFX-x.x.x-setup.exe</code> — pasang seperti aplikasi biasa, dengan ASIO.</p>
         </div>
         <div class="flavour" style="--hue: var(--coral)">
-          <div class="tag">Latensi terendah</div>
+          <div class="tag" data-i18n="dl2_tag">Latensi terendah</div>
           <h3>ASIO</h3>
-          <p><code>MilodikFX-x.x.x.exe</code> — exe tunggal dengan dukungan ASIO.</p>
+          <p data-i18n-html="dl2_p"><code>MilodikFX-x.x.x.exe</code> — exe tunggal dengan dukungan ASIO.</p>
         </div>
         <div class="flavour" style="--hue: var(--sky)">
-          <div class="tag">Jalan di mana saja</div>
+          <div class="tag" data-i18n="dl3_tag">Jalan di mana saja</div>
           <h3>Portable</h3>
-          <p><code>MilodikFX-x.x.x-portable.exe</code> — exe tunggal, WASAPI/DirectSound, tanpa dipasang.</p>
+          <p data-i18n-html="dl3_p"><code>MilodikFX-x.x.x-portable.exe</code> — exe tunggal, WASAPI/DirectSound, tanpa dipasang.</p>
         </div>
       </div>
       <p style="margin-top:26px">
-        <a class="btn btn--gold" href="https://github.com/banumelody/MilodikFX/releases/latest">Buka halaman rilis →</a>
+        <a class="btn btn--gold" href="https://github.com/banumelody/MilodikFX/releases/latest" data-i18n="dl_releaseBtn">Buka halaman rilis →</a>
       </p>
     </div>
   </section>
@@ -367,23 +399,246 @@
     <div class="wrap">
       <div class="box">
         <div>
-          <h2>Suka MilodikFX?</h2>
-          <p>Gratis dan sumber terbuka, dikerjakan satu orang di sela waktu. Kalau ia menghemat uangmu dari beli pedal atau plugin, pertimbangkan mentraktir satu kopi.</p>
+          <h2 data-i18n="sup_h2">Suka MilodikFX?</h2>
+          <p data-i18n="sup_p">Gratis dan sumber terbuka, dikerjakan satu orang di sela waktu. Kalau ia menghemat uangmu dari beli pedal atau plugin, pertimbangkan mentraktir satu kopi.</p>
         </div>
-        <a class="btn btn--gold" href="https://github.com/sponsors/banumelody">☕ Jadi sponsor</a>
+        <a class="btn btn--gold" href="https://github.com/sponsors/banumelody" data-i18n="sup_btn">☕ Jadi sponsor</a>
       </div>
     </div>
   </section>
 
   <footer class="site">
     <div class="wrap row">
-      <div>Dibuat oleh <b>Banu Antoro</b> · <a href="https://github.com/banumelody">@banumelody</a></div>
+      <div data-i18n-html="foot_made">Dibuat oleh <b>Banu Antoro</b> · <a href="https://github.com/banumelody">@banumelody</a></div>
       <div>
         <a href="https://github.com/banumelody/MilodikFX/blob/main/LICENSE">AGPLv3</a> ·
         <a href="https://github.com/banumelody/MilodikFX">GitHub</a> ·
-        <a href="https://github.com/sponsors/banumelody">Dukung</a>
+        <a href="https://github.com/sponsors/banumelody" data-i18n="foot_support">Dukung</a>
       </div>
     </div>
   </footer>
+
+  <script>
+    // Bilingual page: Indonesian (default) + English. All visible strings live
+    // here; the initial HTML above stays Indonesian so the page is correct
+    // before JS runs and for crawlers. Values are kept verbatim for 'id'.
+    const I18N = {
+      id: {
+        metaTitle: "MilodikFX — multi-efek gitar & bass realtime untuk Windows",
+        metaDesc: "MilodikFX: satu executable C++/JUCE mandiri untuk memproses gitar dan bass secara realtime di Windows — 11 voicing overdrive/distorsi/fuzz, amp head NAM, cabinet IR, tuner, delay/reverb, channel A/B/C/D, scene, Perform view, modifier LFO/envelope, kontrol MIDI, dan latensi ASIO rendah.",
+        ogTitle: "MilodikFX",
+        ogDesc: "Multi-efek gitar & bass realtime untuk Windows — satu exe mandiri, latensi ASIO rendah, kontrol lengkap ala rig panggung.",
+
+        heroTitle: "Rig gitar &amp; bass-mu, dalam <em>satu</em> aplikasi.",
+        heroLead: "Multi-efek realtime untuk Windows. Satu executable mandiri menjalankan audio engine dan menampilkan antarmukanya di jendelanya sendiri — memproses gitar maupun bass dengan latensi ASIO serendah beberapa milidetik. Tanpa DAW, tanpa tab browser.",
+        ctaDownload: "Unduh versi terbaru",
+        ctaSource: "Kode sumber",
+
+        feat_eyebrow: "Rantai sinyal lengkap",
+        feat_h2: "Semua yang biasanya berupa pedalboard, di dalam satu binari.",
+        feat_sub: "Setiap kartu terikat ke parameter DSP yang hidup, jadi antarmukanya tidak pernah melenceng dari engine.",
+
+        f1_h: "11 voicing overdrive",
+        f1_p: "Dari overdrive transparan sampai distorsi dan fuzz — Tube Screamer, OCD, Marshall-in-a-Box, Centaur, RAT, Big Muff. Kontrol menyesuaikan tipe.",
+        f2_h: "Amp head NAM",
+        f2_p: "Menjalankan capture Neural Amp Modeler (<code>.nam</code>) — memodelkan cara distorsi amp berubah mengikuti seberapa keras kamu bermain.",
+        f3_h: "Cabinet dua IR",
+        f3_p: "Cabinet analitik plus dua slot impulse response yang bisa di-blend, untuk mencampur dua karakter speaker.",
+        f4_h: "Gate, boost, comp, EQ & contour",
+        f4_p: "Noise gate, clean boost, compressor dengan parallel mix, EQ tiga-band, dan contour — seluruh tone shaping sebelum dan sesudah amp.",
+        f5_h: "Tuner gitar & bass",
+        f5_p: "Kromatik, sampai low B bass 5-senar (≈ 31 Hz). Akurat dalam ±5 sen, dengan pemberitahuan pas/rendah/tinggi.",
+        f6_h: "Delay & reverb spillover",
+        f6_p: "Delay dengan damping, ping-pong, dan sinkron tempo; reverb algoritmik/konvolusi. Ekor tetap meluruh saat dimatikan.",
+        f7_h: "Channel A/B/C/D per efek",
+        f7_p: "Tiap blok menyimpan empat sound bernama — Tube Screamer gain rendah di A, gain penuh di B — dipindah seketika, tanpa perlu dua blok. Ala Fractal FM9.",
+        f8_h: "Scene, preset & undo",
+        f8_p: "Empat scene instan yang membawa channel tiap efek; preset penuh dengan metadata, impor/ekspor; dan undo/redo penuh.",
+        f9_h: "Perform view",
+        f9_p: "Layar panggung: nama preset besar, empat tombol scene raksasa, meter LED, tuner besar. Pintasan keyboard 1–4 pindah scene, panah ganti preset.",
+        f10_h: "Modifier — LFO, envelope & pedal ekspresi",
+        f10_p: "Sumber menyapu parameter: LFO ke Master jadi tremolo (bisa dikunci ke tempo), envelope petikan ke Contour jadi auto-wah, pedal ekspresi jadi wah. Knob tetap aktif menyetel titik tengah sapuan.",
+        f11_h: "Kontrol MIDI + footswitch",
+        f11_p: "MIDI Learn ke parameter, scene, atau channel. Wizard 4-tombol memasang footswitch (mis. M-Vave Chocolate) ke Scene 1–4. USB & Bluetooth LE MIDI.",
+        f12_h: "Metronome & tap tempo",
+        f12_p: "Satu tempo untuk seluruh app — metronome berdenting di situ, delay yang di-sync ikut. Tap tempo di mana saja.",
+        f13_h: "Cek update otomatis",
+        f13_p: "Aplikasi memeriksa GitHub Releases saat dibuka dan memunculkan pemberitahuan bila ada versi baru. Perbandingan versi yang benar (0.9 vs 0.10).",
+        f14_h: "Latensi ASIO rendah",
+        f14_p: "Dengan ASIO turun sampai 32 sampel; tanpa SDK jatuh mulus ke WASAPI. ~7,6% DSP dengan semua efek menyala.",
+        f15_h: "Looper",
+        f15_p: "Rekam satu frasa lalu bermain di atasnya — overdub berlapis, dicampur setelah master jadi loop tetap berbunyi walau bypass. Kendali kaki lewat footswitch.",
+
+        voice_eyebrow: "Sebelas pedal, satu blok",
+        voice_h2: "Voicing sebagai tabel data, bukan cabang kode per pedal.",
+        voice_sub: "Preset lama tetap berbunyi persis sama karena urutan tipenya append-only.",
+
+        spec_eyebrow: "Spesifikasi minimum",
+        spec_h2: "Ringan. Berjalan di komputer yang sudah kamu punya.",
+        spec_sub: "Satu exe ~8 MB tanpa dependensi terpisah. Yang berikut ini cukup untuk menjalankan seluruh chain.",
+        spec_dt_system: "Sistem",
+        spec_dd_system: "<b>Windows 10 atau 11</b>, 64-bit",
+        spec_dt_cpu: "Prosesor",
+        spec_dd_cpu: "x64 mana pun. Amp <b>NAM</b> membutuhkan <b>AVX2</b> (CPU sekitar 2013 ke atas)",
+        spec_dt_mem: "Memori",
+        spec_dd_mem: "<b>4 GB</b> RAM",
+        spec_dt_storage: "Penyimpanan",
+        spec_dd_storage: "~<b>20 MB</b> ruang kosong",
+        spec_dt_audio: "Audio",
+        spec_dd_audio: "Interface apa pun. <b>ASIO</b> untuk latensi terendah; <b>WASAPI</b>/DirectSound sebagai fallback",
+        spec_dt_runtime: "Runtime",
+        spec_dd_runtime: "<b>Edge WebView2</b> — sudah terpasang di Windows 10/11 modern",
+        spec_note: "Tanpa AVX2, hanya amp NAM yang dinonaktifkan dengan pesan jelas — seluruh efek lain (overdrive, cabinet IR, delay, reverb, tuner, dan sisanya) tetap berjalan penuh. Versi <b>portable</b> tidak perlu dipasang dan berjalan di Windows mana pun lewat WASAPI/DirectSound.",
+
+        dl_eyebrow: "Unduh",
+        dl_h2: "Pilih rasa yang cocok.",
+        dl_sub: "Taruh di folder mana saja lalu jalankan — antarmukanya terbuka di jendelanya sendiri.",
+        dl1_tag: "Paling mudah",
+        dl1_p: "<code>MilodikFX-x.x.x-setup.exe</code> — pasang seperti aplikasi biasa, dengan ASIO.",
+        dl2_tag: "Latensi terendah",
+        dl2_p: "<code>MilodikFX-x.x.x.exe</code> — exe tunggal dengan dukungan ASIO.",
+        dl3_tag: "Jalan di mana saja",
+        dl3_p: "<code>MilodikFX-x.x.x-portable.exe</code> — exe tunggal, WASAPI/DirectSound, tanpa dipasang.",
+        dl_releaseBtn: "Buka halaman rilis →",
+
+        sup_h2: "Suka MilodikFX?",
+        sup_p: "Gratis dan sumber terbuka, dikerjakan satu orang di sela waktu. Kalau ia menghemat uangmu dari beli pedal atau plugin, pertimbangkan mentraktir satu kopi.",
+        sup_btn: "☕ Jadi sponsor",
+
+        foot_made: 'Dibuat oleh <b>Banu Antoro</b> · <a href="https://github.com/banumelody">@banumelody</a>',
+        foot_support: "Dukung"
+      },
+      en: {
+        metaTitle: "MilodikFX — realtime guitar & bass multi-effects for Windows",
+        metaDesc: "MilodikFX: a single self-contained C++/JUCE executable for processing guitar and bass in realtime on Windows — 11 overdrive/distortion/fuzz voicings, a NAM amp head, cabinet IR, tuner, delay/reverb, A/B/C/D channels, scenes, Perform view, LFO/envelope modifiers, MIDI control, and low ASIO latency.",
+        ogTitle: "MilodikFX",
+        ogDesc: "Realtime guitar & bass multi-effects for Windows — one self-contained exe, low ASIO latency, full stage-rig control.",
+
+        heroTitle: "Your guitar &amp; bass rig, in <em>one</em> app.",
+        heroLead: "Realtime multi-effects for Windows. A single self-contained executable runs the audio engine and shows its interface in its own window — processing both guitar and bass with ASIO latency as low as a few milliseconds. No DAW, no browser tab.",
+        ctaDownload: "Download the latest version",
+        ctaSource: "Source code",
+
+        feat_eyebrow: "The complete signal chain",
+        feat_h2: "Everything that's usually a pedalboard, inside one binary.",
+        feat_sub: "Every card is bound to a live DSP parameter, so the interface never drifts from the engine.",
+
+        f1_h: "11 overdrive voicings",
+        f1_p: "From transparent overdrive to distortion and fuzz — Tube Screamer, OCD, Marshall-in-a-Box, Centaur, RAT, Big Muff. The controls adapt to the type.",
+        f2_h: "NAM amp head",
+        f2_p: "Runs Neural Amp Modeler captures (<code>.nam</code>) — modelling how an amp's distortion changes with how hard you play.",
+        f3_h: "Two-IR cabinet",
+        f3_p: "An analytic cabinet plus two impulse-response slots you can blend, to mix two speaker characters.",
+        f4_h: "Gate, boost, comp, EQ & contour",
+        f4_p: "Noise gate, clean boost, compressor with parallel mix, three-band EQ, and contour — all the tone shaping before and after the amp.",
+        f5_h: "Guitar & bass tuner",
+        f5_p: "Chromatic, down to a 5-string bass low B (≈ 31 Hz). Accurate to ±5 cents, with in-tune/flat/sharp cues.",
+        f6_h: "Delay & reverb spillover",
+        f6_p: "Delay with damping, ping-pong, and tempo sync; algorithmic/convolution reverb. The tail keeps decaying when you switch it off.",
+        f7_h: "A/B/C/D channels per effect",
+        f7_p: "Every block stores four named sounds — a low-gain Tube Screamer in A, full gain in B — switched instantly, no need for two blocks. Fractal FM9 style.",
+        f8_h: "Scenes, presets & undo",
+        f8_p: "Four instant scenes that carry each effect's channel; full presets with metadata, import/export; and full undo/redo.",
+        f9_h: "Perform view",
+        f9_p: "A stage screen: big preset name, four giant scene buttons, LED meters, a large tuner. Keyboard shortcuts 1–4 switch scenes, arrows change presets.",
+        f10_h: "Modifiers — LFO, envelope & expression pedal",
+        f10_p: "A source sweeps a parameter: an LFO on Master gives you tremolo (lockable to the tempo), a pick envelope on Contour gives you auto-wah, an expression pedal gives you wah. The knob stays live, setting the sweep's centre.",
+        f11_h: "MIDI + footswitch control",
+        f11_p: "MIDI Learn to a parameter, scene, or channel. A 4-button wizard maps a footswitch (e.g. the M-Vave Chocolate) to Scenes 1–4. USB & Bluetooth LE MIDI.",
+        f12_h: "Metronome & tap tempo",
+        f12_p: "One tempo for the whole app — the metronome clicks to it, a synced delay follows along. Tap tempo anywhere.",
+        f13_h: "Automatic update check",
+        f13_p: "The app checks GitHub Releases on launch and raises a notice when there's a new version. Correct version comparison (0.9 vs 0.10).",
+        f14_h: "Low ASIO latency",
+        f14_p: "With ASIO it drops to 32 samples; without the SDK it falls back smoothly to WASAPI. ~7.6% DSP with every effect on.",
+        f15_h: "Looper",
+        f15_p: "Record a phrase and play over it — layered overdubs, mixed in after the master so the loop keeps sounding through a bypass. Hands-free via a footswitch.",
+
+        voice_eyebrow: "Eleven pedals, one block",
+        voice_h2: "Voicings as a data table, not a code branch per pedal.",
+        voice_sub: "Old presets still sound exactly the same because the type order is append-only.",
+
+        spec_eyebrow: "Minimum requirements",
+        spec_h2: "Lightweight. Runs on the computer you already have.",
+        spec_sub: "A single ~8 MB exe with no separate dependencies. The following is enough to run the whole chain.",
+        spec_dt_system: "System",
+        spec_dd_system: "<b>Windows 10 or 11</b>, 64-bit",
+        spec_dt_cpu: "Processor",
+        spec_dd_cpu: "Any x64. The <b>NAM</b> amp needs <b>AVX2</b> (CPUs from around 2013 onward)",
+        spec_dt_mem: "Memory",
+        spec_dd_mem: "<b>4 GB</b> RAM",
+        spec_dt_storage: "Storage",
+        spec_dd_storage: "~<b>20 MB</b> of free space",
+        spec_dt_audio: "Audio",
+        spec_dd_audio: "Any interface. <b>ASIO</b> for the lowest latency; <b>WASAPI</b>/DirectSound as a fallback",
+        spec_dt_runtime: "Runtime",
+        spec_dd_runtime: "<b>Edge WebView2</b> — already installed on modern Windows 10/11",
+        spec_note: "Without AVX2, only the NAM amp is disabled, with a clear message — every other effect (overdrive, cabinet IR, delay, reverb, tuner, and the rest) still runs in full. The <b>portable</b> version needs no installation and runs on any Windows via WASAPI/DirectSound.",
+
+        dl_eyebrow: "Download",
+        dl_h2: "Pick the flavour that fits.",
+        dl_sub: "Drop it in any folder and run it — the interface opens in its own window.",
+        dl1_tag: "Easiest",
+        dl1_p: "<code>MilodikFX-x.x.x-setup.exe</code> — install it like a normal app, with ASIO.",
+        dl2_tag: "Lowest latency",
+        dl2_p: "<code>MilodikFX-x.x.x.exe</code> — a single exe with ASIO support.",
+        dl3_tag: "Runs anywhere",
+        dl3_p: "<code>MilodikFX-x.x.x-portable.exe</code> — a single exe, WASAPI/DirectSound, no install.",
+        dl_releaseBtn: "Open the releases page →",
+
+        sup_h2: "Like MilodikFX?",
+        sup_p: "Free and open source, built by one person in spare moments. If it saves you money on pedals or plugins, consider buying it a coffee.",
+        sup_btn: "☕ Become a sponsor",
+
+        foot_made: 'Made by <b>Banu Antoro</b> · <a href="https://github.com/banumelody">@banumelody</a>',
+        foot_support: "Support"
+      }
+    };
+
+    function setMeta(attr, name, value) {
+      if (value == null) return;
+      const el = document.querySelector('meta[' + attr + '="' + name + '"]');
+      if (el) el.setAttribute('content', value);
+    }
+
+    function setLang(lang) {
+      if (!I18N[lang]) lang = 'id';
+      const dict = I18N[lang];
+
+      document.documentElement.lang = lang;
+
+      document.querySelectorAll('[data-i18n]').forEach(function (el) {
+        const key = el.getAttribute('data-i18n');
+        if (dict[key] != null) el.textContent = dict[key];
+      });
+      document.querySelectorAll('[data-i18n-html]').forEach(function (el) {
+        const key = el.getAttribute('data-i18n-html');
+        if (dict[key] != null) el.innerHTML = dict[key];
+      });
+
+      if (dict.metaTitle) document.title = dict.metaTitle;
+      setMeta('name', 'description', dict.metaDesc);
+      setMeta('property', 'og:title', dict.ogTitle);
+      setMeta('property', 'og:description', dict.ogDesc);
+
+      document.querySelectorAll('.lang-switch button[data-lang]').forEach(function (btn) {
+        btn.setAttribute('aria-pressed', String(btn.getAttribute('data-lang') === lang));
+      });
+
+      try { localStorage.setItem('milodikfx.lang', lang); } catch (e) {}
+    }
+
+    (function () {
+      let saved = 'id';
+      try { saved = localStorage.getItem('milodikfx.lang') || 'id'; } catch (e) {}
+      if (!I18N[saved]) saved = 'id';
+
+      document.querySelectorAll('.lang-switch button[data-lang]').forEach(function (btn) {
+        btn.addEventListener('click', function () { setLang(btn.getAttribute('data-lang')); });
+      });
+
+      setLang(saved);
+    })();
+  </script>
 </body>
 </html>
