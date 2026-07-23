@@ -331,4 +331,30 @@ describe('MidiMapping', () => {
       await screen.findByText('Tidak bisa membuka perangkat MIDI: FCB1010'),
     ).toBeInTheDocument();
   });
+
+  it('starts the 4-button wizard by learning Scene 1 first', async () => {
+    const user = userEvent.setup();
+    await renderPanel();
+
+    await user.click(screen.getByRole('button', { name: 'Wizard 4-tombol' }));
+
+    expect(learnMidi).toHaveBeenCalledWith({ kind: 'scene', index: 0, mode: 'toggle' });
+    expect(await screen.findByText(/Wizard footswitch \(1\/4\)/)).toBeInTheDocument();
+  });
+
+  it('cancels the 4-button wizard and disarms learn', async () => {
+    const user = userEvent.setup();
+    await renderPanel();
+
+    await user.click(screen.getByRole('button', { name: 'Wizard 4-tombol' }));
+    expect(await screen.findByText(/Wizard footswitch/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Batal wizard' }));
+
+    // Called with no target = disarm.
+    expect(learnMidi).toHaveBeenLastCalledWith();
+    await waitFor(() =>
+      expect(screen.queryByText(/Wizard footswitch/)).not.toBeInTheDocument(),
+    );
+  });
 });

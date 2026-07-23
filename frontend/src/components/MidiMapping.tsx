@@ -163,7 +163,55 @@ function MidiMappingBase({ effects, disabled = false }: MidiMappingProps) {
     void run(() => learnMidi(chosen.target));
   }, [byKey, target, run]);
 
+  // Sequential setup for a 4-button footswitch (an M-Vave Chocolate, say): arm
+  // learn for scene 1, wait for the press to bind it, then scene 2, and so on.
+  // Learning the presses beats hardcoding factory CC numbers -- those vary by
+  // firmware and the user can change them in the pedal's own app.
+  const [wizardStep, setWizardStep] = useState(-1);
+  const prevLearning = useRef<MidiMappingEntry | null>(null);
+
+  const armWizardScene = useCallback(async (index: number) => {
+    try {
+      setState(await learnMidi({ kind: 'scene', index, mode: 'toggle' }));
+      setError(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+      setWizardStep(-1);
+    }
+  }, []);
+
+  const startWizard = useCallback(() => {
+    setWizardStep(0);
+    void armWizardScene(0);
+  }, [armWizardScene]);
+
+  const cancelWizard = useCallback(() => {
+    setWizardStep(-1);
+    void run(() => learnMidi());
+  }, [run]);
+
+  // Advance the wizard when the armed learn resolves (a switch was pressed and
+  // bound), which shows up as `learning` going from set back to null.
+  useEffect(() => {
+    const current = state?.learning ?? null;
+    const was = prevLearning.current;
+    prevLearning.current = current;
+
+    if (wizardStep < 0) return;
+
+    if (was && !current) {
+      if (wizardStep < NUM_SCENES - 1) {
+        const next = wizardStep + 1;
+        setWizardStep(next);
+        void armWizardScene(next);
+      } else {
+        setWizardStep(-1);
+      }
+    }
+  }, [state?.learning, wizardStep, armWizardScene]);
+
   const busy = disabled || state == null;
+  const inWizard = wizardStep >= 0;
   const mappings = state?.mappings ?? [];
 
   return (
@@ -214,7 +262,7 @@ function MidiMappingBase({ effects, disabled = false }: MidiMappingProps) {
         <select
           aria-label="Pasang kontrol ke"
           value={target}
-          disabled={busy || !state?.open}
+          disabled={busy || !state?.open || inWizard}
           onChange={(event) => setTarget(event.target.value)}
         >
           <option value="">Pilih tujuan...</option>
@@ -227,14 +275,31 @@ function MidiMappingBase({ effects, disabled = false }: MidiMappingProps) {
       </label>
 
       <div className="midi__actions">
-        <button
-          type="button"
-          className={`btn${learning ? ' btn--danger' : ''}`}
-          disabled={busy || !state?.open || (!learning && target === '')}
-          onClick={() => (learning ? void run(() => learnMidi()) : startLearn())}
-        >
-          {learning ? 'Batal' : 'MIDI Learn'}
-        </button>
+        {inWizard ? (
+          <button type="button" className="btn btn--danger" onClick={cancelWizard}>
+            Batal wizard
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              className={`btn${learning ? ' btn--danger' : ''}`}
+              disabled={busy || !state?.open || (!learning && target === '')}
+              onClick={() => (learning ? void run(() => learnMidi()) : startLearn())}
+            >
+              {learning ? 'Batal' : 'MIDI Learn'}
+            </button>
+            <button
+              type="button"
+              className="btn btn--ghost"
+              disabled={busy || !state?.open || learning !== null}
+              title="Pasang 4 tombol footswitch ke Scene 1-4, satu per satu"
+              onClick={startWizard}
+            >
+              Wizard 4-tombol
+            </button>
+          </>
+        )}
 
         {state && state.lastCc >= 0 ? (
           <span className="midi__last">
@@ -243,7 +308,15 @@ function MidiMappingBase({ effects, disabled = false }: MidiMappingProps) {
         ) : null}
       </div>
 
-      {learning ? (
+      {inWizard ? (
+        <p className="panel__hint" role="status">
+          <strong>
+            Wizard footswitch ({wizardStep + 1}/{NUM_SCENES}):
+          </strong>{' '}
+          injak tombol yang mau dipasang ke <strong>Scene {wizardStep + 1}</strong>. Injak satu per
+          satu — tombol berikutnya menyusul otomatis.
+        </p>
+      ) : learning ? (
         <p className="panel__hint" role="status">
           Menunggu... gerakkan knob atau injak footswitch untuk memasangnya ke{' '}
           <strong>{describe(learning)}</strong>.

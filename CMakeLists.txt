@@ -33,6 +33,13 @@ FetchContent_MakeAvailable(juce)
 # ---------------------------------------------------------------------------
 option(MILODIKFX_ENABLE_WEBVIEW "Render the UI in-process with WebView2" ON)
 
+# JUCE's WinRT MIDI backend is the only one on Windows that sees Bluetooth LE
+# MIDI devices (e.g. an M-Vave Chocolate paired in Settings). It also handles
+# ordinary USB MIDI, so it is a superset -- default ON. JUCE labels it
+# experimental; if a machine's WinRT MIDI misbehaves, a build with this OFF falls
+# back to the classic WinMM backend (USB only).
+option(MILODIKFX_WINRT_MIDI "Use JUCE's WinRT MIDI backend (adds Bluetooth LE MIDI)" ON)
+
 set(MILODIKFX_WEBVIEW2_VERSION "1.0.2903.40" CACHE STRING "Microsoft.Web.WebView2 NuGet package version")
 
 if(MILODIKFX_ENABLE_WEBVIEW AND WIN32)
@@ -344,6 +351,7 @@ target_compile_definitions(MilodikFX
     MILODIKFX_ENABLE_WEBVIEW=$<BOOL:${MILODIKFX_ENABLE_WEBVIEW}>
     MILODIKFX_EMBED_UI=${MILODIKFX_HAS_EMBEDDED_UI}
     MILODIKFX_VERSION="${PROJECT_VERSION}"
+    JUCE_USE_WINRT_MIDI=$<BOOL:${MILODIKFX_WINRT_MIDI}>
 )
 
 if(MILODIKFX_HAS_EMBEDDED_UI)
