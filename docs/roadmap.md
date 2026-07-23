@@ -49,7 +49,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 
 - P6-1 Channel A/B/C/D + P6-4 spillover antar-preset + P6-5 MIDI/scene→channel — **SELESAI (v0.17.0–v0.18.0)**. Channel per efek (`ChannelStore`), scene kini juga menyimpan+memanggil channel per efek, dan MIDI bisa memetakan CC ke scene/channel (footswitch panggil scene). Sisa FM9: P6-2 (modifier) dan P6-3 (perform view).
 
-**Belum:** P4-5 (looper), P6-2 (modifier — didetailkan dari P4-4, satu-satunya item FM9 tersisa).
+**Belum:** P4-5 (looper — mandiri, selalu paling akhir). Seluruh adaptasi FM9 (P6-1..P6-5) dan audit optimasi (P5-2..P5-5) sudah terkirim.
 
 **Kenapa empat itu belum, per 22 Jul 2026:**
 
@@ -58,7 +58,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - **P4-5 Looper** — mandiri dan tidak menyentuh arsitektur lain, tapi bukan kebutuhan inti; paling akhir sejak awal.
 - **P2-5 Multi-view** — sidebar masih terbaca dalam satu layar, jadi tab Perform/Edit/Library/Settings belum menyelesaikan masalah nyata. Akan terasa perlu begitu panelnya bertambah lagi.
 
-**Rilis terbaru:** v0.19.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.19.0
+**Rilis terbaru:** v0.20.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.20.0
 
 **Catatan P4-1 yang lahir dari implementasi:** tiga hal yang hanya ketahuan lewat pengukuran, bukan pembacaan kode. (1) Split butuh dua filter sungguhan; mengurangi salinan low-pass *tampak* setara tapi menyisakan selisih fasa yang lalu kena gain penuh clipper — Tube Screamer terukur mendistorsi bass lebih keras daripada drive full-range, persis terbalik. (2) Tahap kaskade harus membagi gain; dua tahap gain penuh mengotakkan sinyal, DC blocker menengahkannya, dan harmonik genap — alasan utama memilih voicing asimetris — hilang sama sekali. (3) Test harmoniknya sempat mengukur kebocoran spektralnya sendiri; di luar bin analisis, fundamental menyebar di sekitar −43 dB, satu orde dengan harmonik yang diukur, sehingga kurva simetris tampak punya harmonik genap sebanyak yang asimetris. Tepat di bin, kurva simetris terbaca 0,000000.
 
@@ -749,7 +749,11 @@ tidak ada.
 
 **Effort:** ~1.5–2 weekend. **Ketergantungan:** tidak ada; sebaiknya sebelum P6-3.
 
-### P6-2. Modifier — mendetailkan P4-4 dengan model FM9
+### P6-2. Modifier — mendetailkan P4-4 dengan model FM9 — INTI SELESAI (v0.20.0)
+
+> **Terkirim.** `ModulationEngine` (`src/dsp/ModulationEngine.*`): empat slot tetap, sumber **LFO** (sinus/segitiga/kotak) dan **envelope follower** menyapu satu parameter numerik antara `low` dan `high`, dievaluasi per blok audio di depan chain (dari callback audio, pakai magnitudo input untuk envelope). Realtime-safe: tanpa alokasi/lock, target dipublikasikan dengan release/acquire, nilai ditulis lewat closure `set` parameter (atomic store, sama seperti MIDI CC), phase/env milik audio thread (reset lewat flag), dan mematikan modifier mengembalikan nilai pra-modulasi (dilakukan audio thread blok pertama setelah nonaktif). API `/api/modifiers` (GET/PUT/DELETE), persist di settings. UI: panel Modifier (pilih parameter/sumber/rentang/rate) + knob yang dimodulasi jadi nonaktif dengan tag **MOD**. Diuji: 6 test `ModulationEngine` (sapuan LFO, restore, envelope, clamp, validasi, laporan), 3 test panel + 1 test knob-MOD, 1 E2E. **Yang belum (menyusul):** model base+offset (knob tetap set titik tengah), sumber pedal ekspresi (butuh nilai per-CC dari MidiController), dan sync tempo LFO. Desain asli di bawah.
+
+
 
 P4-4 selama ini berhenti di "desain dulu". Ini desainnya, meniru bentuk FM9:
 
@@ -889,7 +893,7 @@ settings tetap lewat message thread seperti sekarang. UI MIDI Learn mendapat dua
 | 37 | UpdateHandler fetch di luar lock + SSE 1-baris ✅ | P5-4 | ~1–2 jam | selesai (v0.16.0) |
 | 38 | Oversampling default per voicing ✅ | P5-5 | ~2–3 jam | selesai (v0.16.0) |
 | 39 | Channel A/B/C/D per efek ✅ | P6-1 | ~1.5–2 weekend | selesai (v0.17.0); tautan scene→channel di v0.18.0 |
-| 40 | Modifier (desain FM9, menggantikan P4-4) | P6-2 | ~1.5–2 weekend | — |
+| 40 | Modifier (desain FM9, menggantikan P4-4) ✅ (inti) | P6-2 | ~1.5–2 weekend | inti selesai (v0.20.0); base+offset & expression menyusul |
 | 41 | Perform view (menyerap P2-5) ✅ (inti) | P6-3 | ~1–1.5 weekend | inti selesai (v0.19.0); pinned knobs menyusul |
 | 42 | Spillover antar preset (verifikasi) ✅ | P6-4 | ~2–4 jam | selesai |
 | 43 | MIDI → scene & channel ✅ | P6-5 | ~0.5 weekend | selesai (v0.18.0) |
