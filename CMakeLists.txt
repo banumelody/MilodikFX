@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(MilodikFX VERSION 0.19.0 LANGUAGES CXX)
+project(MilodikFX VERSION 0.20.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -226,6 +226,8 @@ set(MILODIKFX_ENGINE_SOURCES
   src/dsp/MetronomeProcessor.cpp
   src/dsp/TunerAnalyzer.h
   src/dsp/TunerAnalyzer.cpp
+  src/dsp/ModulationEngine.h
+  src/dsp/ModulationEngine.cpp
   src/dsp/IrEngine.h
   src/dsp/IrEngine.cpp
   src/dsp/DSPChainManager.h
@@ -306,6 +308,7 @@ target_sources(MilodikFX
     src/api/RestApiDispatcher.h
     src/api/HealthHandler.h
     src/api/UpdateHandler.h
+    src/api/ModulationHandler.h
     src/api/DevicesHandler.h
     src/api/DevicesHandler.cpp
     src/api/ParametersHandler.h
@@ -492,6 +495,7 @@ target_sources(MilodikFX_tests
     tests/InputTrimTests.cpp
     tests/DriveVoicingTests.cpp
     tests/UpdateTests.cpp
+    tests/ModulationTests.cpp
     tests/NamTests.cpp
     tests/PerformanceTests.cpp
     ${MILODIKFX_ENGINE_SOURCES}

@@ -2,6 +2,7 @@
 
 #include "api/HealthHandler.h"
 #include "api/UpdateHandler.h"
+#include "api/ModulationHandler.h"
 
 #include <cmath>
 
@@ -455,6 +456,37 @@ void MainComponent::loadSettingsIntoRegistry()
     {
         channelStore.resetToCurrent();
     }
+
+    // Modifiers (tremolo, auto-wah) come back too. They reference a parameter by
+    // id, so they load after the registry is built and its values restored.
+    using Source = milodikfx::dsp::ModulationEngine::Source;
+
+    for (int slot = 0; slot < milodikfx::dsp::ModulationEngine::kMaxModifiers; ++slot)
+    {
+        const auto prefix = "modifier." + juce::String (slot) + ".";
+        const auto effectId = settingsFile.getValue (prefix + "effect", {});
+
+        if (effectId.isEmpty())
+            continue;
+
+        const auto parameterId = settingsFile.getValue (prefix + "parameter", {});
+        const auto* target = registry.findParameter (effectId.toStdString(), parameterId.toStdString());
+
+        if (target == nullptr)
+            continue;
+
+        const auto sourceStr = settingsFile.getValue (prefix + "source", "lfoSine");
+        const auto source = sourceStr == "lfoTriangle" ? Source::lfoTriangle
+                          : sourceStr == "lfoSquare"   ? Source::lfoSquare
+                          : sourceStr == "envelope"    ? Source::envelope
+                                                       : Source::lfoSine;
+
+        modulationEngine.setModifier (slot, target,
+                                      effectId.toStdString(), parameterId.toStdString(), source,
+                                      (float) settingsFile.getDoubleValue (prefix + "low", 0.0),
+                                      (float) settingsFile.getDoubleValue (prefix + "high", 0.0),
+                                      (float) settingsFile.getDoubleValue (prefix + "rate", 1.0));
+    }
 }
 
 void MainComponent::markSettingsDirty()
@@ -493,6 +525,33 @@ void MainComponent::saveSettingsIfNeeded (bool force)
 
     settingsFile.setValue (kKeyScenes, juce::JSON::toString (sceneManager.toVar(), true));
     settingsFile.setValue (kKeyChannels, juce::JSON::toString (channelStore.toVar(), true));
+
+    for (int slot = 0; slot < milodikfx::dsp::ModulationEngine::kMaxModifiers; ++slot)
+    {
+        const auto prefix = "modifier." + juce::String (slot) + ".";
+        const auto info = modulationEngine.getModifier (slot);
+
+        if (! info.active)
+        {
+            for (const auto* suffix : { "effect", "parameter", "source", "low", "high", "rate" })
+                if (settingsFile.containsKey (prefix + suffix))
+                    settingsFile.removeValue (prefix + suffix);
+
+            continue;
+        }
+
+        const auto sourceName = info.source == (int) milodikfx::dsp::ModulationEngine::Source::lfoTriangle ? "lfoTriangle"
+                              : info.source == (int) milodikfx::dsp::ModulationEngine::Source::lfoSquare   ? "lfoSquare"
+                              : info.source == (int) milodikfx::dsp::ModulationEngine::Source::envelope    ? "envelope"
+                                                                                                           : "lfoSine";
+
+        settingsFile.setValue (prefix + "effect", juce::String (info.effectId));
+        settingsFile.setValue (prefix + "parameter", juce::String (info.parameterId));
+        settingsFile.setValue (prefix + "source", sourceName);
+        settingsFile.setValue (prefix + "low", info.low);
+        settingsFile.setValue (prefix + "high", info.high);
+        settingsFile.setValue (prefix + "rate", info.rateHz);
+    }
 
     settingsFile.saveIfNeeded();
 
@@ -574,6 +633,10 @@ void MainComponent::startServer()
     webServer->registerApiHandler ("/api/history", historyHandler);
     webServer->registerApiHandler ("/api/health", std::make_shared<HealthHandler>());
     webServer->registerApiHandler ("/api/update", std::make_shared<UpdateHandler>());
+
+    auto modulationHandler = std::make_shared<ModulationHandler> (registry, modulationEngine);
+    modulationHandler->onChanged = [this] { markSettingsDirty(); };
+    webServer->registerApiHandler ("/api/modifiers", modulationHandler);
 
     // Meters over one held-open connection instead of a fresh HTTP request every
     // 100 ms, which on a thread-per-connection server meant a thread per poll.
@@ -697,6 +760,7 @@ void MainComponent::audioDeviceAboutToStart (juce::AudioIODevice* device)
 
     audioEngine.prepareToPlay (currentSampleRate, engineBuffer.getNumSamples(), kMaxEngineChannels);
     tunerAnalyzer.prepare (currentSampleRate);
+    modulationEngine.prepare (currentSampleRate);
 
     audioRunning.store (true, std::memory_order_relaxed);
 
@@ -800,6 +864,10 @@ void MainComponent::audioDeviceIOCallbackWithContext (const float* const* inputC
     // a clipped and cabinet-filtered version of it whose harmonics would fool
     // pitch detection. A no-op unless the tuner is actually open.
     tunerAnalyzer.pushSamples (left, samples);
+
+    // Modifiers write their swept values into the parameter atomics just before
+    // the chain reads them. The input magnitude feeds the envelope follower.
+    modulationEngine.process (inputPeak, samples);
 
     audioEngine.processBlock (view);
 

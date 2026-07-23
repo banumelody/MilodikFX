@@ -185,6 +185,25 @@ These are not stylistic; each corresponds to a bug that shipped:
   permanently.
 - `ScopedNoDenormals` in the audio callback; parameter smoothing on every gain.
 
+### Modifiers
+
+`milodikfx::dsp::ModulationEngine` (`src/dsp/ModulationEngine.*`) sweeps a parameter between two values
+with an LFO or the envelope of the input — a tremolo is the master level swept by an LFO, an auto-wah is
+the contour frequency swept by picking. It runs on the audio thread from `MainComponent`'s callback,
+just before the chain reads the parameters (the same spot the tuner taps the input), and is handed the
+block's input magnitude for the envelope follower.
+
+It is *not* in the chain and touches no processor directly: it writes the swept value through the
+parameter's own `set` closure — the plain atomic store a MIDI CC does, not the registry setter with its
+notification. Four fixed slots, no allocation, no lock. The target is a `std::atomic<const
+ParameterDescriptor*>` published with release so the audio thread never reads a half-written descriptor;
+phase and envelope belong to the audio thread alone, reset through a `needsReset` flag the control
+thread raises but never clears; and switching a modifier off restores the pre-modulation value, done by
+the audio thread the first block the slot is inactive so it cannot race a write in flight. While a
+parameter is modulated its knob is inert in the UI (the modifier owns it) and returns when removed — a
+base-plus-offset model, where the knob still sets a centre, is a later refinement. `/api/modifiers`
+(GET/PUT/DELETE); modifiers persist in the settings file under `modifier.<slot>.*`.
+
 ### Drive voicings
 
 `src/dsp/DriveVoicing.h` holds the eight pedal voicings as a table, not a branch per pedal. Type 0 is
@@ -307,7 +326,7 @@ Measured delivery is ~22 Hz against a 33 ms target: Windows rounds a sleep up to
 granularity.
 
 Endpoints: `/api/effects`, `/api/parameters`, `/api/devices`, `/api/levels`, `/api/tuner`, `/api/ir`,
-`/api/nam`, `/api/midi`, `/api/scenes`, `/api/presets`, `/api/health`, `/api/update`.
+`/api/nam`, `/api/midi`, `/api/scenes`, `/api/presets`, `/api/modifiers`, `/api/health`, `/api/update`.
 
 `/api/update` (`UpdateHandler`) reads the newest tag from GitHub Releases and compares it to the
 compiled-in `MILODIKFX_VERSION`, returning `{current, latest, updateAvailable, url}`; the UI raises a

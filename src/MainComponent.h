@@ -21,6 +21,7 @@
 #include "audio/AudioEngine.h"
 #include "dsp/ChainFactory.h"
 #include "dsp/TunerAnalyzer.h"
+#include "dsp/ModulationEngine.h"
 #include "midi/MidiController.h"
 #include "preset/IrLibrary.h"
 #include "preset/PresetManager.h"
@@ -173,6 +174,7 @@ private:
     // Analyses the post-input signal without being part of the chain, so it
     // reads what the pickup sends rather than what the overdrive makes of it.
     milodikfx::dsp::TunerAnalyzer tunerAnalyzer;
+    milodikfx::dsp::ModulationEngine modulationEngine;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };
