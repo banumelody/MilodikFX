@@ -49,7 +49,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 
 - P6-1 Channel A/B/C/D + P6-4 spillover antar-preset + P6-5 MIDI/scene→channel — **SELESAI (v0.17.0–v0.18.0)**. Channel per efek (`ChannelStore`), scene kini juga menyimpan+memanggil channel per efek, dan MIDI bisa memetakan CC ke scene/channel (footswitch panggil scene). Sisa FM9: P6-2 (modifier) dan P6-3 (perform view).
 
-**Belum:** P2-5 (multi-view — diserap ke P6-3), P4-5 (looper), P6-2 (modifier — didetailkan dari P4-4), P6-3 (perform view — adaptasi Fractal FM9).
+**Belum:** P4-5 (looper), P6-2 (modifier — didetailkan dari P4-4, satu-satunya item FM9 tersisa).
 
 **Kenapa empat itu belum, per 22 Jul 2026:**
 
@@ -58,7 +58,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - **P4-5 Looper** — mandiri dan tidak menyentuh arsitektur lain, tapi bukan kebutuhan inti; paling akhir sejak awal.
 - **P2-5 Multi-view** — sidebar masih terbaca dalam satu layar, jadi tab Perform/Edit/Library/Settings belum menyelesaikan masalah nyata. Akan terasa perlu begitu panelnya bertambah lagi.
 
-**Rilis terbaru:** v0.18.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.18.0
+**Rilis terbaru:** v0.19.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.19.0
 
 **Catatan P4-1 yang lahir dari implementasi:** tiga hal yang hanya ketahuan lewat pengukuran, bukan pembacaan kode. (1) Split butuh dua filter sungguhan; mengurangi salinan low-pass *tampak* setara tapi menyisakan selisih fasa yang lalu kena gain penuh clipper — Tube Screamer terukur mendistorsi bass lebih keras daripada drive full-range, persis terbalik. (2) Tahap kaskade harus membagi gain; dua tahap gain penuh mengotakkan sinyal, DC blocker menengahkannya, dan harmonik genap — alasan utama memilih voicing asimetris — hilang sama sekali. (3) Test harmoniknya sempat mengukur kebocoran spektralnya sendiri; di luar bin analisis, fundamental menyebar di sekitar −43 dB, satu orde dengan harmonik yang diukur, sehingga kurva simetris tampak punya harmonik genap sebanyak yang asimetris. Tepat di bin, kurva simetris terbaca 0,000000.
 
@@ -768,7 +768,11 @@ P4-4 selama ini berhenti di "desain dulu". Ini desainnya, meniru bentuk FM9:
 
 **Effort:** ~1.5–2 weekend (estimasi P4-4 tetap).
 
-### P6-3. Perform view — rencana UI/UX (menyerap P2-5)
+### P6-3. Perform view — rencana UI/UX (menyerap P2-5) — INTI SELESAI (v0.19.0)
+
+> **Terkirim.** Saklar **Perform | Edit** di bar atas (pilihan diingat di localStorage). Edit = tampilan lama, tak berubah. Perform (`PerformView.tsx`) = satu layar tanpa scroll: nama preset besar + ‹ ›, BPM besar + tap tempo, **4 tombol scene raksasa** (≥120 px), meter LED In/Out lebar + tombol Tuner/Bypass/Mute besar, dan tuner besar yang menggantikan grid scene saat aktif. Keyboard: **1–4** scene, **←/→** preset, **T** tap (Esc/B tetap global). Diuji: 8 test `PerformView`, 1 E2E. **Yang belum (menyusul):** 8 knob "pin" per preset (butuh simpan pin di metadata preset) dan huruf channel di tombol scene. Rencana desain asli di bawah.
+
+
 
 **Masalah hari ini, dideskripsikan jujur:** UI sekarang adalah satu halaman padat — rack efek di kolom
 kiri, panel-panel (device, tuner, tempo, scene, preset, MIDI, NAM, IR, performa) bertumpuk di kolom
@@ -886,7 +890,7 @@ settings tetap lewat message thread seperti sekarang. UI MIDI Learn mendapat dua
 | 38 | Oversampling default per voicing ✅ | P5-5 | ~2–3 jam | selesai (v0.16.0) |
 | 39 | Channel A/B/C/D per efek ✅ | P6-1 | ~1.5–2 weekend | selesai (v0.17.0); tautan scene→channel di v0.18.0 |
 | 40 | Modifier (desain FM9, menggantikan P4-4) | P6-2 | ~1.5–2 weekend | — |
-| 41 | Perform view (menyerap P2-5) | P6-3 | ~1–1.5 weekend | setelah P6-1, P5-2 |
+| 41 | Perform view (menyerap P2-5) ✅ (inti) | P6-3 | ~1–1.5 weekend | inti selesai (v0.19.0); pinned knobs menyusul |
 | 42 | Spillover antar preset (verifikasi) ✅ | P6-4 | ~2–4 jam | selesai |
 | 43 | MIDI → scene & channel ✅ | P6-5 | ~0.5 weekend | selesai (v0.18.0) |
 
