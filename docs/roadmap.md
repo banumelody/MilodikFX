@@ -47,7 +47,9 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 
 - P5-2..P5-5 Audit optimasi — **SELESAI (22 Jul 2026, v0.16.0)**. P5-2 memoisasi (Knob/Toggle/EffectRack/ChainStrip + panel samping di-`memo`, callback App di-`useCallback` supaya memo bertahan lintas frame meter 22 Hz). P5-3 tuner lewat SSE (`/api/tuner/stream`), menggantikan poll 60 ms yang membuka ~17 socket/detik. P5-4 `UpdateHandler` fetch di luar lock + payload SSE satu-baris (`jsonOkCompact`). P5-5 default oversampling per voicing saat memilih tipe dari dropdown (fuzz dapat headroom, clean boost tidak).
 
-**Belum:** P2-5 (multi-view — diserap ke P6-3), P4-4 (modifier — didetailkan jadi P6-2), P4-5 (looper), P6-1–P6-5 (adaptasi Fractal FM9).
+- P6-1 Channel A/B/C/D + P6-4 spillover antar-preset + P6-5 MIDI/scene→channel — **SELESAI (v0.17.0–v0.18.0)**. Channel per efek (`ChannelStore`), scene kini juga menyimpan+memanggil channel per efek, dan MIDI bisa memetakan CC ke scene/channel (footswitch panggil scene). Sisa FM9: P6-2 (modifier) dan P6-3 (perform view).
+
+**Belum:** P2-5 (multi-view — diserap ke P6-3), P4-5 (looper), P6-2 (modifier — didetailkan dari P4-4), P6-3 (perform view — adaptasi Fractal FM9).
 
 **Kenapa empat itu belum, per 22 Jul 2026:**
 
@@ -56,7 +58,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - **P4-5 Looper** — mandiri dan tidak menyentuh arsitektur lain, tapi bukan kebutuhan inti; paling akhir sejak awal.
 - **P2-5 Multi-view** — sidebar masih terbaca dalam satu layar, jadi tab Perform/Edit/Library/Settings belum menyelesaikan masalah nyata. Akan terasa perlu begitu panelnya bertambah lagi.
 
-**Rilis terbaru:** v0.16.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.16.0
+**Rilis terbaru:** v0.18.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.18.0
 
 **Catatan P4-1 yang lahir dari implementasi:** tiga hal yang hanya ketahuan lewat pengukuran, bukan pembacaan kode. (1) Split butuh dua filter sungguhan; mengurangi salinan low-pass *tampak* setara tapi menyisakan selisih fasa yang lalu kena gain penuh clipper — Tube Screamer terukur mendistorsi bass lebih keras daripada drive full-range, persis terbalik. (2) Tahap kaskade harus membagi gain; dua tahap gain penuh mengotakkan sinyal, DC blocker menengahkannya, dan harmonik genap — alasan utama memilih voicing asimetris — hilang sama sekali. (3) Test harmoniknya sempat mengukur kebocoran spektralnya sendiri; di luar bin analisis, fundamental menyebar di sekitar −43 dB, satu orde dengan harmonik yang diukur, sehingga kurva simetris tampak punya harmonik genap sebanyak yang asimetris. Tepat di bin, kurva simetris terbaca 0,000000.
 
@@ -815,7 +817,11 @@ aktif, delay dimatikan seperti load preset, blok senyap berikutnya masih membawa
 delay saat ekor berbunyi sudah aman sejak dulu (read offset di-smooth, alokasi delay line maksimal sejak
 prepare).
 
-### P6-5. MIDI → scene & channel
+### P6-5. MIDI → scene & channel — SELESAI (v0.18.0)
+
+> **Terkirim.** `Mapping` sekarang punya `kind` (parameter/scene/channel) + `index`; `applyControlChange` menangani scene/channel pada tekan (di-post ke message thread lewat `onSceneRecall`/`onChannelSelect`). `SceneManager` juga menyimpan indeks channel per efek dan memanggilnya saat recall (tautan scene→channel yang tertunda dari P6-1). API `learn`/`PUT mappings` menerima `kind`; UI MidiMapping menawarkan target Scene 1–4 dan Channel A/B/C/D. Serialisasi settings `midi.cc.<n>.{kind,effect,parameter,index,mode}`, back-compat file lama. Diuji: 3 test dispatch backend + scene→channel di `SceneTests`, 1 test frontend, 1 E2E.
+
+
 
 Mapping MIDI sekarang hanya CC→parameter dan PC→preset (diverifikasi di `MidiController.cpp`). Untuk
 panggung, scene (dan setelah P6-1, channel) harus bisa dipanggil dari kaki: perluas target mapping
@@ -878,11 +884,11 @@ settings tetap lewat message thread seperti sekarang. UI MIDI Learn mendapat dua
 | 36 | Tuner lewat SSE ✅ | P5-3 | ~2–3 jam | selesai (v0.16.0) |
 | 37 | UpdateHandler fetch di luar lock + SSE 1-baris ✅ | P5-4 | ~1–2 jam | selesai (v0.16.0) |
 | 38 | Oversampling default per voicing ✅ | P5-5 | ~2–3 jam | selesai (v0.16.0) |
-| 39 | Channel A/B/C/D per efek ✅ (inti) | P6-1 | ~1.5–2 weekend | inti selesai (v0.17.0); tautan scene→channel menyusul di P6-5 |
+| 39 | Channel A/B/C/D per efek ✅ | P6-1 | ~1.5–2 weekend | selesai (v0.17.0); tautan scene→channel di v0.18.0 |
 | 40 | Modifier (desain FM9, menggantikan P4-4) | P6-2 | ~1.5–2 weekend | — |
 | 41 | Perform view (menyerap P2-5) | P6-3 | ~1–1.5 weekend | setelah P6-1, P5-2 |
 | 42 | Spillover antar preset (verifikasi) ✅ | P6-4 | ~2–4 jam | selesai |
-| 43 | MIDI → scene & channel | P6-5 | ~0.5 weekend | setelah P6-1 |
+| 43 | MIDI → scene & channel ✅ | P6-5 | ~0.5 weekend | selesai (v0.18.0) |
 
 Total estimasi kalau semua dikerjakan: kira-kira 27–35 weekend, dengan catatan NAM adalah yang paling tidak pasti dan bisa melar jauh dari estimasi tergantung hasil tahap riset.
 
