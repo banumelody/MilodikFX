@@ -34,6 +34,8 @@ export interface PerformViewProps {
   offline: boolean;
   /** Refresh the rack after a scene recall changes the on/off pattern. */
   onScenesRecalled: () => void;
+  /** Bumped when a footswitch changed scenes; the big buttons need to catch up. */
+  refreshToken?: number;
 }
 
 /** A wide LED-style meter, -60..0 dB, for reading across the room. */
@@ -77,6 +79,7 @@ function PerformViewBase({
   onToggleMute,
   offline,
   onScenesRecalled,
+  refreshToken,
 }: PerformViewProps) {
   const [scenes, setScenes] = useState<ScenesState | null>(null);
   const [tunerOn, setTunerOn] = useState(false);
@@ -97,7 +100,7 @@ function PerformViewBase({
 
   useEffect(() => {
     void refreshScenes();
-  }, [refreshScenes]);
+  }, [refreshScenes, refreshToken]);
 
   const recall = useCallback(
     (index: number) => {

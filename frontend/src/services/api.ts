@@ -55,6 +55,12 @@ export interface Levels {
   bufferSize: number;
   audioRunning: boolean;
   floorDb: number;
+  /**
+   * Bumped by the engine whenever something the UI did not initiate changed the
+   * chain -- a footswitch recalling a scene, a MIDI CC moving a parameter. The
+   * UI watches it to know when to refetch. Absent on older engines.
+   */
+  chainVersion?: number;
 }
 
 export interface DeviceState {

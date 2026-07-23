@@ -134,6 +134,13 @@ export function App() {
   );
   const flushTimer = useRef<number | null>(null);
 
+  // Watches the engine's chain version (see the levels subscription). syncToken
+  // increments whenever a MIDI-driven change lands, so the scene views know to
+  // refetch even though they hold their own scene state.
+  const chainVersionRef = useRef<number | undefined>(undefined);
+  const syncTimer = useRef<number | null>(null);
+  const [syncToken, setSyncToken] = useState(0);
+
   const [modulatedParams, setModulatedParams] = useState<Set<string>>(() => new Set());
 
   const refreshEffects = useCallback(async () => {
@@ -240,12 +247,31 @@ export function App() {
             ? appended.slice(appended.length - CPU_HISTORY_LENGTH)
             : appended;
         });
+
+        // The chain changed from somewhere the UI did not drive (a footswitch, a
+        // MIDI CC). Refetch once, debounced, so a burst of CC moves is one round
+        // trip -- and bump a token the scene views watch so they refetch too.
+        const version = next.chainVersion;
+        if (
+          version !== undefined &&
+          chainVersionRef.current !== undefined &&
+          version !== chainVersionRef.current &&
+          syncTimer.current === null
+        ) {
+          syncTimer.current = window.setTimeout(() => {
+            syncTimer.current = null;
+            void refreshEffects();
+            void refreshModifiers();
+            setSyncToken((token) => token + 1);
+          }, 200);
+        }
+        chainVersionRef.current = version;
       },
       () => setConnection('offline'),
     );
 
     return unsubscribe;
-  }, []);
+  }, [refreshEffects, refreshModifiers]);
 
   const flushWrites = useCallback(async () => {
     flushTimer.current = null;
@@ -759,6 +785,7 @@ export function App() {
           onToggleMute={toggleMute}
           offline={offline}
           onScenesRecalled={refreshEffectsVoid}
+          refreshToken={syncToken}
         />
       ) : (
         <>
@@ -811,7 +838,12 @@ export function App() {
             onEnabledChange={toggleEffect}
           />
 
-          <SceneGrid effects={rackEffects} disabled={offline} onRecalled={refreshEffectsVoid} />
+          <SceneGrid
+            effects={rackEffects}
+            disabled={offline}
+            onRecalled={refreshEffectsVoid}
+            refreshToken={syncToken}
+          />
 
           <PresetControls
             presets={presets}

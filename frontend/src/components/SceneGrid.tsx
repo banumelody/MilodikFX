@@ -9,6 +9,8 @@ interface SceneGridProps {
   disabled?: boolean;
   /** Called after a recall, so the rack can pick up the new on/off pattern. */
   onRecalled: () => void;
+  /** Bumped when a footswitch changed scenes elsewhere; triggers a refetch. */
+  refreshToken?: number;
 }
 
 /**
@@ -18,7 +20,7 @@ interface SceneGridProps {
  * SceneManager for why. Clicking a cell edits the stored scene without
  * touching what is playing; the number button recalls it.
  */
-function SceneGridBase({ effects, disabled = false, onRecalled }: SceneGridProps) {
+function SceneGridBase({ effects, disabled = false, onRecalled, refreshToken }: SceneGridProps) {
   const [state, setState] = useState<ScenesState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
@@ -47,9 +49,11 @@ function SceneGridBase({ effects, disabled = false, onRecalled }: SceneGridProps
     }
   }, []);
 
+  // Fetch on mount, and again whenever refreshToken changes -- a footswitch
+  // recalled a scene, so the grid's active row and pattern need to catch up.
   useEffect(() => {
     void run(getScenes);
-  }, [run]);
+  }, [run, refreshToken]);
 
   // Only the effects a scene can actually switch. A stage that is always in
   // the path has no flag to store, so a column for it would never do anything.

@@ -807,6 +807,14 @@ describe('MilodikFX UI against a live engine', () => {
     cy.request('POST', '/api/presets/delete', { name: 'ChannelRoundTrip' });
   });
 
+  it('carries a chain version on the levels payload', () => {
+    // The UI watches this to know when a footswitch or MIDI CC changed the chain
+    // from outside, so it can refetch.
+    cy.request('/api/levels').then(({ body }) => {
+      expect(body.chainVersion, 'levels carries a chain version').to.be.a('number');
+    });
+  });
+
   it('sweeps a parameter with a modifier and restores it on clear', () => {
     cy.request('POST', '/api/effects/overdrive/enabled', { enabled: true });
 
