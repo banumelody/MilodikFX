@@ -18,6 +18,23 @@ Mapping makeMapping (const char* effect, const char* parameter, MappingMode mode
     return mapping;
 }
 
+Mapping sceneMapping (int index)
+{
+    Mapping mapping;
+    mapping.kind = milodikfx::midi::MappingKind::scene;
+    mapping.index = index;
+    return mapping;
+}
+
+Mapping channelMapping (const char* effect, int index)
+{
+    Mapping mapping;
+    mapping.kind = milodikfx::midi::MappingKind::channel;
+    mapping.effectId = effect;
+    mapping.index = index;
+    return mapping;
+}
+
 /** A control change on channel 1, as a footswitch or knob would send it. */
 juce::MidiMessage cc (int controller, int value)
 {
@@ -270,6 +287,70 @@ public:
             expectEquals (seen, 5);
 
             controller.onProgramChange = nullptr;
+        }
+
+        beginTest ("A footswitch mapped to a scene recalls it on press, not release");
+        {
+            auto recalled = -1;
+            controller.onSceneRecall = [&recalled] (int index) { recalled = index; };
+
+            controller.setMapping (48, sceneMapping (2));
+
+            controller.handleIncomingMidiMessage (nullptr, cc (48, 127)); // press
+            expectEquals (recalled, 2);
+
+            recalled = -1;
+            controller.handleIncomingMidiMessage (nullptr, cc (48, 0)); // release
+            expectEquals (recalled, -1, "the release also recalled the scene");
+
+            controller.onSceneRecall = nullptr;
+            controller.clearMapping (48);
+        }
+
+        beginTest ("A footswitch mapped to a channel selects it on press, not release");
+        {
+            juce::String gotEffect;
+            auto gotIndex = -1;
+            controller.onChannelSelect = [&] (juce::String effectId, int index)
+            {
+                gotEffect = effectId;
+                gotIndex = index;
+            };
+
+            controller.setMapping (49, channelMapping ("overdrive", 1));
+
+            controller.handleIncomingMidiMessage (nullptr, cc (49, 127)); // press
+            expectEquals (gotEffect, juce::String ("overdrive"));
+            expectEquals (gotIndex, 1);
+
+            gotIndex = -1;
+            controller.handleIncomingMidiMessage (nullptr, cc (49, 0)); // release
+            expectEquals (gotIndex, -1, "the release also selected the channel");
+
+            controller.onChannelSelect = nullptr;
+            controller.clearMapping (49);
+        }
+
+        beginTest ("Scene and channel mappings round-trip and validate by kind");
+        {
+            controller.setMapping (50, sceneMapping (3));
+            const auto scene = controller.getMapping (50);
+            expect (scene.kind == milodikfx::midi::MappingKind::scene);
+            expectEquals (scene.index, 3);
+            expect (scene.isValid());
+
+            controller.setMapping (51, channelMapping ("delay", 2));
+            const auto channel = controller.getMapping (51);
+            expect (channel.kind == milodikfx::midi::MappingKind::channel);
+            expectEquals (channel.index, 2);
+            expect (channel.isValid());
+
+            // A scene with no slot, or a channel with no effect, is not valid.
+            expect (! sceneMapping (-1).isValid());
+            expect (! channelMapping ("", 1).isValid());
+
+            controller.clearMapping (50);
+            controller.clearMapping (51);
         }
 
         beginTest ("Notes and other traffic are ignored");

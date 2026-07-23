@@ -2,6 +2,7 @@
 
 #include "dsp/ChainFactory.h"
 #include "dsp/DSPChainManager.h"
+#include "preset/ChannelStore.h"
 #include "preset/PresetManager.h"
 #include "preset/SceneManager.h"
 
@@ -260,6 +261,67 @@ public:
             }
 
             expectEquals (scenes.getActiveIndex(), -1);
+        }
+
+        beginTest ("A scene captures and recalls each block's channel");
+        {
+            // The FM9 link: a scene brings back not just the on/off pattern but
+            // which channel each block is on -- so its whole sound returns.
+            milodikfx::preset::ChannelStore channels (registry);
+            SceneManager scenes (registry);
+            scenes.setChannelStore (&channels);
+
+            registry.setEffectEnabled ("overdrive", true);
+            expect (channels.recall ("overdrive", 1)); // put it on channel B
+            expectEquals (channels.getActive ("overdrive"), 1);
+
+            scenes.capture (0);
+
+            channels.recall ("overdrive", 0); // move it to A
+            expectEquals (channels.getActive ("overdrive"), 0);
+
+            expect (scenes.recall (0));
+            expectEquals (channels.getActive ("overdrive"), 1, "the scene did not bring the channel back");
+        }
+
+        beginTest ("Scene channels survive a JSON round trip");
+        {
+            milodikfx::preset::ChannelStore channels (registry);
+            SceneManager saved (registry);
+            saved.setChannelStore (&channels);
+
+            channels.recall ("overdrive", 2);
+            registry.setEffectEnabled ("overdrive", true);
+            saved.capture (0);
+
+            juce::var parsed;
+            expect (juce::JSON::parse (juce::JSON::toString (saved.toVar(), true), parsed).wasOk());
+
+            milodikfx::preset::ChannelStore restoredChannels (registry);
+            SceneManager restored (registry);
+            restored.setChannelStore (&restoredChannels);
+            restored.fromVar (parsed);
+
+            restoredChannels.recall ("overdrive", 0);
+            expect (restored.recall (0));
+            expectEquals (restoredChannels.getActive ("overdrive"), 2);
+        }
+
+        beginTest ("A scene with no stored channels leaves the channels alone");
+        {
+            // A scene written before channels existed recalls the on/off pattern
+            // and does not touch which channel anything is on.
+            milodikfx::preset::ChannelStore channels (registry);
+            SceneManager scenes (registry);
+            scenes.setChannelStore (&channels);
+
+            juce::var parsed;
+            juce::JSON::parse (R"([{"name":"Old","populated":true,"enabled":{"overdrive":true}}])", parsed);
+            scenes.fromVar (parsed);
+
+            channels.recall ("overdrive", 3);
+            expect (scenes.recall (0));
+            expectEquals (channels.getActive ("overdrive"), 3, "an old scene moved a channel it never stored");
         }
     }
 };

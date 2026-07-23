@@ -334,13 +334,26 @@ get back. After applying, the baseline is re-read from the chain rather than tru
 parameter can clamp what it was given and a baseline that disagreed would make the next commit record
 a step nobody took.
 
-`milodikfx::preset::SceneManager` holds four slots and stores **only the enable flags**, never
-parameter values. That is the load-bearing decision: a scene change mid-song has to be instant and
-predictable, and jumping a parameter to a value you cannot see on a control you were not touching is
-exactly what it must not do. Full snapshots are what presets are for. Scenes live inside the preset,
-with a copy in the settings file so the chain returns as left even when no preset was loaded.
-`active` is -1 once the chain has been changed by hand, so nothing claims a slot describes what you
-are hearing when it does not.
+`milodikfx::preset::SceneManager` holds four slots and stores the enable flags and, when a channel
+store is attached, a channel index per effect — never raw parameter values. That is the load-bearing
+decision: a scene change mid-song has to be instant and predictable, and jumping a parameter to a
+value you cannot see on a control you were not touching is exactly what it must not do. A channel is
+still something you can see — a named tab you built — so recalling one is not a hidden jump. Full
+snapshots are what presets are for. Scenes live inside the preset, with a copy in the settings file so
+the chain returns as left even when no preset was loaded. `active` is -1 once the chain has been
+changed by hand, so nothing claims a slot describes what you are hearing when it does not.
+
+#### Channels
+
+`milodikfx::preset::ChannelStore` (`src/preset/ChannelStore.*`) gives every effect up to four saved
+sounds — channels A/B/C/D, the way a Fractal FM9 block does. Switching a channel saves the live values
+into the outgoing channel first (so edits are kept), then applies the chosen one through the registry
+setters (atomics, smoothed — the same discipline a MIDI CC writes with, and it never calls `reset()`,
+so a delay/reverb tail rings on across a switch). Channels persist inside the preset (schema 4) and the
+settings file. The API lives on the effects surface: `PUT /api/effects/<id>/channel {value}` selects
+one and returns the effect's new parameter values; `/api/effects` carries `channel` and `channels` per
+effect. `commitActive()` is called before a preset save so the stored active channel matches the state
+snapshot. Extends the scene rule rather than breaking it — see above.
 
 ### MIDI
 
@@ -350,13 +363,19 @@ are hearing when it does not.
 
 Incoming messages arrive on JUCE's MIDI thread. Writing a parameter from there is safe (processors
 hold them as atomics); anything touching files — a program change selecting a preset — is posted to
-the message thread.
+the message thread. A mapping's `kind` picks what it drives: a `parameter` (or an effect's `enabled`
+switch), a `scene` (recalled on press), or a `channel` of one effect (selected on press). Scene and
+channel recalls touch the scene/channel stores, which are not built for the MIDI thread, so they are
+posted to the message thread the same way a program change is — `onSceneRecall`/`onChannelSelect` in
+`MainComponent` do the actual recall there.
 
 Two mapping modes, and the difference matters: a footswitch sends 127 on press and 0 on release, so a
 `continuous` mapping would need the switch held down to keep the effect on. `toggle` acts on the press
-and ignores the release. Mappings live in the settings file under `midi.cc.<n>.{effect,parameter,mode}`
-and are saved through `MidiController::onConfigurationChanged` — without that hook a binding only
-reached disk if something else happened to have marked the settings dirty.
+and ignores the release (scene/channel targets always act on the press). Mappings live in the settings
+file under `midi.cc.<n>.{kind,effect,parameter,index,mode}` and are saved through
+`MidiController::onConfigurationChanged` — without that hook a binding only reached disk if something
+else happened to have marked the settings dirty. A file written before `kind` existed reads back as a
+parameter mapping.
 
 `handleIncomingMidiMessage` is public deliberately: it is the only way to exercise dispatch without a
 physical controller, and `tests/MidiTests.cpp` drives it directly. What is *not* covered is whether a

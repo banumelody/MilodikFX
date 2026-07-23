@@ -95,6 +95,10 @@ MainComponent::MainComponent (juce::PropertiesFile& settingsFileToUse)
 
     buildChain();
     buildRegistry();
+
+    // Scenes recall channels too, so give the scene manager the channel store
+    // before any settings or preset is restored into it.
+    sceneManager.setChannelStore (&channelStore);
     loadSettingsIntoRegistry();
     buildMidi();
 
@@ -258,6 +262,21 @@ void MainComponent::buildMidi()
         log ("MIDI program " + juce::String (program) + " loaded preset " + name);
     };
 
+    // A footswitch under each scene, and under a channel of a block. Both run on
+    // the message thread (the callback is posted there), so the scene and
+    // channel stores are only ever touched from one thread.
+    midiController.onSceneRecall = [this] (int index)
+    {
+        if (sceneManager.recall (index))
+            markSettingsDirty();
+    };
+
+    midiController.onChannelSelect = [this] (juce::String effectId, int index)
+    {
+        if (channelStore.recall (effectId.toStdString(), index))
+            markSettingsDirty();
+    };
+
     loadMidiSettings();
 }
 
@@ -266,17 +285,36 @@ void MainComponent::loadMidiSettings()
     for (int cc = 0; cc < milodikfx::midi::MidiController::kNumControllers; ++cc)
     {
         const auto prefix = "midi.cc." + juce::String (cc) + ".";
+        const auto kindStr = settingsFile.getValue (prefix + "kind", {});
         const auto effect = settingsFile.getValue (prefix + "effect", {});
 
-        if (effect.isEmpty())
+        // Nothing stored at this controller.
+        if (kindStr.isEmpty() && effect.isEmpty())
             continue;
 
         milodikfx::midi::Mapping mapping;
-        mapping.effectId = effect;
-        mapping.parameterId = settingsFile.getValue (prefix + "parameter", {});
-        mapping.mode = settingsFile.getValue (prefix + "mode", "continuous") == "toggle"
-                           ? milodikfx::midi::MappingMode::toggle
-                           : milodikfx::midi::MappingMode::continuous;
+
+        if (kindStr == "scene")
+        {
+            mapping.kind = milodikfx::midi::MappingKind::scene;
+            mapping.index = settingsFile.getIntValue (prefix + "index", -1);
+        }
+        else if (kindStr == "channel")
+        {
+            mapping.kind = milodikfx::midi::MappingKind::channel;
+            mapping.effectId = effect;
+            mapping.index = settingsFile.getIntValue (prefix + "index", -1);
+        }
+        else
+        {
+            // Default -- and the shape a file written before kinds existed has.
+            mapping.kind = milodikfx::midi::MappingKind::parameter;
+            mapping.effectId = effect;
+            mapping.parameterId = settingsFile.getValue (prefix + "parameter", {});
+            mapping.mode = settingsFile.getValue (prefix + "mode", "continuous") == "toggle"
+                               ? milodikfx::midi::MappingMode::toggle
+                               : milodikfx::midi::MappingMode::continuous;
+        }
 
         if (mapping.isValid())
             midiController.setMapping (cc, mapping);
@@ -313,17 +351,43 @@ void MainComponent::saveMidiSettings()
             // on containsKey because this runs for all 128 controllers on every
             // save, and removing a key that was never there would still mark
             // the file as needing a write.
-            for (const auto* suffix : { "effect", "parameter", "mode" })
+            for (const auto* suffix : { "effect", "parameter", "mode", "kind", "index" })
                 if (settingsFile.containsKey (prefix + suffix))
                     settingsFile.removeValue (prefix + suffix);
 
             continue;
         }
 
-        settingsFile.setValue (prefix + "effect", mapping.effectId);
-        settingsFile.setValue (prefix + "parameter", mapping.parameterId);
-        settingsFile.setValue (prefix + "mode",
-                               mapping.mode == milodikfx::midi::MappingMode::toggle ? "toggle" : "continuous");
+        if (mapping.kind == milodikfx::midi::MappingKind::scene)
+        {
+            settingsFile.setValue (prefix + "kind", "scene");
+            settingsFile.setValue (prefix + "index", mapping.index);
+
+            for (const auto* suffix : { "effect", "parameter", "mode" })
+                if (settingsFile.containsKey (prefix + suffix))
+                    settingsFile.removeValue (prefix + suffix);
+        }
+        else if (mapping.kind == milodikfx::midi::MappingKind::channel)
+        {
+            settingsFile.setValue (prefix + "kind", "channel");
+            settingsFile.setValue (prefix + "effect", mapping.effectId);
+            settingsFile.setValue (prefix + "index", mapping.index);
+
+            for (const auto* suffix : { "parameter", "mode" })
+                if (settingsFile.containsKey (prefix + suffix))
+                    settingsFile.removeValue (prefix + suffix);
+        }
+        else
+        {
+            settingsFile.setValue (prefix + "kind", "parameter");
+            settingsFile.setValue (prefix + "effect", mapping.effectId);
+            settingsFile.setValue (prefix + "parameter", mapping.parameterId);
+            settingsFile.setValue (prefix + "mode",
+                                   mapping.mode == milodikfx::midi::MappingMode::toggle ? "toggle" : "continuous");
+
+            if (settingsFile.containsKey (prefix + "index"))
+                settingsFile.removeValue (prefix + "index");
+        }
     }
 }
 

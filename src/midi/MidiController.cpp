@@ -278,6 +278,26 @@ void MidiController::applyControlChange (int ccNumber, int value)
     if (! target.isValid())
         return;
 
+    // Scene and channel recalls fire on the press, like a footswitch, and touch
+    // the scene/channel stores -- which are not built for the MIDI thread, so
+    // they go to the message thread the same way a program change does.
+    if (target.kind == MappingKind::scene)
+    {
+        if (value >= kSwitchThreshold && onSceneRecall)
+            postToMessageThread ([callback = onSceneRecall, index = target.index] { callback (index); });
+
+        return;
+    }
+
+    if (target.kind == MappingKind::channel)
+    {
+        if (value >= kSwitchThreshold && onChannelSelect)
+            postToMessageThread ([callback = onChannelSelect, effectId = target.effectId, index = target.index]
+                                 { callback (effectId, index); });
+
+        return;
+    }
+
     const auto effectId = target.effectId.toStdString();
     const auto parameterId = target.parameterId.toStdString();
 

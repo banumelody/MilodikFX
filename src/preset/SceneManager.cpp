@@ -29,6 +29,7 @@ bool SceneManager::capture (int index)
 
     auto& scene = scenes[(size_t) index];
     scene.enabled.clear();
+    scene.channels.clear();
 
     for (const auto& effect : registry.getEffects())
     {
@@ -38,6 +39,11 @@ bool SceneManager::capture (int index)
             continue;
 
         scene.enabled[effect.id] = effect.isEnabled();
+
+        // Which channel each block is on, too -- so a scene brings back the
+        // whole sound, not just the on/off pattern.
+        if (channelStore != nullptr)
+            scene.channels[effect.id] = channelStore->getActive (effect.id);
     }
 
     scene.populated = true;
@@ -58,6 +64,12 @@ bool SceneManager::recall (int index)
 
     for (const auto& [effectId, enabled] : scene.enabled)
         registry.setEffectEnabled (effectId, enabled);
+
+    // Then each block's channel, so the sounds come back with the pattern.
+    // recall on the channel a block is already on is a cheap no-op.
+    if (channelStore != nullptr)
+        for (const auto& [effectId, channelIndex] : scene.channels)
+            channelStore->recall (effectId, channelIndex);
 
     activeIndex = index;
 
@@ -129,6 +141,13 @@ juce::var SceneManager::toVar() const
 
         object->setProperty ("enabled", juce::var (flags));
 
+        auto* channels = new juce::DynamicObject();
+
+        for (const auto& [effectId, channelIndex] : scene.channels)
+            channels->setProperty (juce::Identifier (effectId), channelIndex);
+
+        object->setProperty ("channels", juce::var (channels));
+
         array.add (juce::var (object));
     }
 
@@ -148,6 +167,7 @@ void SceneManager::fromVar (const juce::var& value)
 
         scene.name = kDefaultNames[i];
         scene.enabled.clear();
+        scene.channels.clear();
         scene.populated = false;
 
         if (i >= array->size())
@@ -167,6 +187,15 @@ void SceneManager::fromVar (const juce::var& value)
         {
             for (const auto& property : object->getProperties())
                 scene.enabled[property.name.toString().toStdString()] = (bool) property.value;
+        }
+
+        // Channels are absent in a scene written before they existed; the scene
+        // simply recalls the on/off pattern and leaves the channels alone.
+        if (const auto* object = entry["channels"].getDynamicObject())
+        {
+            for (const auto& property : object->getProperties())
+                scene.channels[property.name.toString().toStdString()]
+                    = juce::jlimit (0, milodikfx::preset::ChannelStore::kNumChannels - 1, (int) property.value);
         }
 
         scene.populated = (bool) entry["populated"] && ! scene.enabled.empty();

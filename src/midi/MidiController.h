@@ -22,13 +22,40 @@ enum class MappingMode
     toggle = 1
 };
 
+/** What a mapped control drives. */
+enum class MappingKind
+{
+    /** An effect parameter (or its enable switch). The original behaviour. */
+    parameter = 0,
+
+    /** A scene slot, recalled on press. For a footswitch under each scene. */
+    scene = 1,
+
+    /** A channel (A/B/C/D) of one effect, selected on press. */
+    channel = 2
+};
+
 struct Mapping
 {
-    juce::String effectId;
-    juce::String parameterId;
+    MappingKind kind = MappingKind::parameter;
+
+    juce::String effectId;    // parameter and channel
+    juce::String parameterId; // parameter only
+    int index = -1;           // scene slot, or channel index
+
     MappingMode mode = MappingMode::continuous;
 
-    bool isValid() const noexcept { return effectId.isNotEmpty() && parameterId.isNotEmpty(); }
+    bool isValid() const noexcept
+    {
+        switch (kind)
+        {
+            case MappingKind::parameter: return effectId.isNotEmpty() && parameterId.isNotEmpty();
+            case MappingKind::scene:     return index >= 0;
+            case MappingKind::channel:   return effectId.isNotEmpty() && index >= 0;
+        }
+
+        return false;
+    }
 };
 
 /**
@@ -85,6 +112,12 @@ public:
 
     /** Fired on the message thread when a program change selects a preset. */
     std::function<void (int programNumber)> onProgramChange;
+
+    /** Fired on the message thread when a mapped footswitch recalls a scene. */
+    std::function<void (int sceneIndex)> onSceneRecall;
+
+    /** Fired on the message thread when a mapped footswitch selects a channel. */
+    std::function<void (juce::String effectId, int channelIndex)> onChannelSelect;
 
     /** Fired on the message thread after a mapped parameter has been written. */
     std::function<void()> onParameterChanged;

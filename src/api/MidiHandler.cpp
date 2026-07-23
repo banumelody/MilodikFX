@@ -4,6 +4,7 @@
 
 using namespace milodikfx::api;
 using milodikfx::midi::MappingMode;
+using milodikfx::midi::MappingKind;
 using milodikfx::midi::Mapping;
 
 namespace
@@ -20,13 +21,55 @@ MappingMode parseMode (const juce::var& value)
                                                               : MappingMode::continuous;
 }
 
+juce::String kindString (MappingKind kind)
+{
+    switch (kind)
+    {
+        case MappingKind::scene:   return "scene";
+        case MappingKind::channel: return "channel";
+        default:                   return "parameter";
+    }
+}
+
+/** Builds a mapping from a request body, defaulting to a parameter target. */
+Mapping parseMapping (const juce::var& parsed)
+{
+    Mapping mapping;
+
+    const auto kind = parsed["kind"].toString().trim().toLowerCase();
+    const auto index = parsed["index"].isVoid() ? -1 : (int) parsed["index"];
+
+    if (kind == "scene")
+    {
+        mapping.kind = MappingKind::scene;
+        mapping.index = index;
+    }
+    else if (kind == "channel")
+    {
+        mapping.kind = MappingKind::channel;
+        mapping.effectId = parsed["effect"].toString().trim();
+        mapping.index = index;
+    }
+    else
+    {
+        mapping.kind = MappingKind::parameter;
+        mapping.effectId = parsed["effect"].toString().trim();
+        mapping.parameterId = parsed["parameter"].toString().trim();
+        mapping.mode = parseMode (parsed["mode"]);
+    }
+
+    return mapping;
+}
+
 juce::var mappingToVar (int ccNumber, const Mapping& mapping)
 {
     auto* object = new juce::DynamicObject();
 
     object->setProperty ("cc", ccNumber);
+    object->setProperty ("kind", kindString (mapping.kind));
     object->setProperty ("effect", mapping.effectId);
     object->setProperty ("parameter", mapping.parameterId);
+    object->setProperty ("index", mapping.index);
     object->setProperty ("mode", describeMode (mapping.mode));
 
     return juce::var (object);
@@ -122,11 +165,7 @@ HttpHandler::Response MidiHandler::handlePost (const std::string& path, const st
         Mapping target;
 
         if (parsed.isObject())
-        {
-            target.effectId = parsed["effect"].toString().trim();
-            target.parameterId = parsed["parameter"].toString().trim();
-            target.mode = parseMode (parsed["mode"]);
-        }
+            target = parseMapping (parsed);
 
         // An empty body disarms rather than erroring: closing the panel while
         // learn is armed has to be able to cancel it.
@@ -154,15 +193,12 @@ HttpHandler::Response MidiHandler::handlePut (const std::string& path, const std
     const auto parsed = parseBody (body);
 
     if (! parsed.isObject())
-        return jsonError (400, "Expected {\"effect\": \"...\", \"parameter\": \"...\"}");
+        return jsonError (400, "Expected a mapping object");
 
-    Mapping mapping;
-    mapping.effectId = parsed["effect"].toString().trim();
-    mapping.parameterId = parsed["parameter"].toString().trim();
-    mapping.mode = parseMode (parsed["mode"]);
+    const auto mapping = parseMapping (parsed);
 
     if (! mapping.isValid())
-        return jsonError (400, "Both effect and parameter are required");
+        return jsonError (400, "Mapping is incomplete for its kind");
 
     controller.setMapping (cc, mapping);
 

@@ -7,16 +7,19 @@
 #include <string>
 
 #include "api/ParameterRegistry.h"
+#include "preset/ChannelStore.h"
 
 namespace milodikfx::preset
 {
 /**
  * Four on/off snapshots you can jump between while playing.
  *
- * Deliberately *only* the enable flags, not parameter values. A scene change
- * mid-song has to be instant and predictable: every processor already has a
- * tested enable/disable path, so switching cannot glitch, and the knobs stay
- * where you left them rather than jumping somewhere you cannot see. A full
+ * Deliberately no raw parameter values -- only the enable flags and, when a
+ * channel store is attached, which channel each effect should be on. A scene
+ * change mid-song has to be instant and predictable: every processor already
+ * has a tested enable/disable path, and a channel is a *named state you built
+ * yourself*, shown as a tab on the card. So a scene jumps only to things you can
+ * see -- never to a hidden value on a control you were not touching. A full
  * parameter snapshot is what presets are for.
  *
  * Scenes live inside the preset, so one preset carries its own four.
@@ -33,11 +36,18 @@ public:
         /** effectId -> enabled. An effect absent here is left alone on recall. */
         std::map<std::string, bool> enabled;
 
+        /** effectId -> channel index (0-3). Empty when no channel store is set. */
+        std::map<std::string, int> channels;
+
         /** False until something has been stored, so an untouched slot recalls nothing. */
         bool populated = false;
     };
 
     explicit SceneManager (milodikfx::api::ParameterRegistry& registryToUse);
+
+    /** When set, scenes also capture and recall each effect's channel. Optional:
+        a plugin build has no channel store. */
+    void setChannelStore (milodikfx::preset::ChannelStore* store) { channelStore = store; }
 
     /** Stores the chain's current on/off pattern into a slot. */
     bool capture (int index);
@@ -64,6 +74,7 @@ public:
 
 private:
     milodikfx::api::ParameterRegistry& registry;
+    milodikfx::preset::ChannelStore* channelStore = nullptr;
 
     std::array<Scene, kNumScenes> scenes;
 
