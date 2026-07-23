@@ -807,6 +807,20 @@ describe('MilodikFX UI against a live engine', () => {
     cy.request('POST', '/api/presets/delete', { name: 'ChannelRoundTrip' });
   });
 
+  it('binds a footswitch to a scene', () => {
+    // The floor-rig case: a CC recalls a scene rather than moving a parameter.
+    cy.request('PUT', '/api/midi/mappings/48', { kind: 'scene', index: 2 });
+
+    cy.request('/api/midi').then(({ body }) => {
+      const mapping = body.mappings.find((m: { cc: number }) => m.cc === 48);
+      expect(mapping, 'the scene mapping is stored').to.exist;
+      expect(mapping.kind).to.eq('scene');
+      expect(mapping.index).to.eq(2);
+    });
+
+    cy.request('DELETE', '/api/midi/mappings/48');
+  });
+
   it('reports its own version and an update verdict', () => {
     // The shape is what matters: current is the build's version and the verdict
     // is a boolean. The value depends on what is published on GitHub and whether

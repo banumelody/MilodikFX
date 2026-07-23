@@ -335,12 +335,29 @@ export function subscribeTuner(
 
 export type MidiMappingMode = 'continuous' | 'toggle';
 
+export type MidiMappingKind = 'parameter' | 'scene' | 'channel';
+
 export interface MidiMapping {
   /** -1 for the pending learn target, which has no controller yet. */
   cc: number;
+  /** What the control drives. Defaults to a parameter for older payloads. */
+  kind: MidiMappingKind;
+  /** Set for parameter and channel targets. */
   effect: string;
+  /** Set for parameter targets. */
   parameter: string;
+  /** Scene slot, or channel index, for those kinds. -1 otherwise. */
+  index: number;
   mode: MidiMappingMode;
+}
+
+/** What MIDI learn / a mapping write can bind a controller to. */
+export interface MidiTarget {
+  kind?: MidiMappingKind;
+  effect?: string;
+  parameter?: string;
+  index?: number;
+  mode?: MidiMappingMode;
 }
 
 export interface MidiState {
@@ -375,7 +392,7 @@ export const clearMidiMapping = (cc: number) =>
   request<MidiState>(`/midi/mappings/${cc}`, { method: 'DELETE' });
 
 /** Arms MIDI learn. Passing no target disarms it. */
-export const learnMidi = (target?: { effect: string; parameter: string; mode: MidiMappingMode }) =>
+export const learnMidi = (target?: MidiTarget) =>
   request<MidiState>('/midi/learn', {
     method: 'POST',
     body: JSON.stringify(target ?? {}),

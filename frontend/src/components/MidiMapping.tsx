@@ -6,10 +6,18 @@ import {
   learnMidi,
   setMidiDevice,
 } from '../services/api';
-import type { EffectDescriptor, MidiMappingMode, MidiState } from '../services/api';
+import type {
+  EffectDescriptor,
+  MidiMapping as MidiMappingEntry,
+  MidiState,
+  MidiTarget,
+} from '../services/api';
 
 /** How often the panel re-reads MIDI state while learn is armed. */
 const LEARN_POLL_MS = 250;
+
+/** Scene slots this build has; matches SceneManager::kNumScenes. */
+const NUM_SCENES = 4;
 
 interface MidiMappingProps {
   effects: EffectDescriptor[];
@@ -17,31 +25,58 @@ interface MidiMappingProps {
 }
 
 interface Assignable {
-  effect: string;
-  parameter: string;
+  key: string;
   label: string;
-  mode: MidiMappingMode;
+  target: MidiTarget;
+}
+
+/** A stable key for a mapping, so the list can look its label back up. */
+function keyForMapping(mapping: {
+  kind?: string;
+  effect?: string;
+  parameter?: string;
+  index?: number;
+}): string {
+  if (mapping.kind === 'scene') return `scene.${mapping.index}`;
+  if (mapping.kind === 'channel') return `channel.${mapping.effect}.${mapping.index}`;
+  return `param.${mapping.effect}.${mapping.parameter}`;
 }
 
 /**
  * Everything a controller can be bound to.
  *
- * Each effect's own switch is offered as "enabled" alongside its parameters:
- * turning a pedal on and off is the single most useful thing to put under a
- * footswitch, and it is not a parameter, so it would otherwise be unreachable.
- * Text parameters are left out -- nothing sensible maps 0..127 onto a list of
- * filenames.
+ * Scenes come first -- a footswitch under each scene is the whole point of a
+ * floor rig. Then each block's on/off switch and its channels (A/B/C/D), and
+ * finally its parameters. Text parameters are left out -- nothing sensible maps
+ * 0..127 onto a list of filenames.
  */
 function collectAssignable(effects: EffectDescriptor[]): Assignable[] {
   const result: Assignable[] = [];
 
+  for (let i = 0; i < NUM_SCENES; i += 1) {
+    result.push({
+      key: `scene.${i}`,
+      label: `Scene ${i + 1}`,
+      target: { kind: 'scene', index: i, mode: 'toggle' },
+    });
+  }
+
   for (const effect of effects) {
     if (effect.toggleable !== false) {
       result.push({
-        effect: effect.id,
-        parameter: 'enabled',
+        key: `param.${effect.id}.enabled`,
         label: `${effect.label} — On/Off`,
-        mode: 'toggle',
+        target: { kind: 'parameter', effect: effect.id, parameter: 'enabled', mode: 'toggle' },
+      });
+    }
+
+    if (effect.toggleable !== false && Array.isArray(effect.channels)) {
+      effect.channels.forEach((name, i) => {
+        result.push({
+          key: `channel.${effect.id}.${i}`,
+          label: `${effect.label} — Channel ${name}`,
+          target: { kind: 'channel', effect: effect.id, index: i, mode: 'toggle' },
+        });
       });
     }
 
@@ -49,10 +84,14 @@ function collectAssignable(effects: EffectDescriptor[]): Assignable[] {
       if (parameter.type === 'text') continue;
 
       result.push({
-        effect: effect.id,
-        parameter: parameter.id,
+        key: `param.${effect.id}.${parameter.id}`,
         label: `${effect.label} — ${parameter.label}`,
-        mode: parameter.type === 'bool' ? 'toggle' : 'continuous',
+        target: {
+          kind: 'parameter',
+          effect: effect.id,
+          parameter: parameter.id,
+          mode: parameter.type === 'bool' ? 'toggle' : 'continuous',
+        },
       });
     }
   }
@@ -67,7 +106,7 @@ function MidiMappingBase({ effects, disabled = false }: MidiMappingProps) {
 
   const assignable = useMemo(() => collectAssignable(effects), [effects]);
   const byKey = useMemo(
-    () => new Map(assignable.map((item) => [`${item.effect}.${item.parameter}`, item])),
+    () => new Map(assignable.map((item) => [item.key, item])),
     [assignable],
   );
 
@@ -103,8 +142,17 @@ function MidiMappingBase({ effects, disabled = false }: MidiMappingProps) {
   }, [learning, run]);
 
   const describe = useCallback(
-    (effect: string, parameter: string) =>
-      byKey.get(`${effect}.${parameter}`)?.label ?? `${effect} — ${parameter}`,
+    (mapping: Pick<MidiMappingEntry, 'kind' | 'effect' | 'parameter' | 'index'>) => {
+      const key = keyForMapping(mapping);
+      const known = byKey.get(key)?.label;
+      if (known) return known;
+
+      // A mapping whose target has since gone (an effect renamed, say) still
+      // needs a readable line rather than a blank one.
+      if (mapping.kind === 'scene') return `Scene ${(mapping.index ?? 0) + 1}`;
+      if (mapping.kind === 'channel') return `${mapping.effect} — Channel ${mapping.index}`;
+      return `${mapping.effect} — ${mapping.parameter}`;
+    },
     [byKey],
   );
 
@@ -112,9 +160,7 @@ function MidiMappingBase({ effects, disabled = false }: MidiMappingProps) {
     const chosen = byKey.get(target);
     if (!chosen) return;
 
-    void run(() =>
-      learnMidi({ effect: chosen.effect, parameter: chosen.parameter, mode: chosen.mode }),
-    );
+    void run(() => learnMidi(chosen.target));
   }, [byKey, target, run]);
 
   const busy = disabled || state == null;
@@ -171,9 +217,9 @@ function MidiMappingBase({ effects, disabled = false }: MidiMappingProps) {
           disabled={busy || !state?.open}
           onChange={(event) => setTarget(event.target.value)}
         >
-          <option value="">Pilih parameter...</option>
+          <option value="">Pilih tujuan...</option>
           {assignable.map((item) => (
-            <option key={`${item.effect}.${item.parameter}`} value={`${item.effect}.${item.parameter}`}>
+            <option key={item.key} value={item.key}>
               {item.label}
             </option>
           ))}
@@ -200,7 +246,7 @@ function MidiMappingBase({ effects, disabled = false }: MidiMappingProps) {
       {learning ? (
         <p className="panel__hint" role="status">
           Menunggu... gerakkan knob atau injak footswitch untuk memasangnya ke{' '}
-          <strong>{describe(learning.effect, learning.parameter)}</strong>.
+          <strong>{describe(learning)}</strong>.
         </p>
       ) : null}
 
@@ -209,7 +255,7 @@ function MidiMappingBase({ effects, disabled = false }: MidiMappingProps) {
           {mappings.map((mapping) => (
             <li key={mapping.cc} className="midi__item">
               <span className="midi__cc">CC {mapping.cc}</span>
-              <span className="midi__target">{describe(mapping.effect, mapping.parameter)}</span>
+              <span className="midi__target">{describe(mapping)}</span>
               <span className="pill">{mapping.mode === 'toggle' ? 'Saklar' : 'Kontinu'}</span>
               <button
                 type="button"

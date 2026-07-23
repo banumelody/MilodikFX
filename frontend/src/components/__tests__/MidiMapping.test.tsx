@@ -159,14 +159,25 @@ describe('MidiMapping', () => {
     const user = userEvent.setup();
     await renderPanel();
 
-    await user.selectOptions(screen.getByLabelText('Pasang kontrol ke'), 'overdrive.drivePct');
+    await user.selectOptions(screen.getByLabelText('Pasang kontrol ke'), 'param.overdrive.drivePct');
     await user.click(screen.getByRole('button', { name: 'MIDI Learn' }));
 
     expect(learnMidi).toHaveBeenCalledWith({
+      kind: 'parameter',
       effect: 'overdrive',
       parameter: 'drivePct',
       mode: 'continuous',
     });
+  });
+
+  it('arms learn against a scene, for a footswitch under it', async () => {
+    const user = userEvent.setup();
+    await renderPanel();
+
+    await user.selectOptions(screen.getByLabelText('Pasang kontrol ke'), 'scene.2');
+    await user.click(screen.getByRole('button', { name: 'MIDI Learn' }));
+
+    expect(learnMidi).toHaveBeenCalledWith({ kind: 'scene', index: 2, mode: 'toggle' });
   });
 
   it('arms an effect switch as a toggle, not a continuous sweep', async () => {
@@ -175,10 +186,11 @@ describe('MidiMapping', () => {
     const user = userEvent.setup();
     await renderPanel();
 
-    await user.selectOptions(screen.getByLabelText('Pasang kontrol ke'), 'overdrive.enabled');
+    await user.selectOptions(screen.getByLabelText('Pasang kontrol ke'), 'param.overdrive.enabled');
     await user.click(screen.getByRole('button', { name: 'MIDI Learn' }));
 
     expect(learnMidi).toHaveBeenCalledWith({
+      kind: 'parameter',
       effect: 'overdrive',
       parameter: 'enabled',
       mode: 'toggle',
@@ -187,7 +199,16 @@ describe('MidiMapping', () => {
 
   it('can cancel a learn that is waiting', async () => {
     getMidi.mockResolvedValue(
-      makeState({ learning: { cc: -1, effect: 'overdrive', parameter: 'drivePct', mode: 'continuous' } }),
+      makeState({
+        learning: {
+          cc: -1,
+          kind: 'parameter',
+          effect: 'overdrive',
+          parameter: 'drivePct',
+          index: -1,
+          mode: 'continuous',
+        },
+      }),
     );
 
     const user = userEvent.setup();
@@ -202,7 +223,16 @@ describe('MidiMapping', () => {
 
   it('names what it is waiting to bind, not just its id', async () => {
     getMidi.mockResolvedValue(
-      makeState({ learning: { cc: -1, effect: 'overdrive', parameter: 'drivePct', mode: 'continuous' } }),
+      makeState({
+        learning: {
+          cc: -1,
+          kind: 'parameter',
+          effect: 'overdrive',
+          parameter: 'drivePct',
+          index: -1,
+          mode: 'continuous',
+        },
+      }),
     );
 
     await renderPanel();
@@ -216,7 +246,16 @@ describe('MidiMapping', () => {
   it('lists what is bound and can unbind it', async () => {
     getMidi.mockResolvedValue(
       makeState({
-        mappings: [{ cc: 7, effect: 'overdrive', parameter: 'drivePct', mode: 'continuous' }],
+        mappings: [
+          {
+            cc: 7,
+            kind: 'parameter',
+            effect: 'overdrive',
+            parameter: 'drivePct',
+            index: -1,
+            mode: 'continuous',
+          },
+        ],
       }),
     );
 
@@ -243,7 +282,9 @@ describe('MidiMapping', () => {
     // stored and still firing.
     getMidi.mockResolvedValue(
       makeState({
-        mappings: [{ cc: 3, effect: 'ghost', parameter: 'mystery', mode: 'toggle' }],
+        mappings: [
+          { cc: 3, kind: 'parameter', effect: 'ghost', parameter: 'mystery', index: -1, mode: 'toggle' },
+        ],
       }),
     );
 
