@@ -133,7 +133,7 @@ ParameterDescriptor makeNamFileParam (NamProcessor* processor,
 }
 } // namespace
 
-GuitarChain buildGuitarChain (DSPChainManager& chain)
+GuitarChain buildGuitarChain (DSPChainManager& chain, ChainOptions options)
 {
     GuitarChain result;
 
@@ -158,13 +158,15 @@ GuitarChain buildGuitarChain (DSPChainManager& chain)
     result.masterOut = add<MasterOutProcessor> (chain);
 
     // Not a stage of the chain: mixed in afterwards so bypass cannot silence it.
-    result.metronome = dynamic_cast<MetronomeProcessor*> (
-        chain.addPostProcessor (std::make_unique<MetronomeProcessor>()));
+    if (options.withMetronome)
+        result.metronome = dynamic_cast<MetronomeProcessor*> (
+            chain.addPostProcessor (std::make_unique<MetronomeProcessor>()));
 
     // The looper is post-master too, so the loop keeps playing through a bypass
     // and is not distorted by the amp and cabinet it would run through in-chain.
-    result.looper = dynamic_cast<LooperProcessor*> (
-        chain.addPostProcessor (std::make_unique<LooperProcessor>()));
+    if (options.withLooper)
+        result.looper = dynamic_cast<LooperProcessor*> (
+            chain.addPostProcessor (std::make_unique<LooperProcessor>()));
 
     return result;
 }
@@ -190,9 +192,14 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
                                             [&manager] { return manager.isBypassed(); },
                                             [&manager] (bool v) { manager.setBypassed (v); }));
 
-        // One tempo for the whole app. The metronome stores it and the delay is
+        // One tempo for the whole chain. The metronome stores it and the delay is
         // handed a copy, so a synced repeat always lands on the click rather
         // than drifting against a second, separately-edited BPM.
+        //
+        // A chain built without a metronome (a plugin: the host has its own
+        // click) still needs the tempo, because a synced delay and a synced LFO
+        // read it. The delay then holds it instead -- one owner either way, so
+        // there is still never a second BPM to disagree with.
         if (auto* metronome = chain.metronome)
         {
             auto* delay = chain.delay;
@@ -209,6 +216,15 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
                                                    if (delay != nullptr)
                                                        delay->setBpm (v);
                                                }));
+        }
+        else if (auto* delay = chain.delay)
+        {
+            e.parameters.push_back (makeParam ("bpm", "Tempo", "BPM",
+                                               MetronomeProcessor::kMinBpm,
+                                               MetronomeProcessor::kMaxBpm,
+                                               1.0f, 120.0f,
+                                               [delay] { return delay->getBpm(); },
+                                               [delay] (float v) { delay->setBpm (v); }));
         }
 
         registry.addEffect (std::move (e));

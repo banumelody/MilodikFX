@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 4,
+  "name": "Gtr Blues Breakup",
+  "savedAt": "2026-07-23T21:49:24.495Z",
+  "description": "Gitar — Bluesbreaker di ambang breakup, dinamis mengikuti petikan.",
+  "favourite": false,
+  "notes": "Preset bawaan MilodikFX.",
+  "tags": [
+    "gitar",
+    "blues",
+    "crunch"
+  ],
+  "state": {
+    "global": {
+      "enabled": true,
+      "params": {
+        "bypass": 0,
+        "bpm": 120
+      }
+    },
+    "noiseGate": {
+      "enabled": false,
+      "params": {
+        "thresholdDb": -55,
+        "attackMs": 2,
+        "holdMs": 60,
+        "releaseMs": 150
+      }
+    },
+    "cleanBoost": {
+      "enabled": false,
+      "params": {
+        "gainDb": 0
+      }
+    },
+    "compressor": {
+      "enabled": true,
+      "params": {
+        "inputGainDb": 0,
+        "thresholdDb": -20,
+        "ratio": 2.5,
+        "attackMs": 10,
+        "releaseMs": 100,
+        "mixPct": 70,
+        "autoMakeup": 1
+      }
+    },
+    "overdrive": {
+      "enabled": true,
+      "params": {
+        "type": 2,
+        "drivePct": 42,
+        "levelPct": 80,
+        "asymmetry": 0,
+        "oversampling": 1,
+        "tonePct": 55,
+        "voicePct": 50,
+        "bassDb": 0,
+        "midDb": 0,
+        "trebleDb": 0,
+        "hpMode": 0,
+        "bright": 0
+      }
+    },
+    "eq": {
+      "enabled": true,
+      "params": {
+        "bassDb": 0,
+        "midDb": 2,
+        "trebleDb": 0
+      }
+    },
+    "toneStack": {
+      "enabled": false,
+      "params": {
+        "bassDb": 0,
+        "midDb": 0,
+        "trebleDb": 0
+      }
+    },
+    "nam": {
+      "enabled": false,
+      "params": {
+        "inputDb": 0,
+        "outputDb": 0
+      }
+    },
+    "cabinet": {
+      "enabled": true,
+      "params": {
+        "presenceDb": 1,
+        "toneHz": 5500,
+        "irEnabled": 0,
+        "irFile": "",
+        "irFileB": "",
+        "irBlend": 0
+      }
+    },
+    "delay": {
+      "enabled": false,
+      "params": {
+        "timeMs": 350,
+        "feedbackPct": 30,
+        "mixPct": 25,
+        "dampingHz": 20000,
+        "pingPong": 0,
+        "spillover": 1,
+        "syncMode": 0
+      }
+    },
+    "reverb": {
+      "enabled": true,
+      "params": {
+        "roomSize": 0.45,
+        "decayTime": 1.6,
+        "width": 1,
+        "dryWetMix": 0.14,
+        "spillover": 1,
+        "irEnabled": 0
+      }
+    },
+    "master": {
+      "enabled": true,
+      "params": {
+        "muted": 0,
+        "volumeDb": -2,
+        "ceilingDb": -0.3,
+        "limiterEnabled": 1
+      }
+    }
+  }
+}

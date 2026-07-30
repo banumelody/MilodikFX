@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 4,
+  "name": "Gtr Classic Rock",
+  "savedAt": "2026-07-23T21:49:24.495Z",
+  "description": "Gitar — OCD gain menengah, crunch tebal untuk rhythm rock klasik.",
+  "favourite": false,
+  "notes": "Preset bawaan MilodikFX.",
+  "tags": [
+    "gitar",
+    "rock",
+    "crunch"
+  ],
+  "state": {
+    "global": {
+      "enabled": true,
+      "params": {
+        "bypass": 0,
+        "bpm": 120
+      }
+    },
+    "noiseGate": {
+      "enabled": false,
+      "params": {
+        "thresholdDb": -55,
+        "attackMs": 2,
+        "holdMs": 60,
+        "releaseMs": 150
+      }
+    },
+    "cleanBoost": {
+      "enabled": false,
+      "params": {
+        "gainDb": 0
+      }
+    },
+    "compressor": {
+      "enabled": false,
+      "params": {
+        "inputGainDb": 0,
+        "thresholdDb": -24,
+        "ratio": 4,
+        "attackMs": 10,
+        "releaseMs": 100,
+        "mixPct": 100,
+        "autoMakeup": 1
+      }
+    },
+    "overdrive": {
+      "enabled": true,
+      "params": {
+        "type": 5,
+        "drivePct": 60,
+        "levelPct": 75,
+        "asymmetry": 0,
+        "oversampling": 2,
+        "tonePct": 55,
+        "voicePct": 50,
+        "bassDb": 0,
+        "midDb": 0,
+        "trebleDb": 0,
+        "hpMode": 1,
+        "bright": 0
+      }
+    },
+    "eq": {
+      "enabled": true,
+      "params": {
+        "bassDb": 1,
+        "midDb": 1,
+        "trebleDb": 1
+      }
+    },
+    "toneStack": {
+      "enabled": false,
+      "params": {
+        "bassDb": 0,
+        "midDb": 0,
+        "trebleDb": 0
+      }
+    },
+    "nam": {
+      "enabled": false,
+      "params": {
+        "inputDb": 0,
+        "outputDb": 0
+      }
+    },
+    "cabinet": {
+      "enabled": true,
+      "params": {
+        "presenceDb": 2,
+        "toneHz": 5800,
+        "irEnabled": 0,
+        "irFile": "",
+        "irFileB": "",
+        "irBlend": 0
+      }
+    },
+    "delay": {
+      "enabled": false,
+      "params": {
+        "timeMs": 350,
+        "feedbackPct": 30,
+        "mixPct": 25,
+        "dampingHz": 20000,
+        "pingPong": 0,
+        "spillover": 1,
+        "syncMode": 0
+      }
+    },
+    "reverb": {
+      "enabled": true,
+      "params": {
+        "roomSize": 0.4,
+        "decayTime": 1.4,
+        "width": 1,
+        "dryWetMix": 0.12,
+        "spillover": 1,
+        "irEnabled": 0
+      }
+    },
+    "master": {
+      "enabled": true,
+      "params": {
+        "muted": 0,
+        "volumeDb": -2.5,
+        "ceilingDb": -0.3,
+        "limiterEnabled": 1
+      }
+    }
+  }
+}

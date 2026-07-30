@@ -4,6 +4,11 @@
 #include "api/UpdateHandler.h"
 #include "api/ModulationHandler.h"
 #include "api/LooperHandler.h"
+#include "api/PinsHandler.h"
+
+#if MILODIKFX_EMBED_PRESETS
+ #include "MilodikFXPresetData.h"
+#endif
 
 #include <cmath>
 
@@ -81,12 +86,9 @@ private:
 //==============================================================================
 MainComponent::MainComponent (juce::PropertiesFile& settingsFileToUse)
     : settingsFile (settingsFileToUse),
-      presetManager (juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
-                         .getChildFile ("MilodikFX/Presets")),
-      irLibrary (juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
-                     .getChildFile ("MilodikFX/ImpulseResponses")),
-      namLibrary (juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
-                      .getChildFile ("MilodikFX/NamModels"))
+      presetManager (milodikfx::preset::UserPaths::presets()),
+      irLibrary (milodikfx::preset::UserPaths::impulseResponses()),
+      namLibrary (milodikfx::preset::UserPaths::namModels())
 {
     log ("=== MainComponent constructor starting ===");
 
@@ -97,6 +99,7 @@ MainComponent::MainComponent (juce::PropertiesFile& settingsFileToUse)
 
     buildChain();
     buildRegistry();
+    installDefaultPresets();
 
     // Scenes recall channels too, so give the scene manager the channel store
     // before any settings or preset is restored into it.
@@ -247,6 +250,41 @@ void MainComponent::buildRegistry()
     };
 
     log ("Registered " + juce::String ((int) registry.getEffects().size()) + " effects");
+}
+
+//==============================================================================
+void MainComponent::installDefaultPresets()
+{
+   #if MILODIKFX_EMBED_PRESETS
+    auto written = 0;
+
+    for (int i = 0; i < MilodikFXPresetData::namedResourceListSize; ++i)
+    {
+        const juce::File fileName (MilodikFXPresetData::originalFilenames[i]);
+        const auto name = fileName.getFileNameWithoutExtension();
+
+        // Never overwrite. A preset the user edited and saved under a shipped
+        // name is theirs; re-installing the factory version on every launch
+        // would quietly undo their work.
+        if (name.isEmpty() || presetManager.presetExists (name))
+            continue;
+
+        auto size = 0;
+        const auto* data = MilodikFXPresetData::getNamedResource (
+            MilodikFXPresetData::namedResourceList[i], size);
+
+        if (data == nullptr || size <= 0)
+            continue;
+
+        // importPreset validates the document and carries the description, tags
+        // and notes across -- savePreset would keep only the DSP snapshot.
+        if (presetManager.importPreset (name, juce::String::fromUTF8 (data, size)).isNotEmpty())
+            ++written;
+    }
+
+    if (written > 0)
+        log ("Installed " + juce::String (written) + " default presets");
+   #endif
 }
 
 //==============================================================================
@@ -533,6 +571,18 @@ void MainComponent::loadSettingsIntoRegistry()
         channelStore.resetToCurrent();
     }
 
+    // Pinned Perform knobs follow the same pattern again: they belong to a
+    // preset, with a settings copy so the stage screen returns as left.
+    const auto storedPins = settingsFile.getValue (kKeyPins, {});
+
+    if (storedPins.isNotEmpty())
+    {
+        juce::var parsed;
+
+        if (juce::JSON::parse (storedPins, parsed).wasOk())
+            pinnedControls.fromVar (parsed, &registry);
+    }
+
     // The looper's playback level survives a restart; the recorded loop itself
     // is deliberately not persisted (it is a live, throwaway phrase).
     if (looperProcessor != nullptr && settingsFile.containsKey (kKeyLooperLevel))
@@ -651,6 +701,7 @@ void MainComponent::saveSettingsIfNeeded (bool force)
 
     settingsFile.setValue (kKeyScenes, juce::JSON::toString (sceneManager.toVar(), true));
     settingsFile.setValue (kKeyChannels, juce::JSON::toString (channelStore.toVar(), true));
+    settingsFile.setValue (kKeyPins, juce::JSON::toString (pinnedControls.toVar(), true));
 
     if (looperProcessor != nullptr)
         settingsFile.setValue (kKeyLooperLevel, (double) looperProcessor->getLevelPercent());
@@ -734,6 +785,7 @@ void MainComponent::startServer()
     presetsHandler = std::make_shared<PresetsHandler> (presetManager, registry);
     presetsHandler->setSceneManager (&sceneManager);
     presetsHandler->setChannelStore (&channelStore);
+    presetsHandler->setPinnedControls (&pinnedControls);
     presetsHandler->setSelectedName (settingsFile.getValue (kKeyPresetSelectedName, {}));
     presetsHandler->onSelectionChanged = [this] (const juce::String&) { markSettingsDirty(); };
 
@@ -767,6 +819,10 @@ void MainComponent::startServer()
     webServer->registerApiHandler ("/api/midi", midiHandler);
     webServer->registerApiHandler ("/api/presets", presetsHandler);
     webServer->registerApiHandler ("/api/scenes", scenesHandler);
+
+    auto pinsHandler = std::make_shared<PinsHandler> (pinnedControls, registry);
+    pinsHandler->onChanged = [this] { markSettingsDirty(); };
+    webServer->registerApiHandler ("/api/pins", pinsHandler);
 
     auto historyHandler = std::make_shared<HistoryHandler> (undoHistory, registry);
     historyHandler->onChanged = [this] { markSettingsDirty(); };
@@ -1059,6 +1115,15 @@ void MainComponent::audioDeviceIOCallbackWithContext (const float* const* inputC
         levels->updateGainReduction (noiseGateProcessor != nullptr ? noiseGateProcessor->getCurrentGain() : 1.0f,
                                      compressorProcessor != nullptr ? compressorProcessor->getGainReductionDb() : 0.0f,
                                      masterOutProcessor != nullptr ? masterOutProcessor->getLimiterReductionDb() : 0.0f);
+
+        // Rides along with the meters rather than costing the looper panel a
+        // poll of its own. Plain atomic reads, so this is free on the audio side.
+        if (auto* looper = chainProcessors.looper)
+            levels->updateLooper ((int) looper->getState(),
+                                  looper->hasLoop(),
+                                  looper->getLoopSeconds(),
+                                  looper->getPositionFraction(),
+                                  looper->getLevelPercent());
 
         if (currentSampleRate > 0.0)
         {

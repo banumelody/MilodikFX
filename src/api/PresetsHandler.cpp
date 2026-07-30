@@ -143,6 +143,9 @@ HttpHandler::Response PresetsHandler::handlePost (const std::string& path, const
             if (channelStore != nullptr)
                 document.channels = channelStore->toVar();
 
+            if (pinnedControls != nullptr)
+                document.pins = pinnedControls->toVar();
+
             if (! presetManager.saveDocument (name, document))
                 return jsonError (500, "Failed to write the preset file");
 
@@ -188,6 +191,15 @@ HttpHandler::Response PresetsHandler::handlePost (const std::string& path, const
                     channelStore->fromVar (document.channels);
                 else
                     channelStore->resetToCurrent();
+            }
+
+            if (pinnedControls != nullptr)
+            {
+                // A file written before pins existed simply arrives with none,
+                // and the stage screen falls back to showing nothing extra --
+                // rather than inheriting the previous preset's pins, which would
+                // put the wrong knobs under the player's hands.
+                pinnedControls->fromVar (document.pins, &registry);
             }
 
             selectedName = name;

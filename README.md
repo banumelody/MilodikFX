@@ -5,7 +5,8 @@ Satu executable C++20/JUCE mandiri: menjalankan audio engine, menyajikan HTTP AP
 menampilkan UI React **di dalam jendelanya sendiri** lewat Edge WebView2 — tanpa tab browser, tanpa
 proses UI terpisah. Bundle UI tertanam di dalam exe, jadi binernya berdiri sendiri.
 
-Target kedua membangun rantai DSP yang sama sebagai **plugin VST3** plus wrapper JUCE Standalone.
+Target kedua membangun rantai DSP yang sama sebagai **plugin VST3** plus wrapper JUCE Standalone —
+**dengan UI yang sama persis**, disajikan langsung dari dalam biner plugin, tanpa membuka socket apa pun.
 
 ## Unduh
 
@@ -15,9 +16,31 @@ Build siap pakai ada di [halaman Releases](https://github.com/banumelody/Milodik
 - **`MilodikFX-x.x.x-portable.exe`** — exe tunggal tanpa dipasang; WASAPI (shared/exclusive/low-latency)
   dan DirectSound. Jalan di Windows mana pun.
 - **`MilodikFX-x.x.x.exe`** — dengan dukungan ASIO, latensi paling rendah.
+- **`MilodikFX-x.x.x-VST3.zip`** — plugin VST3 untuk dipakai di DAW.
 
 Taruh di folder mana saja lalu jalankan. UI terbuka di jendelanya sendiri (butuh WebView2, sudah ada di
 Windows 10/11 modern).
+
+Untuk plugin-nya, salin `MilodikFX.vst3` ke `C:\Program Files\Common Files\VST3`.
+
+## Di dalam DAW (VST3)
+
+Plugin memakai **rantai, UI, preset, dan file IR/NAM yang sama** dengan aplikasi — sound yang kamu
+bangun di panggung terbuka apa adanya di studio, karena keduanya membaca folder
+`Documents\MilodikFX` yang sama.
+
+Yang berbeda di dalam DAW, dan semuanya disengaja:
+
+- **Tempo ikut host.** Delay tersinkron dan LFO terkunci-tempo mengikuti tempo proyek, bukan angka
+  yang diketik di plugin.
+- **Bypass host memakai crossfade 10 ms** milik engine, bukan potongan keras.
+- **Latensi dilaporkan dengan benar** — oversampling overdrive plus resampler NAM — dan diperbarui
+  saat model dimuat, jadi PDC DAW-mu tepat. Di sesi **48 kHz** resampler NAM jadi passthrough total:
+  nol interpolasi, nol latensi tambahan.
+- **Tanpa looper, metronom, pemilih device, dan panel MIDI.** DAW sudah punya semuanya, dan looper
+  akan menyita 23–46 MB per instance untuk fitur yang tak punya kontrol di sana.
+
+Divalidasi dengan `pluginval --strictness-level 10` (tingkat tertinggi) di CI setiap push.
 
 ## Rantai sinyal
 
@@ -52,7 +75,9 @@ Bluetooth LE MIDI** (lewat backend WinRT); dan **auto-reconnect** — controller
 nyambung lagi sendiri.
 
 Fitur lain: **tuner kromatik** (gitar & bass 5-senar, sampai low B ≈ 31 Hz), **preset** dengan metadata
-+ impor/ekspor, **undo/redo**, kurva respons EQ, metering lewat Server-Sent Events, dan **pengecekan
++ impor/ekspor (**10 preset gitar & bass sudah terpasang** — jazz, blues, rock, metal, ambient, funk,
+fingerstyle, dub), **knob tersemat** — sampai delapan kontrol per preset yang muncul besar di Perform
+view, **undo/redo**, kurva respons EQ, metering lewat Server-Sent Events, dan **pengecekan
 update otomatis** — aplikasi memeriksa GitHub Releases saat dibuka dan memunculkan pemberitahuan bila
 ada versi baru.
 

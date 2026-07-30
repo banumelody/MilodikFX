@@ -294,6 +294,48 @@ public:
         expect (chain.delay != nullptr);
         expect (chain.reverb != nullptr);
         expect (chain.masterOut != nullptr);
+        expect (chain.looper != nullptr);
+
+        beginTest ("A chain built without the post-master stages has neither");
+
+        // What a plugin builds. The looper is not merely unused there, it is
+        // expensive: it allocates its whole 60-second record buffer at prepare
+        // time -- 23 MB at 48 kHz, 46 MB at 96 kHz -- for controls that do not
+        // exist in a host. A DAW has its own click and its own looping.
+        milodikfx::dsp::DSPChainManager hostManager;
+        const auto hostChain = milodikfx::dsp::buildGuitarChain (hostManager, { false, false });
+
+        expect (hostChain.metronome == nullptr, "a plugin must not carry a metronome");
+        expect (hostChain.looper == nullptr, "a plugin must not carry a looper");
+
+        // The twelve stages the guitar passes through are unchanged: only the
+        // post-master mixers are gone.
+        expectEquals (hostManager.getNumProcessors(), 12);
+        expect (hostChain.masterOut != nullptr);
+
+        beginTest ("Tempo survives without a metronome to hold it");
+
+        // The metronome is the app's tempo owner, but a synced delay and a
+        // tempo-locked LFO still need a BPM in a host. The delay holds it
+        // instead -- one owner either way, so there is never a second tempo to
+        // drift against.
+        milodikfx::api::ParameterRegistry hostRegistry;
+        milodikfx::dsp::registerChainParameters (hostRegistry, hostChain, hostManager);
+
+        expect (hostRegistry.findEffect ("metronome") == nullptr,
+                "a metronome card must not appear without a metronome");
+
+        const auto* hostBpm = hostRegistry.findParameter ("global", "bpm");
+        expect (hostBpm != nullptr, "global.bpm must survive without a metronome");
+
+        if (hostBpm != nullptr)
+        {
+            float applied = 0.0f;
+            expect (hostRegistry.setParameter ("global", "bpm", 90.0f, applied));
+            expectWithinAbsoluteError (applied, 90.0f, 0.001f);
+            expectWithinAbsoluteError (hostChain.delay->getBpm(), 90.0f, 0.001f,
+                                       "the delay must be the tempo owner here");
+        }
 
         beginTest ("The plugin and the app share one parameter set");
 
@@ -302,15 +344,58 @@ public:
         // channel routing is host-specific -- the app maps device channels
         // itself, a plugin gets whatever the host sends -- so Mode is the one
         // parameter that differs. Everything else must match exactly.
+        //
+        // Both are given the file libraries, because both hosts have them: the
+        // plugin shipped without them for a long time, which silently cost it
+        // the impulse responses and the amp models entirely.
+        auto libraryRoot = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                               .getNonexistentChildFile ("MilodikFXChainLib", "", false);
+
+        milodikfx::preset::IrLibrary irLibrary (libraryRoot.getChildFile ("ImpulseResponses"));
+        milodikfx::preset::NamLibrary namLibrary (libraryRoot.getChildFile ("NamModels"));
+
+        const auto withLibraries = [&irLibrary, &namLibrary]
+        {
+            milodikfx::dsp::ChainExtras extras;
+            extras.irLibrary = &irLibrary;
+            extras.namLibrary = &namLibrary;
+            return extras;
+        };
+
         milodikfx::api::ParameterRegistry pluginRegistry;
-        milodikfx::dsp::registerChainParameters (pluginRegistry, chain, manager);
+        milodikfx::dsp::registerChainParameters (pluginRegistry, chain, manager, withLibraries());
 
         milodikfx::api::ParameterRegistry appRegistry;
-        milodikfx::dsp::ChainExtras appExtras;
+        auto appExtras = withLibraries();
         appExtras.getInputMode = [] { return 0.0f; };
         appExtras.setInputMode = [] (float) {};
 
         milodikfx::dsp::registerChainParameters (appRegistry, chain, manager, std::move (appExtras));
+
+        // The whole point of wiring the libraries into the plugin: without these
+        // a DAW instance runs the analytic cabinet and a passthrough amp head,
+        // with no way to reach either file.
+        for (const auto* which : { &pluginRegistry, &appRegistry })
+        {
+            expect (which->findParameter ("cabinet", "irFile") != nullptr, "no cabinet IR control");
+            expect (which->findParameter ("cabinet", "irFileB") != nullptr, "no second cabinet IR");
+            expect (which->findParameter ("cabinet", "irBlend") != nullptr, "no cabinet IR blend");
+            expect (which->findParameter ("reverb", "irFile") != nullptr, "no reverb IR control");
+            expect (which->findParameter ("nam", "namFile") != nullptr, "no amp model control");
+        }
+
+        // A file control is text, and text is not something a host can automate:
+        // it has no setter, which is what keeps it out of the plugin's parameter
+        // layout rather than becoming a meaningless float in the automation list.
+        if (const auto* namFile = pluginRegistry.findParameter ("nam", "namFile"))
+        {
+            expect (namFile->isText, "namFile must be a text parameter");
+            expect (namFile->set == nullptr, "a text parameter must have no numeric setter");
+            expect (namFile->setText != nullptr, "a text parameter needs setText");
+            expect (namFile->getOptions != nullptr, "a file control must list its choices");
+        }
+
+        libraryRoot.deleteRecursively();
 
         expectEquals ((int) pluginRegistry.getEffects().size(), 14);
         expectEquals ((int) appRegistry.getEffects().size(), 14);
@@ -413,13 +498,25 @@ public:
 
                 const auto where = juce::String (effect.id) + "." + juce::String (parameter.id);
 
+                expect (! parameter.label.empty(), where + " has no label");
+
+                // A file chooser is text: it has no numeric range to bound and no
+                // numeric setter, which is exactly what keeps it out of a host's
+                // automation list.
+                if (parameter.isText)
+                {
+                    expect (parameter.getText != nullptr, where + " has no text getter");
+                    expect (parameter.setText != nullptr, where + " has no text setter");
+                    expect (parameter.set == nullptr, where + " is text but has a numeric setter");
+                    return;
+                }
+
                 expect (parameter.get != nullptr, where + " has no getter");
                 expect (parameter.set != nullptr, where + " has no setter");
                 expect (parameter.maxValue > parameter.minValue, where + " has an empty range");
                 expect (parameter.defaultValue >= parameter.minValue
                             && parameter.defaultValue <= parameter.maxValue,
                         where + " default sits outside its range");
-                expect (! parameter.label.empty(), where + " has no label");
             });
 
         expect (parameterCount >= 30, "only " + juce::String (parameterCount) + " parameters registered");

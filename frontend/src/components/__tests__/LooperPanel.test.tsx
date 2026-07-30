@@ -64,4 +64,24 @@ describe('LooperPanel', () => {
 
     await waitFor(() => expect(looperAction).toHaveBeenCalledWith('clear'));
   });
+
+  it('takes its state from the meter stream and stops polling entirely', async () => {
+    // The whole point of moving it into the level payload: the panel used to
+    // open four sockets a second for a payload that fits in a stream already
+    // running at ~22 Hz.
+    render(<LooperPanel streamed={playing} />);
+
+    expect(await screen.findByRole('button', { name: 'Overdub' })).toBeInTheDocument();
+    expect(screen.getByText('Main')).toBeInTheDocument();
+    expect(getLooper).not.toHaveBeenCalled();
+  });
+
+  it('still polls when the engine does not report a looper in the stream', async () => {
+    // An older engine, or one that simply has no looper. Same graceful fallback
+    // the level stream itself has.
+    render(<LooperPanel />);
+
+    expect(await screen.findByRole('button', { name: 'Rekam' })).toBeInTheDocument();
+    await waitFor(() => expect(getLooper).toHaveBeenCalled());
+  });
 });

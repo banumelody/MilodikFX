@@ -2,7 +2,7 @@ import { memo } from 'react';
 
 import { Knob } from './Knob';
 import { recordLabel, useLooper } from '../hooks/useLooper';
-import type { LooperState } from '../services/api';
+import type { LooperInfo, LooperState } from '../services/api';
 
 const STATE_LABELS: Record<LooperState, string> = {
   empty: 'Kosong',
@@ -14,6 +14,11 @@ const STATE_LABELS: Record<LooperState, string> = {
 
 export interface LooperPanelProps {
   disabled?: boolean;
+  /**
+   * The looper as reported in the meter stream. Passing it means this panel
+   * needs no connection of its own; leaving it out falls back to a poll.
+   */
+  streamed?: LooperInfo;
 }
 
 /**
@@ -22,8 +27,8 @@ export interface LooperPanelProps {
  * (rekam → tutup → overdub/main); Stop and Hapus are explicit. Bind a footswitch
  * to it from the MIDI panel to run it hands-free.
  */
-function LooperPanelBase({ disabled = false }: LooperPanelProps) {
-  const { info, act, setLevel } = useLooper(!disabled);
+function LooperPanelBase({ disabled = false, streamed }: LooperPanelProps) {
+  const { info, act, setLevel } = useLooper(!disabled, streamed);
 
   const state = info?.state ?? 'empty';
   const busy = disabled || info == null;

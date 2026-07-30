@@ -24,6 +24,7 @@ import {
   getEffects,
   getHistory,
   getModifiers,
+  getPins,
   getPresets,
   getUpdate,
   importPreset,
@@ -39,14 +40,17 @@ import {
   setParameter,
   setPresetMetadata,
   subscribeLevels,
+  togglePin,
   undoChange,
 } from './services/api';
+import { isPluginHost } from './services/transport';
 import type {
   DeviceRequest,
   DevicesResponse,
   EffectDescriptor,
   HistoryState,
   Levels,
+  PinnedControl,
   PresetMetadata,
   UpdateInfo,
 } from './services/api';
@@ -85,7 +89,18 @@ function describeError(error: unknown) {
   return String(error);
 }
 
+/**
+ * True when this bundle is running inside the VST3's WebView rather than the
+ * standalone app. Constant for the session, so it is read once here.
+ *
+ * What it hides is everything the *host* owns: the audio device, the MIDI
+ * ports, the update check, and the looper the plugin's chain does not build.
+ * Everything else is the same screen either way.
+ */
+const IN_PLUGIN = isPluginHost();
+
 export function App() {
+  const inPlugin = IN_PLUGIN;
   const [effects, setEffects] = useState<EffectDescriptor[]>([]);
   const [levels, setLevels] = useState<Levels>(IDLE_LEVELS);
   const [cpuHistory, setCpuHistory] = useState<number[]>([]);
@@ -143,11 +158,19 @@ export function App() {
   const [syncToken, setSyncToken] = useState(0);
 
   const [modulatedParams, setModulatedParams] = useState<Set<string>>(() => new Set());
+  const [pins, setPins] = useState<PinnedControl[]>([]);
 
   const refreshEffects = useCallback(async () => {
     const response = await getEffects();
     setEffects(response.effects);
   }, []);
+
+  // "<effect>.<parameter>" keys, so the rack can light the pin button without
+  // scanning the pin list once per knob.
+  const pinnedParams = useMemo(
+    () => new Set(pins.map((pin) => `${pin.effect}.${pin.parameter}`)),
+    [pins],
+  );
 
   // Which parameters a modifier currently owns, as "<effect>.<parameter>" keys.
   // The rack shows these knobs inert, since the modifier writes them each block.
@@ -162,7 +185,30 @@ export function App() {
     }
   }, []);
 
+  // The knobs this preset wants on the stage screen. They live in the preset, so
+  // changing preset changes what Perform shows.
+  const refreshPins = useCallback(async () => {
+    try {
+      setPins((await getPins()).pins);
+    } catch {
+      /* an engine without /api/pins simply shows no pinned controls */
+    }
+  }, []);
+
+  const handleTogglePin = useCallback((effectId: string, parameterId: string) => {
+    void (async () => {
+      try {
+        setPins((await togglePin(effectId, parameterId)).pins);
+      } catch {
+        /* full, or not pinnable; the current list stands */
+      }
+    })();
+  }, []);
+
   const refreshDevices = useCallback(async () => {
+    // The host owns the device inside a plugin; there is no endpoint to ask.
+    if (IN_PLUGIN) return;
+
     try {
       setDevices(await getDevices());
       setDeviceError(null);
@@ -183,7 +229,13 @@ export function App() {
 
     const bootstrap = async () => {
       try {
-        await Promise.all([refreshEffects(), refreshDevices(), refreshPresets(), refreshModifiers()]);
+        await Promise.all([
+          refreshEffects(),
+          refreshDevices(),
+          refreshPresets(),
+          refreshModifiers(),
+          refreshPins(),
+        ]);
         if (!cancelled) setConnection('online');
       } catch (error) {
         if (!cancelled) {
@@ -197,7 +249,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [refreshEffects, refreshDevices, refreshPresets, refreshModifiers]);
+  }, [refreshEffects, refreshDevices, refreshPresets, refreshModifiers, refreshPins]);
 
   const handleModifiersChanged = useCallback(() => {
     void refreshModifiers();
@@ -208,6 +260,9 @@ export function App() {
   // GitHub, which may be slow or blocked, and its failure must never colour the
   // "connected to engine" status or hold up the rack.
   useEffect(() => {
+    // A plugin has no business reaching out to GitHub from inside someone's DAW.
+    if (IN_PLUGIN) return undefined;
+
     let cancelled = false;
 
     getUpdate()
@@ -263,6 +318,7 @@ export function App() {
             syncTimer.current = null;
             void refreshEffects();
             void refreshModifiers();
+            void refreshPins();
             setSyncToken((token) => token + 1);
           }, 200);
         }
@@ -272,7 +328,7 @@ export function App() {
     );
 
     return unsubscribe;
-  }, [refreshEffects, refreshModifiers]);
+  }, [refreshEffects, refreshModifiers, refreshPins]);
 
   const flushWrites = useCallback(async () => {
     flushTimer.current = null;
@@ -431,9 +487,12 @@ export function App() {
       void withMessage(async () => {
         await loadPreset(name);
         await refreshEffects();
+        // The pins live inside the preset, so this preset's stage screen is a
+        // different set of knobs from the last one's.
+        await refreshPins();
         setSelectedPreset(name);
       }, `Preset "${name}" dimuat`),
-    [refreshEffects, withMessage],
+    [refreshEffects, refreshPins, withMessage],
   );
 
   const handlePresetSave = useCallback(
@@ -535,6 +594,10 @@ export function App() {
   }, [offline, bypass, isBypassed, handleParameterChange]);
 
   const refreshHistory = useCallback(async () => {
+    // The DAW has its own undo stack, and a second one inside the plugin
+    // fighting it would be worse than none.
+    if (IN_PLUGIN) return;
+
     try {
       setHistory(await getHistory());
     } catch {
@@ -545,6 +608,8 @@ export function App() {
   // The engine commits a step once the chain has been still for a moment, so
   // the buttons cannot know they have become available without asking.
   useEffect(() => {
+    if (IN_PLUGIN) return undefined;
+
     const timer = window.setInterval(() => void refreshHistory(), 1500);
     void refreshHistory();
     return () => window.clearInterval(timer);
@@ -767,10 +832,14 @@ export function App() {
         </div>
       ) : null}
 
-      <UpdateBanner
-        info={update && update.latest !== dismissedUpdate ? update : null}
-        onDismiss={dismissUpdate}
-      />
+      {/* No update banner inside a plugin: it has no business reaching out to
+          GitHub from someone's DAW, and the host updates it with the installer. */}
+      {inPlugin ? null : (
+        <UpdateBanner
+          info={update && update.latest !== dismissedUpdate ? update : null}
+          onDismiss={dismissUpdate}
+        />
+      )}
 
       {view === 'perform' ? (
         <PerformView
@@ -780,6 +849,7 @@ export function App() {
           selectedPreset={selectedPreset}
           onLoadPreset={handlePresetLoad}
           bpm={bpm}
+          pins={pins}
           onParameterChange={handleParameterChange}
           isBypassed={isBypassed}
           isMuted={isMuted}
@@ -816,19 +886,25 @@ export function App() {
               onEnabledChange={toggleEffect}
               onChannelSelect={handleChannelSelect}
               modulatedParams={modulatedParams}
+              pinnedParams={pinnedParams}
+              onTogglePin={handleTogglePin}
             />
           ))}
         </div>
 
         <aside className="layout__side">
-          <DeviceSettings
-            devices={devices}
-            busy={deviceBusy}
-            error={deviceError}
-            onApply={applyDevice}
-            onRefresh={refreshDevicesVoid}
-            onOptimise={optimiseVoid}
-          />
+          {/* The host owns the audio device and the MIDI ports inside a plugin.
+              Offering a device picker there would, at best, be a lie. */}
+          {inPlugin ? null : (
+            <DeviceSettings
+              devices={devices}
+              busy={deviceBusy}
+              error={deviceError}
+              onApply={applyDevice}
+              onRefresh={refreshDevicesVoid}
+              onOptimise={optimiseVoid}
+            />
+          )}
 
           <TunerDisplay disabled={offline} />
 
@@ -860,11 +936,15 @@ export function App() {
             onImport={handlePresetImport}
           />
 
-          <MidiMapping effects={effects} disabled={offline} />
+          {inPlugin ? null : <MidiMapping effects={effects} disabled={offline} />}
 
           <NamPanel disabled={offline} onLibraryChanged={refreshEffectsVoid} />
 
-          <LooperPanel disabled={offline} />
+          {/* The plugin's chain has no looper -- a DAW has its own, and the
+              record buffer is tens of megabytes per instance. */}
+          {levels.looper === undefined && inPlugin ? null : (
+            <LooperPanel disabled={offline} streamed={levels.looper} />
+          )}
 
           <ModulationPanel
             effects={rackEffects}

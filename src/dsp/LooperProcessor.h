@@ -54,6 +54,15 @@ public:
     /** Queue an action; the audio thread applies it at the next block. Any thread. */
     void requestAction (Action action) noexcept { pendingAction.store ((int) action, std::memory_order_relaxed); }
 
+    /**
+     * The name the API reports for a state.
+     *
+     * Here rather than in a handler because two of them report it now -- the
+     * looper endpoint and the meter stream -- and two copies of the same
+     * switch is exactly how a state ends up spelled differently in one of them.
+     */
+    static const char* toString (State state) noexcept;
+
     void setLevelPercent (float percent) noexcept
     {
         levelPercent.store (juce::jlimit (0.0f, 100.0f, percent), std::memory_order_relaxed);

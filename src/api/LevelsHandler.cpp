@@ -1,6 +1,7 @@
 #include "api/LevelsHandler.h"
 
 #include "api/ApiJson.h"
+#include "dsp/LooperProcessor.h"
 
 using namespace milodikfx::api;
 
@@ -20,6 +21,23 @@ HttpHandler::Response LevelsHandler::handleGet (const std::string&, const std::s
     object->setProperty ("audioRunning", audioRunning.load (std::memory_order_relaxed));
     object->setProperty ("floorDb", kFloorDb);
     object->setProperty ("chainVersion", (int) chainVersion.load (std::memory_order_relaxed));
+
+    // Only when there is a looper to report. The field is absent otherwise, so a
+    // client can tell "no looper in this build" from "a looper sitting empty".
+    if (looperPresent.load (std::memory_order_relaxed))
+    {
+        using Looper = milodikfx::dsp::LooperProcessor;
+
+        auto* looper = new juce::DynamicObject();
+        looper->setProperty ("state", Looper::toString ((Looper::State) looperState.load (std::memory_order_relaxed)));
+        looper->setProperty ("hasLoop", looperHasLoop.load (std::memory_order_relaxed));
+        looper->setProperty ("loopSeconds", looperSeconds.load (std::memory_order_relaxed));
+        looper->setProperty ("position", looperPosition.load (std::memory_order_relaxed));
+        looper->setProperty ("level", looperLevel.load (std::memory_order_relaxed));
+        looper->setProperty ("maxSeconds", (double) Looper::kMaxSeconds);
+
+        object->setProperty ("looper", juce::var (looper));
+    }
 
     // Compact: this is the meter payload, delivered ~22 times a second down the
     // SSE stream. One line is fewer bytes and skips the line-splitting the

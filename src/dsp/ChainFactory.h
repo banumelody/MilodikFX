@@ -52,12 +52,27 @@ struct GuitarChain
 };
 
 /**
+ * Which optional post-master stages a chain gets.
+ *
+ * Both default to on, so the app is unchanged. A plugin turns them off: neither
+ * has a control surface there, and the looper is not free to carry around --
+ * it allocates its whole 60-second record buffer at prepare time, which is
+ * 23 MB at 48 kHz and 46 MB at 96 kHz *per instance*. A host also has its own
+ * click and its own looping, so in a DAW they are dead weight twice over.
+ */
+struct ChainOptions
+{
+    bool withMetronome = true;
+    bool withLooper = true;
+};
+
+/**
  * Builds the signal chain in its fixed order and returns pointers into it.
  *
  * Shared by the standalone app and the plugin so the two can never disagree
  * about what the chain is or what order it runs in.
  */
-GuitarChain buildGuitarChain (DSPChainManager& chain);
+GuitarChain buildGuitarChain (DSPChainManager& chain, ChainOptions options = {});
 
 /**
  * Host-provided pieces the chain can use but does not own.

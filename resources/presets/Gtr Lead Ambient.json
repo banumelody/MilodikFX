@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 4,
+  "name": "Gtr Lead Ambient",
+  "savedAt": "2026-07-23T21:49:24.495Z",
+  "description": "Gitar — lead menyanyi: drive transparan, delay sync 1/8 ping-pong, reverb luas dengan spillover.",
+  "favourite": false,
+  "notes": "Preset bawaan MilodikFX.",
+  "tags": [
+    "gitar",
+    "lead",
+    "ambient"
+  ],
+  "state": {
+    "global": {
+      "enabled": true,
+      "params": {
+        "bypass": 0,
+        "bpm": 120
+      }
+    },
+    "noiseGate": {
+      "enabled": false,
+      "params": {
+        "thresholdDb": -55,
+        "attackMs": 2,
+        "holdMs": 60,
+        "releaseMs": 150
+      }
+    },
+    "cleanBoost": {
+      "enabled": false,
+      "params": {
+        "gainDb": 0
+      }
+    },
+    "compressor": {
+      "enabled": true,
+      "params": {
+        "inputGainDb": 0,
+        "thresholdDb": -20,
+        "ratio": 3,
+        "attackMs": 10,
+        "releaseMs": 100,
+        "mixPct": 60,
+        "autoMakeup": 1
+      }
+    },
+    "overdrive": {
+      "enabled": true,
+      "params": {
+        "type": 4,
+        "drivePct": 45,
+        "levelPct": 80,
+        "asymmetry": 0,
+        "oversampling": 2,
+        "tonePct": 50,
+        "voicePct": 50,
+        "bassDb": 0,
+        "midDb": 0,
+        "trebleDb": 1,
+        "hpMode": 0,
+        "bright": 0
+      }
+    },
+    "eq": {
+      "enabled": true,
+      "params": {
+        "bassDb": 0,
+        "midDb": 2,
+        "trebleDb": 0
+      }
+    },
+    "toneStack": {
+      "enabled": false,
+      "params": {
+        "bassDb": 0,
+        "midDb": 0,
+        "trebleDb": 0
+      }
+    },
+    "nam": {
+      "enabled": false,
+      "params": {
+        "inputDb": 0,
+        "outputDb": 0
+      }
+    },
+    "cabinet": {
+      "enabled": true,
+      "params": {
+        "presenceDb": 2,
+        "toneHz": 6000,
+        "irEnabled": 0,
+        "irFile": "",
+        "irFileB": "",
+        "irBlend": 0
+      }
+    },
+    "delay": {
+      "enabled": true,
+      "params": {
+        "timeMs": 350,
+        "feedbackPct": 40,
+        "mixPct": 35,
+        "dampingHz": 5000,
+        "pingPong": 1,
+        "spillover": 1,
+        "syncMode": 3
+      }
+    },
+    "reverb": {
+      "enabled": true,
+      "params": {
+        "roomSize": 0.75,
+        "decayTime": 3.5,
+        "width": 1,
+        "dryWetMix": 0.32,
+        "spillover": 1,
+        "irEnabled": 0
+      }
+    },
+    "master": {
+      "enabled": true,
+      "params": {
+        "muted": 0,
+        "volumeDb": -3,
+        "ceilingDb": -0.3,
+        "limiterEnabled": 1
+      }
+    }
+  }
+}

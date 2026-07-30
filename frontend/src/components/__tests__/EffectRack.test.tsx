@@ -492,3 +492,43 @@ describe('EffectRack', () => {
     expect(screen.getByRole('slider', { name: 'Drive' })).toHaveAttribute('aria-disabled', 'true');
   });
 });
+
+describe('EffectRack pins', () => {
+  it('shows no pin buttons when the engine does not track pins', () => {
+    renderRack(overdrive);
+
+    expect(screen.queryByRole('button', { name: /Sematkan/ })).not.toBeInTheDocument();
+  });
+
+  it('pins a control and reports which one', () => {
+    const onTogglePin = vi.fn();
+
+    render(
+      <EffectRack
+        effect={overdrive}
+        onParameterChange={vi.fn()}
+        onEnabledChange={vi.fn()}
+        onTogglePin={onTogglePin}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sematkan Drive ke layar Perform' }));
+
+    expect(onTogglePin).toHaveBeenCalledWith('overdrive', 'drivePct');
+  });
+
+  it('marks an already-pinned control as pressed, and offers to unpin it', () => {
+    render(
+      <EffectRack
+        effect={overdrive}
+        onParameterChange={vi.fn()}
+        onEnabledChange={vi.fn()}
+        pinnedParams={new Set(['overdrive.drivePct'])}
+        onTogglePin={vi.fn()}
+      />,
+    );
+
+    const pin = screen.getByRole('button', { name: 'Lepas Drive dari layar Perform' });
+    expect(pin).toHaveAttribute('aria-pressed', 'true');
+  });
+});

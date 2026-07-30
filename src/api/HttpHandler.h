@@ -19,12 +19,17 @@ public:
         std::string body;
     };
 
+    // The default implementations answer 405, so a handler only overrides the
+    // methods it actually supports. Their parameters are deliberately unnamed:
+    // named-but-unused arguments made every build of every translation unit that
+    // includes this header emit four C4100 warnings.
+
     /**
      * Handle GET request
      * @param path The request path (e.g., "/api/devices" or "/api/parameters/master-volume")
      * @param query Query string parameters (e.g., "device=input")
      */
-    virtual Response handleGet(const std::string& path, const std::string& query) const
+    virtual Response handleGet(const std::string& /*path*/, const std::string& /*query*/) const
     {
         return { 405, "application/json", R"({"error":"Method Not Allowed"})" };
     }
@@ -34,7 +39,7 @@ public:
      * @param path The request path
      * @param body The request body (JSON)
      */
-    virtual Response handlePost(const std::string& path, const std::string& body)
+    virtual Response handlePost(const std::string& /*path*/, const std::string& /*body*/)
     {
         return { 405, "application/json", R"({"error":"Method Not Allowed"})" };
     }
@@ -44,7 +49,7 @@ public:
      * @param path The request path
      * @param body The request body (JSON)
      */
-    virtual Response handlePut(const std::string& path, const std::string& body)
+    virtual Response handlePut(const std::string& /*path*/, const std::string& /*body*/)
     {
         return { 405, "application/json", R"({"error":"Method Not Allowed"})" };
     }
@@ -53,7 +58,7 @@ public:
      * Handle DELETE request
      * @param path The request path
      */
-    virtual Response handleDelete(const std::string& path)
+    virtual Response handleDelete(const std::string& /*path*/)
     {
         return { 405, "application/json", R"({"error":"Method Not Allowed"})" };
     }

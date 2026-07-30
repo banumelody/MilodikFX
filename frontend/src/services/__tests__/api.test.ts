@@ -2,13 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError, getEffects, setParameter, subscribeLevels } from '../api';
 
+// The transport reads status and text(); it never looks at ok/statusText, so an
+// engine that answers 400 with a JSON body still surfaces the message inside it.
 function jsonResponse(body: unknown, status = 200) {
   return {
     ok: status >= 200 && status < 300,
     status,
     statusText: status === 200 ? 'OK' : 'Error',
-    json: async () => body,
-  } as Response;
+    text: async () => JSON.stringify(body),
+  } as unknown as Response;
 }
 
 describe('api client', () => {
@@ -30,7 +32,7 @@ describe('api client', () => {
 
     expect(fetch).toHaveBeenCalledWith(
       `${window.location.origin}/api/effects`,
-      expect.objectContaining({ headers: { 'Content-Type': 'application/json' } }),
+      expect.objectContaining({ method: 'GET', headers: { 'Content-Type': 'application/json' } }),
     );
   });
 
@@ -64,17 +66,15 @@ describe('api client', () => {
     await expect(getEffects()).rejects.toThrow(/buffer size mismatch/);
   });
 
-  it('falls back to the status text when the error body is not JSON', async () => {
+  it('falls back to the status code when the error body is not JSON', async () => {
     vi.mocked(fetch).mockResolvedValue({
       ok: false,
       status: 500,
       statusText: 'Internal Server Error',
-      json: async () => {
-        throw new Error('not json');
-      },
+      text: async () => '<html>gateway exploded</html>',
     } as unknown as Response);
 
-    await expect(getEffects()).rejects.toThrow('Internal Server Error');
+    await expect(getEffects()).rejects.toThrow('HTTP 500');
   });
 
   it('does not stack level requests when the engine is slow', async () => {

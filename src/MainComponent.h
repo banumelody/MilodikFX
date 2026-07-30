@@ -24,7 +24,9 @@
 #include "dsp/ModulationEngine.h"
 #include "midi/MidiController.h"
 #include "preset/IrLibrary.h"
+#include "preset/PinnedControls.h"
 #include "preset/PresetManager.h"
+#include "preset/UserPaths.h"
 #include "preset/ChannelStore.h"
 #include "ui/WebServer.h"
 
@@ -75,10 +77,14 @@ private:
     static constexpr const char* kKeyMidiDevice = "midi.device";
     static constexpr const char* kKeyScenes = "ui.scenes";
     static constexpr const char* kKeyChannels = "ui.channels";
+    static constexpr const char* kKeyPins = "ui.pins";
     static constexpr const char* kKeyLooperLevel = "looper.level";
 
     void buildChain();
     void buildRegistry();
+
+    /** Writes the presets shipped inside the exe, skipping any already on disk. */
+    void installDefaultPresets();
     void buildMidi();
 
     void loadMidiSettings();
@@ -124,6 +130,7 @@ private:
     milodikfx::api::ParameterRegistry registry;
     milodikfx::preset::SceneManager sceneManager { registry };
     milodikfx::preset::ChannelStore channelStore { registry };
+    milodikfx::preset::PinnedControls pinnedControls;
     milodikfx::api::UndoHistory undoHistory { registry };
 
     juce::AudioDeviceManager deviceManager;

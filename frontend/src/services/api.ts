@@ -1,11 +1,14 @@
 /**
  * Typed client for the MilodikFX engine's REST API.
  *
- * The base URL is derived from the page origin: the engine serves this bundle
- * itself, and it falls back to ports 3001+ when 3000 is taken, so a hardcoded
- * port would silently break exactly when the fallback was needed.
+ * How a call actually travels is `transport`'s problem: loopback HTTP in the
+ * standalone app, JUCE's native function bridge inside the plugin, where there
+ * is no server to talk to. Everything below this line is identical either way.
  */
 
+import { supportsEventStream, transport } from './transport';
+
+/** Only the event streams still need a real URL; see subscribeLevels. */
 const API_BASE = `${window.location.origin}/api`;
 
 export interface ParameterDescriptor {
@@ -61,6 +64,12 @@ export interface Levels {
    * UI watches it to know when to refetch. Absent on older engines.
    */
   chainVersion?: number;
+  /**
+   * The looper rides along here rather than costing its panel a poll of its own.
+   * Absent when the engine has no looper at all -- the plugin build -- which is
+   * deliberately distinguishable from a looper that is merely sitting empty.
+   */
+  looper?: LooperInfo;
 }
 
 export interface DeviceState {
@@ -145,27 +154,36 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...init,
-  });
+  // Split the query off the path: the native bridge takes them separately,
+  // exactly as the C++ dispatcher does.
+  const marker = path.indexOf('?');
+  const bare = marker < 0 ? path : path.slice(0, marker);
+  const query = marker < 0 ? '' : path.slice(marker + 1);
 
-  if (!response.ok) {
+  const response = await transport()(
+    init?.method ?? 'GET',
+    `/api${bare}`,
+    query,
+    typeof init?.body === 'string' ? init.body : '',
+  );
+
+  if (response.status < 200 || response.status >= 300) {
     // The engine answers with { "error": "..." }; surface that rather than a
     // bare status code, since it usually says exactly what the driver refused.
-    let detail = response.statusText;
+    let detail = `HTTP ${response.status}`;
 
     try {
-      const body = await response.json();
+      const body = JSON.parse(response.body);
       if (body && typeof body.error === 'string') detail = body.error;
     } catch {
-      /* the body was not JSON; the status text will have to do */
+      /* the body was not JSON; the status will have to do */
     }
 
     throw new ApiError(detail, response.status);
   }
 
-  return response.json() as Promise<T>;
+  // A 204, or an endpoint that answers with nothing, is not a parse failure.
+  return (response.body ? JSON.parse(response.body) : {}) as T;
 }
 
 export const getEffects = () => request<EffectsResponse>('/effects');
@@ -303,7 +321,7 @@ export function subscribeTuner(
   onError: (error: unknown) => void,
   intervalMs = 60,
 ): () => void {
-  if (typeof EventSource !== 'function') return pollTuner(onReading, onError, intervalMs);
+  if (!supportsEventStream()) return pollTuner(onReading, onError, intervalMs);
 
   let stopped = false;
   let delivered = false;
@@ -464,6 +482,42 @@ export const importPreset = (name: string, data: string) =>
     method: 'POST',
     body: JSON.stringify({ name, data }),
   });
+
+/**
+ * A control the current preset wants on the Perform screen.
+ *
+ * The engine sends everything needed to draw the knob, so the stage view never
+ * has to pick through the whole rack to find it.
+ */
+export interface PinnedControl {
+  effect: string;
+  parameter: string;
+  effectLabel: string;
+  label: string;
+  unit: string;
+  min: number;
+  max: number;
+  step: number;
+  isBoolean: boolean;
+  value: number;
+}
+
+export interface PinsState {
+  /** The most the engine will hold — two readable rows at stage distance. */
+  max: number;
+  pins: PinnedControl[];
+}
+
+export const getPins = () => request<PinsState>('/pins');
+
+export const togglePin = (effect: string, parameter: string) =>
+  request<PinsState>('/pins/toggle', {
+    method: 'POST',
+    body: JSON.stringify({ effect, parameter }),
+  });
+
+export const setPins = (pins: Array<{ effect: string; parameter: string }>) =>
+  request<PinsState>('/pins', { method: 'PUT', body: JSON.stringify({ pins }) });
 
 export type ModifierSource = 'lfoSine' | 'lfoTriangle' | 'lfoSquare' | 'envelope' | 'expression';
 
@@ -642,7 +696,10 @@ export function subscribeLevels(
   onError: (error: unknown) => void,
   intervalMs = 100,
 ): () => void {
-  if (typeof EventSource !== 'function') return pollLevels(onLevels, onError, intervalMs);
+  // No stream inside the plugin: there is no server to hold a connection open.
+  // The polling path already existed as the fallback for a stream that never
+  // delivered, so the plugin simply takes it from the start.
+  if (!supportsEventStream()) return pollLevels(onLevels, onError, intervalMs);
 
   let stopped = false;
   let delivered = false;

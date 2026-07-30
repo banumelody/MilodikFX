@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: ["main"]
 
-# The native engine only builds on Windows and the Cypress suite needs a running
-# engine to talk to, so CI covers the frontend only. C++ changes are verified
-# locally with `ctest --test-dir build -C Debug` and run-local-e2e.ps1.
 jobs:
   frontend:
     runs-on: ubuntu-latest
@@ -42,3 +39,75 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # The engine, the plugin and the native test suite. This used to be verified
+  # locally or not at all -- for a codebase that lives on one machine, that made
+  # every C++ change a leap of faith. It builds without the ASIO SDK (Steinberg's
+  # licence forbids redistributing it), which also proves the WASAPI fallback
+  # path still compiles.
+  native:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # The bundle is embedded into the exe at configure time, so it has to
+      # exist before CMake runs or the build silently falls back to the
+      # "UI not built" page.
+      - name: Build the frontend bundle
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      # JUCE and the NAM core are fetched at configure time; caching them keeps
+      # the job from re-cloning several hundred megabytes on every push.
+      - name: Cache fetched dependencies
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: deps-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: deps-${{ runner.os }}-
+
+      - name: Configure
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+
+      - name: Build engine, plugin and tests
+        run: cmake --build build --config Release --target MilodikFX MilodikFX_Plugin_VST3 MilodikFX_tests --parallel
+
+      # Runs every statically-registered juce::UnitTest, including the DSP,
+      # registry, MIDI, scene, channel, looper, modifier and NAM suites. The
+      # performance tests assert build-independent ratios, so a slow CI runner
+      # does not fail them.
+      - name: Unit tests
+        run: build\MilodikFX_tests_artefacts\Release\MilodikFX_tests.exe
+
+      # Catches host-compatibility bugs the unit suite cannot see: state
+      # round-trips, odd bus layouts, extreme block sizes, parameter access from
+      # the wrong thread.
+      - name: Validate the VST3 with pluginval
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Invoke-WebRequest -Uri "https://github.com/Tracktion/pluginval/releases/download/v1.0.3/pluginval_Windows.zip" -OutFile pluginval.zip
+          Expand-Archive pluginval.zip -DestinationPath pluginval
+          $vst3 = Get-ChildItem -Recurse -Filter "MilodikFX.vst3" -Path build\MilodikFX_Plugin_artefacts\Release\VST3 | Select-Object -First 1
+          .\pluginval\pluginval.exe --strictness-level 8 --validate-in-process --timeout-ms 600000 --validate $vst3.FullName
+          if ($LASTEXITCODE -ne 0) { throw "pluginval reported failures" }
+
+      - name: Upload the engine
+        uses: actions/upload-artifact@v4
+        with:
+          name: MilodikFX-windows-x64
+          path: |
+            build/MilodikFX_artefacts/Release/MilodikFX.exe
+            build/MilodikFX_Plugin_artefacts/Release/VST3/MilodikFX.vst3
+          if-no-files-found: error

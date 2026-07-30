@@ -270,8 +270,10 @@ juce::String AudioDeviceController::initialiseOnMessageThread (const juce::XmlEl
 
 juce::String AudioDeviceController::openPreferredType()
 {
+    // Only the rate is read here. The buffer preference is deliberately not --
+    // see the note below on why it is tuned after the device is open, not
+    // guessed at while trying to open it.
     const auto desiredSampleRate = preferredSampleRate.load (std::memory_order_relaxed);
-    const auto desiredBufferSize = preferredBufferSize.load (std::memory_order_relaxed);
 
     juce::StringArray types;
 

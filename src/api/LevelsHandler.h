@@ -74,6 +74,25 @@ public:
         return chainVersion.load (std::memory_order_relaxed);
     }
 
+    /**
+     * Rides the meter payload so the looper panel does not need a poll of its
+     * own. It used to ask /api/looper four times a second, which on a
+     * thread-per-connection server is four sockets a second for a payload that
+     * fits alongside one already going out ~22 times a second.
+     *
+     * Left absent until this is called, so a build with no looper -- the plugin --
+     * simply reports no looper rather than a fabricated empty one.
+     */
+    void updateLooper (int state, bool loopPresent, float seconds, float positionFraction, float levelPercent) noexcept
+    {
+        looperState.store (state, std::memory_order_relaxed);
+        looperHasLoop.store (loopPresent, std::memory_order_relaxed);
+        looperSeconds.store (seconds, std::memory_order_relaxed);
+        looperPosition.store (positionFraction, std::memory_order_relaxed);
+        looperLevel.store (levelPercent, std::memory_order_relaxed);
+        looperPresent.store (true, std::memory_order_relaxed);
+    }
+
 private:
     // Silence floor, reported until the audio callback delivers the first block.
     // Keep in sync with MainComponent::kMeterFloorDb.
@@ -90,4 +109,11 @@ private:
     std::atomic<int> currentBufferSize { 0 };
     std::atomic<bool> audioRunning { false };
     std::atomic<juce::uint32> chainVersion { 0 };
+
+    std::atomic<bool> looperPresent { false };
+    std::atomic<int> looperState { 0 };
+    std::atomic<bool> looperHasLoop { false };
+    std::atomic<float> looperSeconds { 0.0f };
+    std::atomic<float> looperPosition { 0.0f };
+    std::atomic<float> looperLevel { 100.0f };
 };

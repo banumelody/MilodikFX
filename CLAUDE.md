@@ -11,7 +11,8 @@ loopback-only HTTP API, and hosts the React UI *inside its own window* via Edge 
 browser tab and no separate UI process. The UI bundle is embedded in the exe, so the binary runs on its
 own with nothing beside it.
 
-A second target builds the same DSP chain as a **VST3 plugin** plus a JUCE Standalone wrapper.
+A second target builds the same DSP chain as a **VST3 plugin** plus a JUCE Standalone wrapper, running
+the same React UI inside the plugin window. See "Plugin" below.
 
 ## Build & run
 
@@ -358,6 +359,54 @@ success is cached for 30 min so a reload loop cannot exhaust GitHub's unauthenti
 version comparison is a pure function (`isNewerVersion`) and is unit-tested; the network fetch is not.
 External links in the UI (sponsor page, a release) open via `UiWebView::newWindowAttemptingToLoad`, which
 hands a `target=_blank` off to the system browser rather than a chromeless WebView2 popup.
+
+### Plugin (VST3)
+
+`src/plugin/` is the same engine in a host, and the load-bearing insight is that **`RestApiDispatcher`
+and `HttpHandler` were never tied to a socket** — they take `(method, path, query, body)` and hand back
+`(status, body)`. So the plugin reuses the identical handler set through a different transport.
+
+- **`PluginBackend`** owns that dispatcher plus its own `SceneManager`, `ChannelStore` and
+  `PinnedControls`, and registers effects/parameters/presets/scenes/pins/ir/nam/levels/health. It is
+  built lazily on first editor open, so a render farm of unopened instances pays nothing for it.
+  Deliberately *not* registered: `devices` and `midi` (the host owns both), `looper`/`metronome`
+  (not in the plugin's chain), `update` (a plugin has no business calling GitHub).
+- **`PluginEditor`** hosts a JUCE 8 `WebBrowserComponent` with `withResourceProvider` serving the
+  *same* embedded bundle the exe uses, and `withNativeFunction("milodikfxApi", …)` for the calls.
+  **A plugin must never open a port** — several instances in one project would fight over it. A
+  resource provider is handed only a URL, no method and no body, which is exactly why writes go
+  through the native function instead. Falls back to `GenericAudioProcessorEditor` without WebView2.
+- **`services/transport.ts`** is the frontend half: `fetch` in the app, JUCE's
+  `__juce__invoke`/`__juce__complete` bridge in the plugin, chosen once. The protocol is spelled out
+  there rather than importing JUCE's `juce.js`, which is served at runtime and would stop the bundle
+  being one self-contained embeddable file. SSE does not exist in the plugin, so `subscribeLevels`
+  takes the polling path it already had as a fallback. `isPluginHost()` hides the device, MIDI, update
+  and looper panels — the things the host owns.
+
+Four things the plugin gets right that are easy to break again:
+
+- **No looper, no metronome** (`ChainOptions{false,false}`). The looper allocates its entire 60-second
+  record buffer at prepare — 23 MB at 48 kHz, 46 MB at 96 kHz, *per instance* — for controls that do
+  not exist in a host. With no metronome to hold the tempo, `global.bpm` falls back to the delay as
+  its owner, so there is still exactly one BPM.
+- **The host owns the tempo.** `followHostTempo()` reads `getPlayHead()` every block; a synced delay
+  has to land on the project grid, not on a number typed into the plugin.
+- **Latency is reported and kept current.** Overdrive oversampling *plus* `NamProcessor`'s measured
+  resampler latency, re-checked on the timer, because a model loads long after `prepareToPlay` and a
+  stale figure silently misaligns the track against every other one. At a 48 kHz session the NAM
+  resampler is a passthrough and adds nothing. Known limit: a bypassed instance is not
+  latency-compensated for the reported figure.
+- **Parameters are polled, not listened to.** `pollHostParameters()` compares cached floats against
+  the APVTS atomics at the top of `processBlock` and applies what moved, straight through the
+  descriptor's `set` closure. The old listener did a linear scan of `juce::String` comparisons on
+  whichever thread the host automated from — including the audio thread.
+
+The timer also reaps retired NAM models (`collectGarbage`), which nothing did before: every model
+change leaked one until the instance was destroyed.
+
+`tests/smoke.ps1` does not cover the plugin. **`pluginval --strictness-level 10` does**, and CI runs it
+on every push — it is what catches state round-trips, odd bus layouts, extreme block sizes and
+parameter access from the wrong thread.
 
 ### Presets and scenes
 

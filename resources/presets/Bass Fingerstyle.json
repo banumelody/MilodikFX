@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 4,
+  "name": "Bass Fingerstyle",
+  "savedAt": "2026-07-23T21:49:24.495Z",
+  "description": "Bass — fingerstyle clean hi-fi: kompresi rata, low tebal + presence, cab Ampeg 810 + B15.",
+  "favourite": false,
+  "notes": "Preset bawaan MilodikFX.",
+  "tags": [
+    "bass",
+    "fingerstyle",
+    "clean"
+  ],
+  "state": {
+    "global": {
+      "enabled": true,
+      "params": {
+        "bypass": 0,
+        "bpm": 120
+      }
+    },
+    "noiseGate": {
+      "enabled": false,
+      "params": {
+        "thresholdDb": -55,
+        "attackMs": 2,
+        "holdMs": 60,
+        "releaseMs": 150
+      }
+    },
+    "cleanBoost": {
+      "enabled": false,
+      "params": {
+        "gainDb": 0
+      }
+    },
+    "compressor": {
+      "enabled": true,
+      "params": {
+        "inputGainDb": 0,
+        "thresholdDb": -22,
+        "ratio": 4,
+        "attackMs": 15,
+        "releaseMs": 120,
+        "mixPct": 100,
+        "autoMakeup": 1
+      }
+    },
+    "overdrive": {
+      "enabled": false,
+      "params": {
+        "type": 0,
+        "drivePct": 0,
+        "levelPct": 100,
+        "asymmetry": 0,
+        "oversampling": 1,
+        "tonePct": 50,
+        "voicePct": 50,
+        "bassDb": 0,
+        "midDb": 0,
+        "trebleDb": 0,
+        "hpMode": 0,
+        "bright": 0
+      }
+    },
+    "eq": {
+      "enabled": true,
+      "params": {
+        "bassDb": 3,
+        "midDb": -1,
+        "trebleDb": 2
+      }
+    },
+    "toneStack": {
+      "enabled": false,
+      "params": {
+        "bassDb": 0,
+        "midDb": 0,
+        "trebleDb": 0
+      }
+    },
+    "nam": {
+      "enabled": false,
+      "params": {
+        "inputDb": 0,
+        "outputDb": 0
+      }
+    },
+    "cabinet": {
+      "enabled": true,
+      "params": {
+        "presenceDb": 2,
+        "toneHz": 6000,
+        "irEnabled": 1,
+        "irFile": "07_Ampeg_SVT-810E_by_Shift_Line",
+        "irFileB": "04_Ampeg_Heritage_B15_by_Shift_Line",
+        "irBlend": 0.35
+      }
+    },
+    "delay": {
+      "enabled": false,
+      "params": {
+        "timeMs": 350,
+        "feedbackPct": 30,
+        "mixPct": 25,
+        "dampingHz": 20000,
+        "pingPong": 0,
+        "spillover": 1,
+        "syncMode": 0
+      }
+    },
+    "reverb": {
+      "enabled": false,
+      "params": {
+        "roomSize": 0.5,
+        "decayTime": 2,
+        "width": 1,
+        "dryWetMix": 0.25,
+        "spillover": 1,
+        "irEnabled": 0
+      }
+    },
+    "master": {
+      "enabled": true,
+      "params": {
+        "muted": 0,
+        "volumeDb": -3,
+        "ceilingDb": -0.3,
+        "limiterEnabled": 1
+      }
+    }
+  }
+}

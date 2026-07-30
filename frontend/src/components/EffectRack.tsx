@@ -152,6 +152,10 @@ export interface EffectRackProps {
   onChannelSelect?: (effectId: string, index: number) => void;
   /** "<effect>.<parameter>" keys a modifier currently owns; those knobs go inert. */
   modulatedParams?: Set<string>;
+  /** "<effect>.<parameter>" keys pinned to the Perform screen by this preset. */
+  pinnedParams?: Set<string>;
+  /** Pins or unpins a control. Absent when the engine does not track pins. */
+  onTogglePin?: (effectId: string, parameterId: string) => void;
   disabled?: boolean;
   /** Only affects where the tone curve puts Nyquist; harmless when unknown. */
   sampleRate?: number;
@@ -172,6 +176,8 @@ function EffectRackBase({
   onEnabledChange,
   onChannelSelect,
   modulatedParams,
+  pinnedParams,
+  onTogglePin,
   disabled = false,
   sampleRate,
 }: EffectRackProps) {
@@ -382,17 +388,49 @@ function EffectRackBase({
             />
           );
 
-          return modulated ? (
+          const pinned = pinnedParams?.has(`${effect.id}.${parameter.id}`) ?? false;
+
+          // A bare knob stays bare. It only gets a wrapper when there is
+          // something to overlay on it — the MOD tag, the pin button, or both.
+          if (!modulated && !onTogglePin) return <Fragment key={parameter.id}>{knob}</Fragment>;
+
+          return (
             <div
               key={parameter.id}
-              className="rack__modknob rack__modknob--live"
-              title="Modifier aktif — knob menyetel titik tengah sapuan"
+              className={`rack__modknob${modulated ? ' rack__modknob--live' : ''}`}
+              title={
+                modulated ? 'Modifier aktif — knob menyetel titik tengah sapuan' : undefined
+              }
             >
               {knob}
-              <span className="rack__modtag">MOD</span>
+              {modulated && <span className="rack__modtag">MOD</span>}
+              {onTogglePin && (
+                <button
+                  type="button"
+                  className={`rack__pin${pinned ? ' rack__pin--on' : ''}`}
+                  aria-pressed={pinned}
+                  aria-label={
+                    pinned
+                      ? `Lepas ${parameter.label} dari layar Perform`
+                      : `Sematkan ${parameter.label} ke layar Perform`
+                  }
+                  title={
+                    pinned
+                      ? 'Tersemat di Perform — klik untuk melepas'
+                      : 'Sematkan ke layar Perform'
+                  }
+                  onClick={() => onTogglePin(effect.id, parameter.id)}
+                >
+                  <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                    <path
+                      d="M9.5 1.5 14 6l-2 .6-3 3L8.4 13 3 7.6l3.4-.6 3-3z"
+                      fill="currentColor"
+                    />
+                    <path d="M6 10 2 14" stroke="currentColor" strokeWidth="1.4" fill="none" />
+                  </svg>
+                </button>
+              )}
             </div>
-          ) : (
-            <Fragment key={parameter.id}>{knob}</Fragment>
           );
         })}
       </div>

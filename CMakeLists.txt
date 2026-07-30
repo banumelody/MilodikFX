@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(MilodikFX VERSION 0.22.0 LANGUAGES CXX)
+project(MilodikFX VERSION 0.23.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -243,6 +243,7 @@ set(MILODIKFX_ENGINE_SOURCES
   src/dsp/DSPChainManager.cpp
   src/dsp/ChainFactory.h
   src/dsp/ChainFactory.cpp
+  src/preset/UserPaths.h
   src/preset/PresetManager.h
   src/preset/PresetManager.cpp
   src/preset/IrLibrary.h
@@ -253,6 +254,8 @@ set(MILODIKFX_ENGINE_SOURCES
   src/preset/SceneManager.cpp
   src/preset/ChannelStore.h
   src/preset/ChannelStore.cpp
+  src/preset/PinnedControls.h
+  src/preset/PinnedControls.cpp
   src/api/ParameterRegistry.h
   src/api/ParameterRegistry.cpp
   src/api/UndoHistory.h
@@ -303,6 +306,36 @@ else()
   set(MILODIKFX_HAS_EMBEDDED_UI 0)
 endif()
 
+# ---------------------------------------------------------------------------
+# Bundled presets
+#
+# A fresh install used to open on an empty preset library, which is a poor first
+# five minutes: the app is a rack of knobs with nothing to compare against.
+# These ship inside the exe and are written to the user's presets folder on
+# first run, never overwriting a file that is already there.
+#
+# The bass presets name impulse responses from the author's own library. That is
+# safe by design -- the cabinet falls back to its analytic model when a named IR
+# cannot be found, rather than going silent.
+# ---------------------------------------------------------------------------
+file(GLOB MILODIKFX_DEFAULT_PRESETS "${CMAKE_SOURCE_DIR}/resources/presets/*.json")
+
+if(MILODIKFX_DEFAULT_PRESETS)
+  list(LENGTH MILODIKFX_DEFAULT_PRESETS MILODIKFX_PRESET_COUNT)
+  message(STATUS "MilodikFX: embedding ${MILODIKFX_PRESET_COUNT} default presets")
+
+  juce_add_binary_data(MilodikFX_PresetData
+    HEADER_NAME MilodikFXPresetData.h
+    NAMESPACE MilodikFXPresetData
+    SOURCES ${MILODIKFX_DEFAULT_PRESETS}
+  )
+
+  set(MILODIKFX_HAS_PRESET_DATA 1)
+else()
+  message(WARNING "MilodikFX: no default presets found in resources/presets")
+  set(MILODIKFX_HAS_PRESET_DATA 0)
+endif()
+
 target_sources(MilodikFX
   PRIVATE
     src/Main.cpp
@@ -319,6 +352,7 @@ target_sources(MilodikFX
     src/api/UpdateHandler.h
     src/api/ModulationHandler.h
     src/api/LooperHandler.h
+    src/api/PinsHandler.h
     src/api/DevicesHandler.h
     src/api/DevicesHandler.cpp
     src/api/ParametersHandler.h
@@ -353,12 +387,17 @@ target_compile_definitions(MilodikFX
     JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=$<BOOL:${MILODIKFX_ENABLE_WEBVIEW}>
     MILODIKFX_ENABLE_WEBVIEW=$<BOOL:${MILODIKFX_ENABLE_WEBVIEW}>
     MILODIKFX_EMBED_UI=${MILODIKFX_HAS_EMBEDDED_UI}
+    MILODIKFX_EMBED_PRESETS=${MILODIKFX_HAS_PRESET_DATA}
     MILODIKFX_VERSION="${PROJECT_VERSION}"
     JUCE_USE_WINRT_MIDI=$<BOOL:${MILODIKFX_WINRT_MIDI}>
 )
 
 if(MILODIKFX_HAS_EMBEDDED_UI)
   target_link_libraries(MilodikFX PRIVATE MilodikFX_UiData)
+endif()
+
+if(MILODIKFX_HAS_PRESET_DATA)
+  target_link_libraries(MilodikFX PRIVATE MilodikFX_PresetData)
 endif()
 
 milodikfx_apply_nam(MilodikFX)
@@ -440,6 +479,7 @@ if(MILODIKFX_BUILD_PLUGIN)
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT FALSE
     NEEDS_MIDI_OUTPUT FALSE
+    NEEDS_WEBVIEW2 ${MILODIKFX_ENABLE_WEBVIEW}
     COPY_PLUGIN_AFTER_BUILD FALSE
   )
 
@@ -449,17 +489,60 @@ if(MILODIKFX_BUILD_PLUGIN)
     PRIVATE
       src/plugin/PluginProcessor.h
       src/plugin/PluginProcessor.cpp
+      src/plugin/PluginBackend.h
+      src/plugin/PluginBackend.cpp
+      src/plugin/PluginEditor.h
+      src/plugin/PluginEditor.cpp
+      src/api/HttpHandler.h
+      src/api/ApiJson.h
+      src/api/RestApiDispatcher.h
+      src/api/HealthHandler.h
+      src/api/PinsHandler.h
+      src/api/ParametersHandler.h
+      src/api/ParametersHandler.cpp
+      src/api/EffectsHandler.h
+      src/api/EffectsHandler.cpp
+      src/api/IrHandler.h
+      src/api/IrHandler.cpp
+      src/api/NamHandler.h
+      src/api/NamHandler.cpp
+      src/api/LevelsHandler.h
+      src/api/LevelsHandler.cpp
+      src/api/ScenesHandler.h
+      src/api/ScenesHandler.cpp
+      src/api/PresetsHandler.h
+      src/api/PresetsHandler.cpp
       ${MILODIKFX_ENGINE_SOURCES}
   )
 
   target_include_directories(MilodikFX_Plugin PRIVATE src)
 
+  # The plugin hosts the same React UI as the app, served straight out of the
+  # binary by JUCE 8's WebBrowserComponent resource provider -- no socket, which
+  # matters because several instances in one project would fight over a port.
+  # NEEDS_WEBVIEW2 is set on the target above.
+  set(MILODIKFX_PLUGIN_WEBVIEW 0)
+
+  if(MILODIKFX_ENABLE_WEBVIEW AND WIN32)
+    set(MILODIKFX_PLUGIN_WEBVIEW 1)
+  endif()
+
   target_compile_definitions(MilodikFX_Plugin
     PUBLIC
-      JUCE_WEB_BROWSER=0
+      JUCE_WEB_BROWSER=${MILODIKFX_PLUGIN_WEBVIEW}
+      JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=${MILODIKFX_PLUGIN_WEBVIEW}
       JUCE_USE_CURL=0
       JUCE_VST3_CAN_REPLACE_VST2=0
+    PRIVATE
+      MILODIKFX_PLUGIN_WEBVIEW=${MILODIKFX_PLUGIN_WEBVIEW}
+      MILODIKFX_PLUGIN_EMBED_UI=${MILODIKFX_HAS_EMBEDDED_UI}
+      MILODIKFX_VERSION="${PROJECT_VERSION}"
   )
+
+  # The identical bundle the exe embeds: one UI to build, test and keep honest.
+  if(MILODIKFX_HAS_EMBEDDED_UI)
+    target_link_libraries(MilodikFX_Plugin PRIVATE MilodikFX_UiData)
+  endif()
 
   if(MILODIKFX_ENABLE_ASIO)
     target_compile_definitions(MilodikFX_Plugin PRIVATE JUCE_ASIO=1)
@@ -474,6 +557,7 @@ if(MILODIKFX_BUILD_PLUGIN)
     PRIVATE
       juce::juce_audio_utils
       juce::juce_dsp
+      juce::juce_gui_extra
       juce::juce_data_structures
       juce::juce_recommended_config_flags
       juce::juce_recommended_lto_flags
@@ -502,6 +586,7 @@ target_sources(MilodikFX_tests
     tests/MidiTests.cpp
     tests/SceneTests.cpp
     tests/ChannelTests.cpp
+    tests/PinTests.cpp
     tests/UndoTests.cpp
     tests/InputTrimTests.cpp
     tests/DriveVoicingTests.cpp

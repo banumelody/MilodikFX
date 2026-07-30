@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 4,
+  "name": "Bass Metal",
+  "savedAt": "2026-07-23T21:49:24.495Z",
+  "description": "Bass — grind metal: gate, kompresi kuat, RAT untuk gerinda, mids menembus, cab SVT-810.",
+  "favourite": false,
+  "notes": "Preset bawaan MilodikFX.",
+  "tags": [
+    "bass",
+    "metal",
+    "grind"
+  ],
+  "state": {
+    "global": {
+      "enabled": true,
+      "params": {
+        "bypass": 0,
+        "bpm": 120
+      }
+    },
+    "noiseGate": {
+      "enabled": true,
+      "params": {
+        "thresholdDb": -50,
+        "attackMs": 1,
+        "holdMs": 60,
+        "releaseMs": 120
+      }
+    },
+    "cleanBoost": {
+      "enabled": false,
+      "params": {
+        "gainDb": 0
+      }
+    },
+    "compressor": {
+      "enabled": true,
+      "params": {
+        "inputGainDb": 0,
+        "thresholdDb": -22,
+        "ratio": 5,
+        "attackMs": 10,
+        "releaseMs": 100,
+        "mixPct": 100,
+        "autoMakeup": 1
+      }
+    },
+    "overdrive": {
+      "enabled": true,
+      "params": {
+        "type": 10,
+        "drivePct": 55,
+        "levelPct": 70,
+        "asymmetry": 0,
+        "oversampling": 2,
+        "tonePct": 60,
+        "voicePct": 50,
+        "bassDb": 0,
+        "midDb": 0,
+        "trebleDb": 0,
+        "hpMode": 0,
+        "bright": 0
+      }
+    },
+    "eq": {
+      "enabled": true,
+      "params": {
+        "bassDb": 2,
+        "midDb": 2,
+        "trebleDb": 1
+      }
+    },
+    "toneStack": {
+      "enabled": true,
+      "params": {
+        "bassDb": 1,
+        "midDb": 1,
+        "trebleDb": 0
+      }
+    },
+    "nam": {
+      "enabled": false,
+      "params": {
+        "inputDb": 0,
+        "outputDb": 0
+      }
+    },
+    "cabinet": {
+      "enabled": true,
+      "params": {
+        "presenceDb": 3,
+        "toneHz": 6500,
+        "irEnabled": 1,
+        "irFile": "12_Ampeg_SVT-810E_Olympic_MkIIIS_edition2",
+        "irFileB": "",
+        "irBlend": 0
+      }
+    },
+    "delay": {
+      "enabled": false,
+      "params": {
+        "timeMs": 350,
+        "feedbackPct": 30,
+        "mixPct": 25,
+        "dampingHz": 20000,
+        "pingPong": 0,
+        "spillover": 1,
+        "syncMode": 0
+      }
+    },
+    "reverb": {
+      "enabled": false,
+      "params": {
+        "roomSize": 0.5,
+        "decayTime": 2,
+        "width": 1,
+        "dryWetMix": 0.25,
+        "spillover": 1,
+        "irEnabled": 0
+      }
+    },
+    "master": {
+      "enabled": true,
+      "params": {
+        "muted": 0,
+        "volumeDb": -4,
+        "ceilingDb": -0.3,
+        "limiterEnabled": 1
+      }
+    }
+  }
+}

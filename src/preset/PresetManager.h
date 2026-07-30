@@ -40,14 +40,18 @@ struct PresetDocument
 
     /** Per-effect A/B/C/D channels, opaque here -- ChannelStore owns the shape. */
     juce::var channels;
+
+    /** Which knobs this sound wants on the stage screen -- PinnedControls owns the shape. */
+    juce::var pins;
 };
 
 class PresetManager final
 {
 public:
-    /** 3 added metadata and scenes; 4 added per-effect channels. Older files
-        still load; the new fields simply come back empty. */
-    static constexpr int kSchemaVersion = 4;
+    /** 3 added metadata and scenes; 4 added per-effect channels; 5 added the
+        pinned Perform controls. Older files still load; the new fields simply
+        come back empty. */
+    static constexpr int kSchemaVersion = 5;
 
     explicit PresetManager (juce::File presetsDirectoryIn);
 

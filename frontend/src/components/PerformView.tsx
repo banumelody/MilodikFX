@@ -1,11 +1,14 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { EFFECT_ACCENTS } from './EffectRack';
+import { Knob } from './Knob';
 import { recordLabel, useLooper } from '../hooks/useLooper';
 import { getScenes, recallScene, setTunerEnabled, subscribeTuner } from '../services/api';
 import type {
   EffectDescriptor,
   Levels,
   ParameterDescriptor,
+  PinnedControl,
   ScenesState,
   TunerReading,
 } from '../services/api';
@@ -35,6 +38,11 @@ export interface PerformViewProps {
   selectedPreset: string;
   onLoadPreset: (name: string) => void;
   bpm?: ParameterDescriptor;
+  /**
+   * The knobs this preset asked to keep within reach. They live in the preset,
+   * so switching preset changes what is on the stage screen.
+   */
+  pins?: PinnedControl[];
   onParameterChange: (effectId: string, parameterId: string, value: number) => void;
   isBypassed: boolean;
   isMuted: boolean;
@@ -82,6 +90,7 @@ function PerformViewBase({
   selectedPreset,
   onLoadPreset,
   bpm,
+  pins,
   onParameterChange,
   isBypassed,
   isMuted,
@@ -95,7 +104,9 @@ function PerformViewBase({
   const [tunerOn, setTunerOn] = useState(false);
   const [reading, setReading] = useState<TunerReading>(IDLE_TUNER);
 
-  const { info: looper, act: looperAct } = useLooper(!offline);
+  // The engine reports the looper inside the meter payload this view already
+  // receives, so it costs no connection of its own.
+  const { info: looper, act: looperAct } = useLooper(!offline, levels.looper);
 
   // Short labels and channel counts, so a scene button can badge which channel
   // each multi-channel effect lands on -- "OD·B", "DL·A".
@@ -361,6 +372,27 @@ function PerformViewBase({
           <span style={{ width: `${Math.min(100, Math.max(0, (looper?.position ?? 0) * 100))}%` }} />
         </div>
       </div>
+
+      {pins && pins.length > 0 ? (
+        <div className="perform__pins" role="group" aria-label="Knob tersemat">
+          {pins.map((pin) => (
+            <Knob
+              key={`${pin.effect}.${pin.parameter}`}
+              value={pin.value}
+              min={pin.min}
+              max={pin.max}
+              step={pin.step}
+              defaultValue={pin.value}
+              label={`${pin.effectLabel} ${pin.label}`}
+              unit={pin.unit}
+              accent={EFFECT_ACCENTS[pin.effect] ?? '#4da3ff'}
+              disabled={offline}
+              size={92}
+              onChange={(value) => onParameterChange(pin.effect, pin.parameter, value)}
+            />
+          ))}
+        </div>
+      ) : null}
 
       <div className="perform__bottom">
         <div className="perform__meters">

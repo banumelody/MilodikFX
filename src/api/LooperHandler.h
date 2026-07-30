@@ -80,25 +80,10 @@ public:
     }
 
 private:
-    static const char* stateName (milodikfx::dsp::LooperProcessor::State state)
-    {
-        using State = milodikfx::dsp::LooperProcessor::State;
-
-        switch (state)
-        {
-            case State::recording:   return "recording";
-            case State::playing:     return "playing";
-            case State::overdubbing: return "overdubbing";
-            case State::stopped:     return "stopped";
-            case State::empty:
-            default:                 return "empty";
-        }
-    }
-
     juce::var stateVar() const
     {
         auto* object = new juce::DynamicObject();
-        object->setProperty ("state", stateName (looper.getState()));
+        object->setProperty ("state", milodikfx::dsp::LooperProcessor::toString (looper.getState()));
         object->setProperty ("hasLoop", looper.hasLoop());
         object->setProperty ("loopSeconds", looper.getLoopSeconds());
         object->setProperty ("position", looper.getPositionFraction());

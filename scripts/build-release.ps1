@@ -106,7 +106,7 @@ cmake -S $repoRoot -B $buildDir -G $Generator -A x64 @cmakeArgs
 if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed' }
 
 Log 'Building Release...'
-cmake --build $buildDir --config Release --target MilodikFX --parallel
+cmake --build $buildDir --config Release --target MilodikFX MilodikFX_Plugin_VST3 --parallel
 if ($LASTEXITCODE -ne 0) { throw 'Release build failed' }
 
 $exePath = Join-Path $buildDir 'MilodikFX_artefacts\Release\MilodikFX.exe'
@@ -118,6 +118,19 @@ Copy-Item $exePath (Join-Path $distDir $artefactName) -Force
 
 $sizeMb = [math]::Round((Get-Item $exePath).Length / 1MB, 1)
 Log "Standalone executable: dist\$artefactName ($sizeMb MB)"
+
+# The VST3 travels as a zip: it is a bundle directory, not a single file, and
+# a browser download of a loose folder is not a thing.
+$vst3Path = Join-Path $buildDir 'MilodikFX_Plugin_artefacts\Release\VST3\MilodikFX.vst3'
+if (Test-Path $vst3Path) {
+    $vst3Zip = Join-Path $distDir "MilodikFX-$version$artefactSuffix-VST3.zip"
+    if (Test-Path $vst3Zip) { Remove-Item $vst3Zip -Force }
+    Compress-Archive -Path $vst3Path -DestinationPath $vst3Zip
+    $vstMb = [math]::Round((Get-Item $vst3Zip).Length / 1MB, 1)
+    Log "VST3 plugin: dist\$(Split-Path $vst3Zip -Leaf) ($vstMb MB)"
+} else {
+    Log 'VST3 plugin not produced - skipping (build with MILODIKFX_BUILD_PLUGIN=ON)'
+}
 
 if ($SkipInstaller) {
     Log 'Installer skipped (-SkipInstaller)'

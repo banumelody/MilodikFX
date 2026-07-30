@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 4,
+  "name": "Gtr Metal Rhythm",
+  "savedAt": "2026-07-23T21:49:24.495Z",
+  "description": "Gitar — high-gain Marshall-in-a-Box, gate ketat, mid scoop modern.",
+  "favourite": false,
+  "notes": "Preset bawaan MilodikFX.",
+  "tags": [
+    "gitar",
+    "metal",
+    "high-gain"
+  ],
+  "state": {
+    "global": {
+      "enabled": true,
+      "params": {
+        "bypass": 0,
+        "bpm": 120
+      }
+    },
+    "noiseGate": {
+      "enabled": true,
+      "params": {
+        "thresholdDb": -50,
+        "attackMs": 1,
+        "holdMs": 40,
+        "releaseMs": 120
+      }
+    },
+    "cleanBoost": {
+      "enabled": false,
+      "params": {
+        "gainDb": 0
+      }
+    },
+    "compressor": {
+      "enabled": false,
+      "params": {
+        "inputGainDb": 0,
+        "thresholdDb": -24,
+        "ratio": 4,
+        "attackMs": 10,
+        "releaseMs": 100,
+        "mixPct": 100,
+        "autoMakeup": 1
+      }
+    },
+    "overdrive": {
+      "enabled": true,
+      "params": {
+        "type": 7,
+        "drivePct": 80,
+        "levelPct": 70,
+        "asymmetry": 0,
+        "oversampling": 3,
+        "tonePct": 50,
+        "voicePct": 50,
+        "bassDb": 1,
+        "midDb": -2,
+        "trebleDb": 2,
+        "hpMode": 0,
+        "bright": 0
+      }
+    },
+    "eq": {
+      "enabled": true,
+      "params": {
+        "bassDb": -1,
+        "midDb": 1,
+        "trebleDb": 0
+      }
+    },
+    "toneStack": {
+      "enabled": true,
+      "params": {
+        "bassDb": 2,
+        "midDb": -3,
+        "trebleDb": 2
+      }
+    },
+    "nam": {
+      "enabled": false,
+      "params": {
+        "inputDb": 0,
+        "outputDb": 0
+      }
+    },
+    "cabinet": {
+      "enabled": true,
+      "params": {
+        "presenceDb": 3,
+        "toneHz": 6200,
+        "irEnabled": 0,
+        "irFile": "",
+        "irFileB": "",
+        "irBlend": 0
+      }
+    },
+    "delay": {
+      "enabled": false,
+      "params": {
+        "timeMs": 350,
+        "feedbackPct": 30,
+        "mixPct": 25,
+        "dampingHz": 20000,
+        "pingPong": 0,
+        "spillover": 1,
+        "syncMode": 0
+      }
+    },
+    "reverb": {
+      "enabled": true,
+      "params": {
+        "roomSize": 0.3,
+        "decayTime": 1.2,
+        "width": 1,
+        "dryWetMix": 0.08,
+        "spillover": 1,
+        "irEnabled": 0
+      }
+    },
+    "master": {
+      "enabled": true,
+      "params": {
+        "muted": 0,
+        "volumeDb": -3,
+        "ceilingDb": -0.3,
+        "limiterEnabled": 1
+      }
+    }
+  }
+}

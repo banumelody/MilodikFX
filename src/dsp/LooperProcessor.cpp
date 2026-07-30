@@ -19,6 +19,19 @@ void LooperProcessor::prepareToPlay (double sampleRateIn, int, int)
     prepared = true;
 }
 
+const char* LooperProcessor::toString (State state) noexcept
+{
+    switch (state)
+    {
+        case State::recording:   return "recording";
+        case State::playing:     return "playing";
+        case State::overdubbing: return "overdubbing";
+        case State::stopped:     return "stopped";
+        case State::empty:
+        default:                 return "empty";
+    }
+}
+
 void LooperProcessor::reset()
 {
     // Not the buffer contents: clearing 60 s of stereo audio is far too much for

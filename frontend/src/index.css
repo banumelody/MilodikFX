@@ -1920,6 +1920,62 @@ input[type='text']:disabled {
   color: var(--accent);
 }
 
+/* ------------------------------------------------- Pinned controls
+   The pin button stays out of the way until the knob is hovered or the pin is
+   already set -- a rack of forty knobs each wearing a permanent badge would be
+   noisier than the rack itself. */
+.rack__pin {
+  position: absolute;
+  bottom: 2px;
+  right: 0;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-dim, #6d7685);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    color 120ms ease;
+}
+
+.rack__pin svg {
+  width: 11px;
+  height: 11px;
+}
+
+.rack__modknob:hover .rack__pin,
+.rack__pin:focus-visible {
+  opacity: 1;
+}
+
+.rack__pin:hover {
+  color: var(--text, #e6e9ef);
+}
+
+.rack__pin--on {
+  opacity: 1;
+  color: var(--accent);
+}
+
+/* Two readable rows at stage distance, which is why the engine caps it at 8. */
+.perform__pins {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 18px 26px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  border: 1px solid var(--line, #232833);
+  border-radius: 14px;
+  background: var(--panel, #141821);
+}
+
 /* ------------------------------------------------------- Looper */
 .looper__state {
   font-size: 11px;

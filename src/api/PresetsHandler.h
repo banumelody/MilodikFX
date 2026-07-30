@@ -7,6 +7,7 @@
 #include "api/HttpHandler.h"
 #include "api/ParameterRegistry.h"
 #include "preset/ChannelStore.h"
+#include "preset/PinnedControls.h"
 #include "preset/PresetManager.h"
 #include "preset/SceneManager.h"
 
@@ -45,6 +46,13 @@ public:
     /** Channels travel inside the preset too; optional, like the scene manager. */
     void setChannelStore (milodikfx::preset::ChannelStore* store) { channelStore = store; }
 
+    /**
+     * Which knobs the sound wants on the stage screen. Also inside the preset:
+     * a high-gain sound wants Drive and Gate within reach, an ambient one wants
+     * Delay Mix -- that is a property of the sound, not of the app.
+     */
+    void setPinnedControls (milodikfx::preset::PinnedControls* controls) { pinnedControls = controls; }
+
     Response handleGet (const std::string& path, const std::string& query) const override;
     Response handlePost (const std::string& path, const std::string& body) override;
     Response handleDelete (const std::string& path) override;
@@ -62,5 +70,6 @@ private:
     const milodikfx::api::ParameterRegistry& registry;
     milodikfx::preset::SceneManager* sceneManager = nullptr;
     milodikfx::preset::ChannelStore* channelStore = nullptr;
+    milodikfx::preset::PinnedControls* pinnedControls = nullptr;
     juce::String selectedName;
 };
