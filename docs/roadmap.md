@@ -81,7 +81,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 
 - P7-5 Upgrade Vite — **DICOBA LALU DIURUNGKAN (24 Jul 2026).** Upgrade ke Vite 6 + Vitest 2 build bersih dengan nama file stabil, tapi (a) toolchain baru memecah 4 test drag Knob (jsdom/pointer-event berubah — koordinat hilang jadi NaN) dan (b) `npm audit` **tetap** melaporkan kerentanan: esbuild/vite yang rentan ikut ter-bundle di dalam Vitest 2, dan membersihkannya butuh Vitest 4 (breaking change lebih besar lagi). Nol nilai bagi pengguna (UI dilayani engine di loopback, bukan internet), risiko nyata ke pipeline embed exe — jadi diurungkan, tetap di Vite 4. Bukan ditunda karena malas: dicoba, terbukti destabilisasi tanpa mencapai tujuannya.
 
-**Belum:** P2-5 (multi-view — terserap ke Perform/Edit; tab penuh menunggu sidebar terasa sesak) dan P7-5 (upgrade Vite — dicoba & diurungkan, lihat di atas). P7-4 kini **tuntas**: knob pin per preset terkirim di v0.23.0. Seluruh adaptasi FM9 (P6-1..P6-5), audit optimasi (P5-2..P5-5), looper (P4-5), dan poles Perform/modifier (P7-4 inti) sudah terkirim.
+**Belum:** P2-5 (multi-view — terserap ke Perform/Edit; tab penuh menunggu sidebar terasa sesak) dan P7-5 (upgrade Vite — dicoba & diurungkan, lihat di atas). P7-4 kini **tuntas**: knob pin per preset terkirim di v0.23.0. **Direncanakan:** P9-S/P9/P10 — stereo jujur, urutan chain custom (drag & drop), dan split A/B ala Pedalboard, dengan target versi v0.25–v0.28; detail lengkap + alasan desainnya di bagian **P9–P10** di akhir dokumen ini. Seluruh adaptasi FM9 (P6-1..P6-5), audit optimasi (P5-2..P5-5), looper (P4-5), dan poles Perform/modifier (P7-4 inti) sudah terkirim.
 
 **Kenapa empat itu belum, per 22 Jul 2026:**
 
@@ -1042,3 +1042,177 @@ Total estimasi kalau semua dikerjakan: kira-kira 27–35 weekend, dengan catatan
 **Urutan dalam P4** (bukan urutan nomornya): P4-0 input gain dulu karena paling kecil dan memperbaiki segala yang di hilirnya; lalu P4-2 spillover karena kecil dan langsung memperbaiki fitur scene yang sudah ada; baru P4-1 tipe overdrive yang jadi pekerjaan besarnya; sisanya menyusul.
 
 **Catatan adaptasi mockup:** dari seluruh elemen mockup `docs/E0B4AFA6-...png`, hanya satu yang sengaja tidak diadaptasi — ADD BLOCK / CLEAR CHAIN (chain dinamis), karena bertabrakan dengan arsitektur satu-prosesor-per-tipe dan urutan chain tetap; alasan lengkap di catatan Revisi 2 di atas. Sisanya tersebar: chain strip & kartu pedal → P1-5, Global Bypass → P1-6, tuner → P0-2, EXP/assign → P0-3, scene → P2-3, tap tempo & sync → P2-4, tab navigasi → P2-5, star/notes preset → P3-1, import/export → P3-7, metronome → P3-8, CPU history & versi → P3-9, meter LED tersegmen → P3-6b. Elemen mockup yang sudah ada di aplikasi sekarang (tidak perlu item): pemilihan device/sample rate/buffer, indikator AUDIO RUNNING, master volume + mute, readout CPU/kHz/samples.
+
+---
+
+# P9–P10 — Signal chain: stereo, urutan custom, dan split A/B (direncanakan 31 Jul 2026)
+
+Lahir dari tiga diskusi beruntun: audit stereo per-stage, validasi model **Pedalboard Logic Pro**
+(Splitter → Bus A/B → Mixer ber-pan), dan perbandingan dengan **grid Fractal FM9/Axe-Fx III**
+(14×6, instance ganda, mixer per baris). Kesimpulan spektrumnya: grid Fractal adalah langit-langit
+(harganya id per-instance + editor graph), Pedalboard adalah subset murah (bus assignment tanpa
+duplikasi blok), dan MilodikFX bisa mengambil jalur Pedalboard di atas fondasi reorder.
+
+**Catatan sejarah yang direvisi sebagian:** roadmap ini dulu menolak "chain dinamis" dari mockup
+(ADD BLOCK / CLEAR CHAIN) karena bertabrakan dengan satu-prosesor-per-tipe dan urutan tetap.
+P9/P10 membuka *urutan* dan *routing*, tapi tetap mempertahankan dua fondasi itu: tidak ada
+tambah/hapus blok, tidak ada instance ganda. Grid penuh ala Fractal tetap di luar rencana sampai
+ada kebutuhan konkret yang tidak terpenuhi oleh split A/B.
+
+## Fakta audit yang mendasari (31 Jul 2026)
+
+- Chain **sudah stereo ujung-ke-ujung**: overdrive/EQ/contour dual-mono sejati (state per-channel),
+  gate & compressor **deteksi linked** (disengaja — deteksi terpisah membuat citra stereo goyang),
+  cabinet konvolusi `Stereo::yes`, delay ping-pong dan reverb width adalah *pembangkit* stereo.
+- **Satu-satunya titik mono: NAM.** `NamProcessor` memproses ch0 lalu menyalinnya ke ch1, dengan
+  komentar yang mengasumsikan seluruh chain pra-cabinet dual-mono identik. Asumsi itu **basi**
+  sejak input stereo ada: dengan `input.mode = stereo` atau plugin di track stereo, **channel
+  kanan dibuang diam-diam** di stage amp. Bug laten, belum pernah terasa karena input gitar mono.
+- **Blend dual-IR sudah menjalankan kedua engine konvolusi** setiap blok saat blend ∈ (0,1) —
+  mode stereo cab (A→L, B→R) praktis gratis CPU-nya.
+- Meter "input setelah trim" dihitung `inputDb + trimDb` — **mengasumsikan trim di posisi pertama**.
+  Alasan teknis (bukan selera) kenapa `input` dipatok saat reorder dibuka.
+- UI (rack + ChainStrip) menggambar dalam urutan `GET /api/effects` — kalau handler mengeluarkan
+  efek dalam urutan chain, **seluruh UI menata ulang dirinya tanpa perubahan komponen**.
+- Preset/scene/settings/undo semuanya di-key **id efek**, bukan posisi — reorder tidak merusak
+  satu pun persistensi yang ada.
+
+## v0.25.0 — "Stereo jujur" (P9-S)
+
+### P9-S1. Kebijakan stereo NAM
+
+**Masalah:** input stereo + NAM menyala = channel kanan dibuang tanpa suara.
+**Solusi:** sum L+R sebelum model (persis perilaku ampli sungguhan — satu head tidak menerima
+stereo), hasil model tetap disalin ke kedua sisi. Implementasi paling sederhana: selalu sum,
+karena untuk input dual-mono identik `0.5*(L+R) == L` sehingga jalur mono lama bit-identik.
+**File:** `src/dsp/NamProcessor.cpp` (processBlock), test baru di `tests/NamTests.cpp`.
+**Test:** (1) input dual-mono identik → output bit-identik dengan perilaku lama; (2) input stereo
+→ kedua channel berkontribusi (kanan tidak lagi hilang); (3) alokasi tetap nol.
+**Effort:** ~2–3 jam.
+
+### P9-S2. Cabinet mode stereo (IR A→kiri, IR B→kanan)
+
+**Masalah:** dua IR hanya bisa di-blend mono-ish; rig stereo klasik (dua cab/mic kiri-kanan)
+tidak bisa dibangun padahal kedua konvolusi sudah berjalan.
+**Solusi:** parameter `cabinet.irMode` (enum: `blend` | `stereo`). Mode stereo: hasil engine A
+ke channel kiri, engine B ke kanan; `irBlend` menjadi keseimbangan level A/B. Fallback: kalau
+salah satu IR kosong, jatuh ke perilaku sekarang.
+**File:** `CabinetProcessor.{h,cpp}` (rumus mix di `processConvolution`), `ChainFactory.cpp`
+(satu parameter enum — otomatis muncul di API/UI/preset/settings), test di `tests/IrTests.cpp`.
+**Test:** mode stereo → korelasi silang L/R rendah dengan dua IR berbeda; mode blend → output
+identik dengan sebelum perubahan; CPU tidak naik (kedua engine memang sudah jalan).
+**Effort:** ~setengah hari. **CPU:** ~0.
+
+### P9-S3. Audit terdokumentasi perilaku channel per stage
+
+Tabel perilaku channel tiap stage masuk CLAUDE.md (dual-mono / linked / mono / generator stereo)
+plus test stereo-integrity di suite native: sinyal L≠R dilewatkan seluruh chain (NAM off),
+verifikasi dekorelasi bertahan. Menjaga stage baru tidak diam-diam me-mono-kan chain.
+**Effort:** ~2 jam. **Rilis v0.25.0 total: ~1 hari kerja.**
+
+## v0.26.0 — "Urutan chain milikmu" (P9-1..P9-3)
+
+### P9-1. Engine: urutan sebagai data atomik
+
+10 stage bebas-geser (indeks 0–9) dikemas 4 bit per stage ke **satu `std::atomic<uint64_t>`**
+di `DSPChainManager`. Thread kontrol menghitung kemasan baru → `store(release)`; thread audio
+`load(acquire)` **sekali di awal blok**. Satu load = satu permutasi utuh — mustahil robek, nol
+alokasi, perubahan mendarat di batas blok. (Bukan pola tiga-slot NAM: permutasi adalah *nilai*,
+tidak ada objek untuk di-retire.)
+**Dipatok:** `input` pertama (meter mengasumsikannya), `master` terakhir (limiter pengaman).
+Setter memvalidasi permutasi lengkap tanpa duplikat; menerima id, bukan indeks.
+**Diskontinuitas:** reorder adalah gestur *edit*; prosesor stateful tidak bisa dijalankan dua
+urutan sekaligus untuk crossfade (state maju dua kali), jadi klik kecil diterima dan
+didokumentasikan — Helix/Fractal pun berbunyi saat routing berubah.
+**Test:** permutasi invalid ditolak; pin ditegakkan; urutan berlaku tepat di batas blok
+(prosesor penanda); ekor delay ikut prosesornya saat digeser mid-tail; PerformanceTests rasio
+biaya iterasi-via-order vs langsung.
+**Effort:** ~1 weekend.
+
+### P9-2. API + persistensi urutan
+
+`GET/PUT /api/chain/order` (daftar **id**, bukan indeks — id stabil lintas versi; id tak dikenal
+diabaikan, yang hilang disisipkan di posisi default). `EffectsHandler` mengeluarkan efek dalam
+urutan chain lewat callback penyedia → UI menata diri gratis. `bumpChainVersion()` pada reorder
+→ klien lain sinkron lewat mekanisme yang ada. **Preset schema 6:** field `chainOrder` di samping
+`state` (state tetap murni `captureState`); file lama termuat urutan default. Settings
+`dsp.chainOrder`. Urutan masuk snapshot **UndoHistory** (Ctrl+Z setelah salah geser adalah undo
+paling alami). **Plugin:** urutan masuk blob state; parameter host tak berubah sama sekali
+(id-keyed) → otomasi DAW kebal reorder; pluginval menguji round-trip-nya gratis.
+**Effort:** ~1 weekend.
+
+### P9-3. UI tahap A: tombol ↑↓ per kartu
+
+Sepasang tombol di header kartu rack (stage dipatok: gembok + tooltip alasan). Optimistik → PUT
+→ refetch; ChainStrip otomatis benar. Aksesibel keyboard sejak hari pertama, bisa diuji E2E
+(geser overdrive melewati EQ → muat ulang → urutan bertahan).
+**Effort:** ~setengah weekend. **Titik rilis alami: fungsional penuh tanpa DnD.**
+
+## v0.27.0 — "Drag & drop" (P9-4..P9-5)
+
+### P9-4. DnD pointer-events di rack + ChainStrip
+
+**Pointer events, bukan HTML5 DnD API** — HTML5 DnD rewel di WebView2 dan tak teruji rapi di
+jsdom; disiplin pointer-capture sudah terbukti di `Knob` (lengkap dengan jebakan test yang sudah
+didokumentasikan). Drag handle eksplisit di header kartu (kartu penuh knob — gestur tak boleh
+bentrok), drop indicator garis sisip, gagal → snap balik + refetch. **ChainStrip jadi permukaan
+drag kedua** (menggeser chip kecil lebih ergonomis daripada menggeser kartu besar melewati lima
+layar scroll). Mode keyboard "angkat" (Enter → ↑↓ → Enter jatuhkan, Esc batal); tombol P9-3
+dipertahankan sebagai fallback a11y.
+**Test:** vitest logika reorder + mode keyboard; E2E drag round-trip; verifikasi manual WebView2.
+**Effort:** ~1–1.5 weekend.
+
+### P9-5. Verifikasi + dokumentasi
+
+Suite penuh + pluginval; CLAUDE.md bagian *Signal chain* (klaim "fixed order" harus diganti),
+README, kartu situs dwibahasa, roadmap. **Effort:** ~1 hari.
+
+## v0.28.0 — "Split A/B ala Pedalboard" (P10)
+
+Model **Pedalboard Logic Pro** yang tervalidasi: satu **Split node** → Bus A/B → satu **Mixer
+node** ber-pan per bus. Kunci arsitekturnya (temuan validasi): pedal **tidak diduplikasi** —
+tiap stage hanya *ditugaskan* ke bus. Satu-prosesor-per-tipe dan id parameter
+(`overdrive.drivePct`) **tidak berubah**, preset tak pecah, otomasi DAW tak berubah. Grid penuh
+Fractal (instance ganda Amp 1/2, Drive 1–3, mixer per baris) tetap di luar cakupan — bahkan di
+dunia Fractal, dual-amp dipakai minoritas.
+
+### P10-1. Engine: dua bus + assignment per stage
+
+Split point dan mix point sebagai posisi di array urutan (P9-1); di antara keduanya tiap stage
+membawa tag bus (A/B). Audio thread: di split, salin buffer → bufferB (pra-alokasi, pola
+`dryCopy`); stage ber-tag A memproses buffer utama, B memproses bufferB; di mix point kedua
+buffer dijumlahkan dengan level+pan per bus. **Mode split:** `even` (sinyal sama ke A dan B) dan
+`crossover` (low→A, high→B, satu kenop frekuensi — padanan blok Crossover Fractal dan mode Freq
+Pedalboard; kasus bass klasik: low bersih + high di-drive; filter Linkwitz-Riley agar jumlahnya
+flat saat A/B netral).
+**Test:** semua stage di A + pan tengah ≡ chain serial (bit-exact); crossover sum-flat; ekor
+spillover di masing-masing bus; alokasi nol di callback.
+**Effort:** ~1.5 weekend.
+
+### P10-2. Node Mixer + parameter
+
+`split.mode`, `split.freqHz`, `mixer.levelA/B`, `mixer.panA/B` sebagai efek registry biasa →
+otomatis di API/UI/preset/settings/otomasi host. `mixer.panA/B` **bisa jadi target modifier**
+(pan bergoyang = auto-panner gratis). Schema preset membawa assignment bus + posisi split/mix.
+**Effort:** ~0.5–1 weekend.
+
+### P10-3. UI: jalur A/B di rack + ChainStrip
+
+ChainStrip menggambar dua lajur di antara split dan mix (persis Router area Pedalboard); kartu
+rack di seksi paralel diberi penanda bus + kontrol pindah A↔B (ikut DnD P9-4: drop ke lajur).
+Perform view tidak berubah.
+**Effort:** ~1 weekend. **Rilis v0.28.0 total: ~3 weekend.**
+
+## Backlog eksplisit (tidak dijadwalkan, dengan alasan)
+
+- **Dual NAM (amp per sisi):** 2× CPU model (~29% → ~58% budget di 96k/32 dengan model Standard).
+  Baru layak kalau v0.25 (stereo cab) + v0.28 (split) terbukti kurang lebar. Prasyarat teknis
+  sudah ada di P10 (bus assignment) — tinggal biaya instance kedua.
+- **Grid penuh ala Fractal + instance ganda:** membayar id per-instance (`drive1.drivePct`) di
+  seluruh persistensi + editor graph. Keputusan sadar: hanya jika ada kebutuhan konkret yang
+  split A/B tidak bisa jawab. Bahkan FM9 membatasi 14×6 kiri-ke-kanan tanpa loop.
+- **Urutan per-scene:** ditolak permanen — scene hanya memanggil yang terlihat; chain yang menata
+  ulang diri saat pindah scene di tengah lagu adalah kejutan yang aturan scene larang.
+
+**Total estimasi P9-S + P9 + P10: ±6.5–7 weekend**, empat titik rilis (v0.25 → v0.28), tiap
+rilis berdiri sendiri dan bisa berhenti kapan pun tanpa ada yang setengah jadi.
