@@ -533,6 +533,113 @@ public:
 
                 expect (allFinite, "a model swap produced a non-finite sample");
             }
+
+            beginTest ("A mono rig is bit-identical to before the stereo sum");
+            {
+                // The head sums L+R now. For a mono guitar -- both channels
+                // carrying the same samples, which is everything upstream of the
+                // cabinet in a mono rig -- that sum has to be exact, not merely
+                // close: 0.5 * (x + x) == x in IEEE754. If this drifts, every
+                // preset anyone dialled in before the change starts sounding
+                // slightly different for no reason they can see.
+                NamProcessor nam;
+                nam.setEnabled (true);
+                nam.prepareToPlay (kHostRate, 32, 2);
+                expect (nam.loadModel (tiny).isEmpty());
+
+                juce::AudioBuffer<float> warm (2, 32);
+                warm.clear();
+                for (int b = 0; b < 50; ++b) nam.processBlock (warm);
+
+                auto identical = true;
+
+                for (int b = 0; b < 200; ++b)
+                {
+                    juce::AudioBuffer<float> buffer (2, 32);
+
+                    for (int i = 0; i < 32; ++i)
+                    {
+                        const auto s = 0.3f * (float) std::sin (0.041 * (b * 32 + i));
+                        buffer.setSample (0, i, s);
+                        buffer.setSample (1, i, s);
+                    }
+
+                    nam.processBlock (buffer);
+
+                    for (int i = 0; i < 32; ++i)
+                        if (buffer.getSample (0, i) != buffer.getSample (1, i))
+                            identical = false;
+                }
+
+                expect (identical, "the two sides diverged on a dual-mono input");
+            }
+
+            beginTest ("The amp treats left and right alike, rather than dropping one");
+            {
+                // The bug this closes: channel 0 was modelled and channel 1 was
+                // overwritten with the result, so the right side of a stereo
+                // signal was discarded without a sound.
+                //
+                // Asserting "right-only input produces output" does NOT catch
+                // it -- a WaveNet fed silence still emits a DC bias well above
+                // any sensible floor, so that test passes even with the bug
+                // present. This was checked by reintroducing the bug.
+                //
+                // What does catch it is symmetry: send the same signal down the
+                // left on one instance and down the right on another. Summed,
+                // both models see exactly 0.5x and must agree. Dropped, one sees
+                // the guitar and the other sees silence.
+                const auto run = [&] (int channel, std::vector<float>& out)
+                {
+                    NamProcessor nam;
+                    nam.setEnabled (true);
+                    nam.prepareToPlay (kHostRate, 32, 2);
+                    expect (nam.loadModel (tiny).isEmpty());
+
+                    juce::AudioBuffer<float> warm (2, 32);
+                    warm.clear();
+                    for (int b = 0; b < 50; ++b) nam.processBlock (warm);
+
+                    out.clear();
+
+                    for (int b = 0; b < 200; ++b)
+                    {
+                        juce::AudioBuffer<float> buffer (2, 32);
+                        buffer.clear();
+
+                        for (int i = 0; i < 32; ++i)
+                            buffer.setSample (channel, i,
+                                              0.4f * (float) std::sin (0.037 * (b * 32 + i)));
+
+                        nam.processBlock (buffer);
+
+                        for (int i = 0; i < 32; ++i)
+                            out.push_back (buffer.getSample (0, i));
+                    }
+                };
+
+                std::vector<float> viaLeft, viaRight;
+                run (0, viaLeft);
+                run (1, viaRight);
+
+                expectEquals ((int) viaLeft.size(), (int) viaRight.size());
+
+                auto biggestDifference = 0.0f;
+                auto signalPeak = 0.0f;
+
+                for (size_t i = 0; i < viaLeft.size(); ++i)
+                {
+                    biggestDifference = juce::jmax (biggestDifference, std::abs (viaLeft[i] - viaRight[i]));
+                    signalPeak = juce::jmax (signalPeak, std::abs (viaLeft[i]));
+                }
+
+                logMessage ("  left-vs-right difference " + juce::String (biggestDifference, 8)
+                            + " against a peak of " + juce::String (signalPeak, 8));
+
+                expect (signalPeak > 0.001f, "the model produced nothing to compare");
+                expect (biggestDifference < 1.0e-5f,
+                        "the two sides are processed differently: one of them is being dropped");
+            }
         }
        #endif
     }

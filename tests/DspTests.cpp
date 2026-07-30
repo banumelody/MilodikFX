@@ -2,7 +2,10 @@
 
 #include <cmath>
 #include <limits>
+#include <memory>
+#include <vector>
 
+#include "dsp/AudioProcessorBase.h"
 #include "dsp/CabinetProcessor.h"
 #include "dsp/CompressorProcessor.h"
 #include "dsp/DelayProcessor.h"
@@ -1116,3 +1119,142 @@ private:
 };
 
 static ToneStackProcessorTests toneStackProcessorTests;
+
+//==============================================================================
+/**
+ * The chain has to carry a stereo signal as a stereo signal.
+ *
+ * Almost every stage is dual-mono -- separate filter and envelope state per
+ * channel -- and the ones that are not are deliberate: the gate and the
+ * compressor detect from both sides at once, because a detector that opens on
+ * one side alone makes the stereo image lurch. Delay ping-pong and reverb width
+ * are the opposite, generating width where there was none.
+ *
+ * The stage that is genuinely mono is the amp head, and that is correct: a real
+ * head has one input jack. What was *not* correct was how it got there -- it
+ * modelled channel 0 and copied the result over channel 1, silently discarding
+ * the right side. It now sums first, and NamTests holds the line on that.
+ *
+ * This suite is the guard for everything else. A new stage that quietly collapses
+ * the two channels -- or an existing one refactored into doing so -- would pass
+ * every other test in the project, because every other test feeds it mono.
+ */
+class StereoIntegrityTests final : public juce::UnitTest
+{
+public:
+    StereoIntegrityTests() : juce::UnitTest ("Stereo integrity", "dsp") {}
+
+    void runTest() override
+    {
+        constexpr double kRate = 48000.0;
+        constexpr int kBlock = 512;
+
+        // How far apart the two sides are, as a fraction of the energy present.
+        // 0 means the stage collapsed them together.
+        const auto spread = [] (const juce::AudioBuffer<float>& b)
+        {
+            auto difference = 0.0;
+            auto energy = 0.0;
+
+            for (int i = 0; i < b.getNumSamples(); ++i)
+            {
+                const auto l = (double) b.getSample (0, i);
+                const auto r = (double) b.getSample (1, i);
+                difference += (l - r) * (l - r);
+                energy += l * l + r * r;
+            }
+
+            return energy > 0.0 ? std::sqrt (difference / energy) : 0.0;
+        };
+
+        // Two uncorrelated tones, one per side, at a level that clears every
+        // gate threshold in the chain.
+        const auto fillDecorrelated = [] (juce::AudioBuffer<float>& b)
+        {
+            for (int i = 0; i < b.getNumSamples(); ++i)
+            {
+                b.setSample (0, i, 0.35f * (float) std::sin (0.031 * (double) i));
+                b.setSample (1, i, 0.35f * (float) std::sin (0.017 * (double) i + 1.1));
+            }
+        };
+
+        beginTest ("A decorrelated signal survives every stage that claims to be stereo");
+        {
+            struct Stage
+            {
+                const char* name;
+                std::unique_ptr<milodikfx::dsp::AudioProcessorBase> processor;
+            };
+
+            std::vector<Stage> stages;
+
+            stages.push_back ({ "NoiseGate", std::make_unique<milodikfx::dsp::NoiseGateProcessor>() });
+            stages.push_back ({ "Compressor", std::make_unique<milodikfx::dsp::CompressorProcessor>() });
+            stages.push_back ({ "Overdrive", std::make_unique<milodikfx::dsp::OverdriveProcessor>() });
+            stages.push_back ({ "EQ", std::make_unique<milodikfx::dsp::EQProcessor>() });
+            stages.push_back ({ "ToneStack", std::make_unique<milodikfx::dsp::ToneStackProcessor>() });
+            stages.push_back ({ "Cabinet", std::make_unique<milodikfx::dsp::CabinetProcessor>() });
+            stages.push_back ({ "MasterOut", std::make_unique<milodikfx::dsp::MasterOutProcessor>() });
+
+            for (auto& stage : stages)
+            {
+                stage.processor->prepareToPlay (kRate, kBlock, 2);
+
+                juce::AudioBuffer<float> buffer (2, kBlock);
+                fillDecorrelated (buffer);
+
+                const auto before = spread (buffer);
+
+                // A few passes so any per-channel state settles.
+                for (int pass = 0; pass < 4; ++pass)
+                {
+                    fillDecorrelated (buffer);
+                    stage.processor->processBlock (buffer);
+                }
+
+                const auto after = spread (buffer);
+
+                logMessage ("  " + juce::String (stage.name) + ": spread "
+                            + juce::String (before, 4) + " -> " + juce::String (after, 4));
+
+                expect (after > 0.10,
+                        juce::String (stage.name) + " collapsed the two channels into one");
+            }
+        }
+
+        beginTest ("The gate and the compressor detect from both sides together");
+        {
+            // Not a stereo failure -- a deliberate design choice. A detector
+            // running per channel opens on one side before the other and the
+            // image lurches. Signal on the left alone must still let the right
+            // through unaltered rather than being gated shut independently.
+            milodikfx::dsp::NoiseGateProcessor gate;
+            gate.setEnabled (true);
+            gate.setThresholdDb (-40.0f);
+            gate.setAttackMs (1.0f);
+            gate.setReleaseMs (5.0f);
+            gate.prepareToPlay (kRate, kBlock, 2);
+
+            juce::AudioBuffer<float> buffer (2, kBlock);
+
+            for (int pass = 0; pass < 20; ++pass)
+            {
+                for (int i = 0; i < kBlock; ++i)
+                {
+                    // Loud left, quiet-but-present right.
+                    buffer.setSample (0, i, 0.5f * (float) std::sin (0.031 * (double) i));
+                    buffer.setSample (1, i, 0.02f * (float) std::sin (0.017 * (double) i));
+                }
+
+                gate.processBlock (buffer);
+            }
+
+            // The linked detector saw the loud left, so the gate is open and the
+            // quiet right survives. A per-channel detector would have shut it.
+            expect (buffer.getMagnitude (1, 0, kBlock) > 0.005f,
+                    "the right side was gated shut on its own while the left was loud");
+        }
+    }
+};
+
+static StereoIntegrityTests stereoIntegrityTests;

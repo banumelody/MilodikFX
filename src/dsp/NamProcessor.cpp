@@ -168,6 +168,24 @@ void NamProcessor::processBlock (juce::AudioBuffer<float>& buffer)
 
     auto* mono = buffer.getWritePointer (0);
 
+    // An amp head has one input jack, so a stereo signal has to be summed before
+    // it reaches the model. This used to be skipped on the grounds that the
+    // pre-cabinet chain fed both channels the same thing -- true of a mono
+    // guitar, and stale the day stereo input existed. Without the sum, channel 0
+    // was modelled and then copied over channel 1, silently discarding the right
+    // side of a stereo track in a host or of the app's stereo input mode.
+    //
+    // For the mono case this is exact, not approximate: x + x is exact in
+    // IEEE754 and so is halving it, so 0.5 * (x + x) == x bit for bit. A mono
+    // rig gets the same samples out of here as it always did.
+    if (numChannels > 1)
+    {
+        const auto* right = buffer.getReadPointer (1);
+
+        for (int i = 0; i < numSamples; ++i)
+            mono[i] = 0.5f * (mono[i] + right[i]);
+    }
+
     // Drive into the model, at host rate, smoothed so a knob turn does not step.
     for (int i = 0; i < numSamples; ++i)
         mono[i] *= smoothedInput.next (inTarget);
@@ -205,8 +223,9 @@ void NamProcessor::processBlock (juce::AudioBuffer<float>& buffer)
         mono[i] = s;
     }
 
-    // The amp is mono; the rest of the pre-cabinet chain fed both channels the
-    // same signal, so copy channel 0 across rather than modelling twice.
+    // One head, one output: the modelled signal feeds both sides. Width is the
+    // cabinet's job from here on -- two impulse responses panned apart is how a
+    // real stereo rig is built, not two amps modelled twice at twice the cost.
     for (int ch = 1; ch < juce::jmin (numChannels, kMaxChannels); ++ch)
         std::copy (mono, mono + numSamples, buffer.getWritePointer (ch));
 

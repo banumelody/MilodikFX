@@ -143,6 +143,29 @@ Each processor derives from `AudioProcessorBase` (`prepareToPlay`/`processBlock`
 parameters as `std::atomic`. `MasterOut` is the only stage that can attenuate, and it carries the
 safety limiter plus a final clamp — **no stage may be added after it**.
 
+#### What each stage does with two channels
+
+The chain carries stereo end to end. Every stage falls into one of four kinds, and which one is a
+design decision rather than an accident:
+
+| Kind | Stages | Why |
+|---|---|---|
+| **Dual-mono** — independent state per channel | Overdrive, EQ, Contour, Cabinet (analytic + convolution), InputTrim, CleanBoost, MasterOut | The obvious default: two channels, two sets of filter state |
+| **Linked detection** — one detector, same gain both sides | NoiseGate, Compressor | Deliberate. A detector running per channel opens on one side before the other and the stereo image lurches |
+| **Mono** — sums to one signal | NAM | A real amp head has one input jack. It **sums** L+R; for a mono rig `0.5*(x+x) == x` is exact, so nothing changed for existing presets |
+| **Width generators** | Delay ping-pong, Reverb width, Cabinet `irMode: stereo` | Produce width where the input had none |
+
+`tests/DspTests.cpp` has a **Stereo integrity** suite that pushes a decorrelated signal through every
+stage and fails if one collapses the two channels. It exists because every *other* test in the project
+feeds mono, so a stage that quietly went mono would pass all of them.
+
+The trap this closes: NAM used to model channel 0 and copy the result over channel 1, on the
+documented grounds that the pre-cabinet chain fed both channels the same thing. True of a mono guitar,
+and stale the day stereo input existed — the right side of a stereo track was being discarded in
+silence. Note that the obvious regression test (*"right-only input should produce output"*) does **not**
+catch it: a WaveNet fed silence still emits a DC bias above any sensible floor. What catches it is
+symmetry — the same signal down the left and down the right must produce identical output.
+
 `DSPChainManager::findProcessor<T>()` is a `dynamic_cast` scan returning the *first* instance of a
 type, so the chain may contain at most one processor of each type.
 

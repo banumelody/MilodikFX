@@ -61,6 +61,26 @@ public:
     void setIrBlend (float amount) noexcept;
     float getIrBlend() const noexcept;
 
+    /** How two loaded impulse responses are combined. */
+    enum class IrMode
+    {
+        /** Mixed together by `irBlend`. One cabinet, two mics. */
+        blend = 0,
+
+        /**
+         * A to the left, B to the right.
+         *
+         * This is how a stereo guitar rig is actually built: one mono amp into
+         * two different cabinets or mic positions, panned apart. It costs
+         * essentially nothing here because a blend already runs both convolution
+         * engines every block -- only the final mix differs.
+         */
+        stereo = 1
+    };
+
+    void setIrMode (IrMode mode) noexcept;
+    IrMode getIrMode() const noexcept;
+
 private:
     static constexpr int kNumStages = 6;
 
@@ -86,6 +106,7 @@ private:
     IrEngine irEngine;
     IrEngine irEngineB;
     std::atomic<float> irBlend { 0.0f };
+    std::atomic<int> irMode { (int) IrMode::blend };
 
     juce::AudioBuffer<float> blendScratch;
 

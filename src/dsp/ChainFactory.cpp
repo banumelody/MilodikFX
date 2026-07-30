@@ -504,6 +504,19 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
             e.parameters.push_back (makeParam ("irBlend", "A/B Blend", "", 0.0f, 1.0f, 0.01f, 0.0f,
                                                [p] { return p->getIrBlend(); },
                                                [p] (float v) { p->setIrBlend (v); }));
+
+            // 0 = blend the two IRs together, 1 = A left / B right. Stereo mode
+            // is how a real stereo rig is built -- one mono amp into two
+            // cabinets panned apart -- and it costs nothing, because a blend
+            // already runs both convolution engines every block.
+            e.parameters.push_back (makeParam ("irMode", "Mode IR", "", 0.0f, 1.0f, 1.0f, 0.0f,
+                                               [p] { return (float) (int) p->getIrMode(); },
+                                               [p] (float v)
+                                               {
+                                                   p->setIrMode (v >= 0.5f
+                                                                     ? CabinetProcessor::IrMode::stereo
+                                                                     : CabinetProcessor::IrMode::blend);
+                                               }));
         }
 
         registry.addEffect (std::move (e));

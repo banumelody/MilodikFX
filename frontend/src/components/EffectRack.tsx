@@ -30,6 +30,9 @@ export const EFFECT_ACCENTS: Record<string, string> = {
 const ENUM_OPTIONS: Record<string, string[]> = {
   'input.mode': ['Mono - Input 1', 'Mono - Input 2', 'Mono - Sum both', 'Stereo'],
   'overdrive.oversampling': ['Mati', '2x', '4x', '8x'],
+  // Blend = one cabinet with two mics. Stereo = A left, B right, which is how a
+  // real stereo rig is built: one mono amp into two cabinets panned apart.
+  'cabinet.irMode': ['Blend A+B', 'Stereo (A kiri / B kanan)'],
   // Order fixed by drive::Type in DriveVoicing.h; the index is what presets
   // store, so these may be appended to but never reordered.
   'overdrive.type': [

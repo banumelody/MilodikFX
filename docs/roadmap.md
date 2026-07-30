@@ -90,7 +90,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - **P4-5 Looper** — mandiri dan tidak menyentuh arsitektur lain, tapi bukan kebutuhan inti; paling akhir sejak awal.
 - **P2-5 Multi-view** — sidebar masih terbaca dalam satu layar, jadi tab Perform/Edit/Library/Settings belum menyelesaikan masalah nyata. Akan terasa perlu begitu panelnya bertambah lagi.
 
-**Rilis terbaru:** v0.24.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.24.0
+**Rilis terbaru:** v0.25.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.25.0
 
 **Catatan P4-1 yang lahir dari implementasi:** tiga hal yang hanya ketahuan lewat pengukuran, bukan pembacaan kode. (1) Split butuh dua filter sungguhan; mengurangi salinan low-pass *tampak* setara tapi menyisakan selisih fasa yang lalu kena gain penuh clipper — Tube Screamer terukur mendistorsi bass lebih keras daripada drive full-range, persis terbalik. (2) Tahap kaskade harus membagi gain; dua tahap gain penuh mengotakkan sinyal, DC blocker menengahkannya, dan harmonik genap — alasan utama memilih voicing asimetris — hilang sama sekali. (3) Test harmoniknya sempat mengukur kebocoran spektralnya sendiri; di luar bin analisis, fundamental menyebar di sekitar −43 dB, satu orde dengan harmonik yang diukur, sehingga kurva simetris tampak punya harmonik genap sebanyak yang asimetris. Tepat di bin, kurva simetris terbaca 0,000000.
 
@@ -1077,7 +1077,17 @@ ada kebutuhan konkret yang tidak terpenuhi oleh split A/B.
 - Preset/scene/settings/undo semuanya di-key **id efek**, bukan posisi — reorder tidak merusak
   satu pun persistensi yang ada.
 
-## v0.25.0 — "Stereo jujur" (P9-S)
+## v0.25.0 — "Stereo jujur" (P9-S) — **SELESAI (31 Jul 2026)**
+
+> **Terkirim.** Ketiganya beres. Dua catatan dari pengerjaan yang layak diingat:
+> (1) **Test regresi pertama saya tidak menangkap bug-nya** — "input kanan-saja harus
+> menghasilkan output" lulus juga dengan bug hadir, karena WaveNet yang disuapi diam tetap
+> mengeluarkan bias DC di atas ambang mana pun yang masuk akal. Yang menangkapnya adalah
+> **simetri**: sinyal sama lewat kiri dan lewat kanan harus menghasilkan output identik
+> (terukur: selisih 0.0 dengan perbaikan, 0.122 tanpa). Diverifikasi dengan sengaja
+> mengembalikan bug-nya. (2) **`mv` mempertahankan timestamp**, jadi mengembalikan file dari
+> backup membuat MSBuild mengira sumbernya belum berubah dan test menguji binary lama — selalu
+> `touch` setelah restore.
 
 ### P9-S1. Kebijakan stereo NAM
 

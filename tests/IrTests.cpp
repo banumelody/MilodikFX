@@ -545,6 +545,113 @@ public:
             expectEquals (cab.getIrBlend(), 1.0f);
         }
 
+        //======================================================================
+        // Stereo mode: A left, B right. This is how a stereo guitar rig is
+        // actually built -- one mono amp into two cabinets panned apart.
+        using IrMode = milodikfx::dsp::CabinetProcessor::IrMode;
+
+        auto runStereoCabinet = [&] (IrMode mode, float blend, bool loadB = true)
+        {
+            milodikfx::dsp::CabinetProcessor cab;
+            cab.setEnabled (true);
+            cab.setUseImpulseResponse (true);
+            cab.prepareToPlay (kRate, 2048, 2);
+
+            expect (cab.getIrEngine().loadFromFile (darkFile));
+
+            if (loadB)
+                expect (cab.getIrEngineB().loadFromFile (brightFile));
+
+            cab.setIrBlend (blend);
+            cab.setIrMode (mode);
+
+            juce::Thread::sleep (300);
+
+            juce::AudioBuffer<float> buffer (2, 2048);
+
+            for (int pass = 0; pass < 8; ++pass)
+            {
+                for (int i = 0; i < buffer.getNumSamples(); ++i)
+                {
+                    const auto s = (float) std::sin (0.03 * (double) i) * 0.4f;
+                    buffer.setSample (0, i, s);
+                    buffer.setSample (1, i, s);
+                }
+
+                cab.processBlock (buffer);
+            }
+
+            return buffer;
+        };
+
+        // How far apart the two sides are, as a fraction of the level present.
+        // Identical sides give 0; genuinely different cabinets give a lot more.
+        auto sideDifference = [] (const juce::AudioBuffer<float>& b)
+        {
+            auto difference = 0.0;
+            auto energy = 0.0;
+
+            for (int i = 0; i < b.getNumSamples(); ++i)
+            {
+                const auto l = (double) b.getSample (0, i);
+                const auto r = (double) b.getSample (1, i);
+                difference += (l - r) * (l - r);
+                energy += l * l + r * r;
+            }
+
+            return energy > 0.0 ? std::sqrt (difference / energy) : 0.0;
+        };
+
+        beginTest ("Blend mode leaves both sides identical");
+        {
+            // A mono guitar into a blended cabinet must stay centred. If this
+            // starts producing width, something is decorrelating the sides that
+            // should not be.
+            const auto blended = runStereoCabinet (IrMode::blend, 0.5f);
+            const auto spread = sideDifference (blended);
+
+            logMessage ("  blend-mode side difference " + juce::String (spread, 6));
+            expect (spread < 1.0e-6, "blend mode should be dead centre");
+        }
+
+        beginTest ("Stereo mode puts a different cabinet on each side");
+        {
+            const auto wide = runStereoCabinet (IrMode::stereo, 0.5f);
+            const auto spread = sideDifference (wide);
+
+            logMessage ("  stereo-mode side difference " + juce::String (spread, 6));
+
+            // Two genuinely different impulse responses, so the sides must
+            // diverge substantially -- not merely by a rounding error.
+            expect (spread > 0.05, "stereo mode did not separate the two cabinets");
+
+            // Both sides must still carry signal: a silent channel would be a
+            // regression dressed up as width.
+            expect (wide.getMagnitude (0, 0, wide.getNumSamples()) > 0.001f, "left went silent");
+            expect (wide.getMagnitude (1, 0, wide.getNumSamples()) > 0.001f, "right went silent");
+        }
+
+        beginTest ("Stereo mode with only one IR keeps both sides sounding");
+        {
+            // Half a cabinet is never what was wanted, and someone who has only
+            // loaded one IR has not asked for width yet.
+            const auto single = runStereoCabinet (IrMode::stereo, 0.5f, false);
+
+            expect (single.getMagnitude (0, 0, single.getNumSamples()) > 0.001f, "left went silent");
+            expect (single.getMagnitude (1, 0, single.getNumSamples()) > 0.001f, "right went silent");
+        }
+
+        beginTest ("Blend mode is untouched by the new parameter");
+        {
+            // The default has to be bit-identical to before stereo mode existed,
+            // or every preset already dialled in would quietly change.
+            const auto before = runCabinet (true, true, 0.35f);
+            const auto after = runStereoCabinet (IrMode::blend, 0.35f);
+
+            for (int i = 0; i < before.getNumSamples(); ++i)
+                expectWithinAbsoluteError (after.getSample (0, i), before.getSample (0, i), 1.0e-6f);
+        }
+
         dir.deleteRecursively();
     }
 };

@@ -77,6 +77,16 @@ float CabinetProcessor::getIrBlend() const noexcept
     return irBlend.load (std::memory_order_relaxed);
 }
 
+void CabinetProcessor::setIrMode (IrMode mode) noexcept
+{
+    irMode.store ((int) mode, std::memory_order_relaxed);
+}
+
+CabinetProcessor::IrMode CabinetProcessor::getIrMode() const noexcept
+{
+    return (IrMode) irMode.load (std::memory_order_relaxed);
+}
+
 /**
  * Runs one or both impulse responses.
  *
@@ -92,12 +102,17 @@ bool CabinetProcessor::processConvolution (juce::AudioBuffer<float>& buffer, int
         return false;
 
     const auto blend = irBlend.load (std::memory_order_relaxed);
+    const auto stereoMode = (IrMode) irMode.load (std::memory_order_relaxed) == IrMode::stereo
+                            && numCh > 1;
 
-    // Only one side in play: no scratch copy, no mixing.
-    if (! hasB || blend <= 0.0f)
+    // Only one side in play: no scratch copy, no mixing. In stereo mode a
+    // missing partner would mean one silent side, so fall back to running the
+    // one that is loaded on both -- a half-silent cabinet is never what was
+    // wanted, and a user who has only loaded one IR has not asked for width yet.
+    if (! hasB || (! stereoMode && blend <= 0.0f))
         return hasA && irEngine.process (buffer);
 
-    if (! hasA || blend >= 1.0f)
+    if (! hasA || (! stereoMode && blend >= 1.0f))
         return irEngineB.process (buffer);
 
     if (numSamples > blendScratch.getNumSamples() || numCh > blendScratch.getNumChannels())
@@ -115,6 +130,26 @@ bool CabinetProcessor::processConvolution (juce::AudioBuffer<float>& buffer, int
         return true; // A already ran; B declined, so leave A's result in place
 
     auto* const* a = buffer.getArrayOfWritePointers();
+
+    if (stereoMode)
+    {
+        // A stays on the left, B replaces the right. `blend` becomes the balance
+        // between the two sides rather than a crossfade: 0.5 is even, 0 leans on
+        // A, 1 leans on B -- so the same knob keeps doing something recognisable
+        // when the mode is switched.
+        const auto gainA = juce::jmin (1.0f, 2.0f * (1.0f - blend));
+        const auto gainB = juce::jmin (1.0f, 2.0f * blend);
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            a[0][i] *= gainA;
+            a[1][i] = bView.getSample (1, i) * gainB;
+        }
+
+        // Anything past the second channel is left as A produced it; the engine
+        // only ever runs stereo, so there is nothing beyond channel 1.
+        return true;
+    }
 
     for (int ch = 0; ch < numCh; ++ch)
         for (int i = 0; i < numSamples; ++i)
