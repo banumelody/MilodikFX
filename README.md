@@ -37,8 +37,11 @@ Yang berbeda di dalam DAW, dan semuanya disengaja:
 - **Latensi dilaporkan dengan benar** — oversampling overdrive plus resampler NAM — dan diperbarui
   saat model dimuat, jadi PDC DAW-mu tepat. Di sesi **48 kHz** resampler NAM jadi passthrough total:
   nol interpolasi, nol latensi tambahan.
+- **Modifier jalan**, termasuk **pedal ekspresi** lewat MIDI dari host — wah, tremolo, dan auto-wah
+  hidup di DAW. Kirim CC pedalmu ke track plugin-nya.
 - **Tanpa looper, metronom, pemilih device, dan panel MIDI.** DAW sudah punya semuanya, dan looper
-  akan menyita 23–46 MB per instance untuk fitur yang tak punya kontrol di sana.
+  akan menyita 23–46 MB per instance untuk fitur yang tak punya kontrol di sana. Pemetaan footswitch
+  ke scene/channel juga belum ada di plugin (di aplikasi ada).
 
 Divalidasi dengan `pluginval --strictness-level 10` (tingkat tertinggi) di CI setiap push.
 

@@ -83,8 +83,22 @@ There is **no per-test filter** in the native suite — `runAllTests()` runs eve
 the effect list, a parameter round-trip, clamping, unknown-parameter rejection, path-traversal
 defence). It backs up and restores the user's settings file rather than deleting it.
 
-CI (`.github/workflows/ci.yml`) is **frontend-only on ubuntu-latest** — the native build is never
-exercised there. C++ changes are verified locally or not at all.
+CI (`.github/workflows/ci.yml`) runs two jobs. **frontend** on ubuntu-latest (type-check, lint, vitest,
+build). **native** on windows-latest: builds the frontend bundle, configures, builds engine + plugin +
+tests, runs the whole native suite, then `pluginval --strictness-level 10` against the VST3.
+
+Two things that bit when that job was added, both of them PowerShell rather than C++:
+
+- **Do not pin the generator.** `-G "Visual Studio 17 2022"` failed with "could not find any instance
+  of Visual Studio" — the runner image has moved past it. Letting CMake pick survives image bumps.
+- **`Start-Process -Wait`, not a bare call.** pluginval is a GUI-subsystem executable and PowerShell
+  does not wait for those: calling it directly returned instantly, leaving `$LASTEXITCODE` holding
+  whatever the previous command set, and the step "failed" 150 ms in while pluginval was still
+  printing its first test.
+
+The E2E suite is not in CI; it needs a running engine and is run locally. Two concurrent runs against
+one engine will contaminate each other's state — a run that reports 1-3 failures is worth repeating
+alone before believing it.
 
 ## Architecture
 
@@ -370,7 +384,8 @@ and `HttpHandler` were never tied to a socket** — they take `(method, path, qu
   `PinnedControls`, and registers effects/parameters/presets/scenes/pins/ir/nam/levels/health. It is
   built lazily on first editor open, so a render farm of unopened instances pays nothing for it.
   Deliberately *not* registered: `devices` and `midi` (the host owns both), `looper`/`metronome`
-  (not in the plugin's chain), `update` (a plugin has no business calling GitHub).
+  (not in the plugin's chain), `update` (a plugin has no business calling GitHub), `history` (the
+  DAW's own undo stack is the one that matters, and a second one fighting it is worse than none).
 - **`PluginEditor`** hosts a JUCE 8 `WebBrowserComponent` with `withResourceProvider` serving the
   *same* embedded bundle the exe uses, and `withNativeFunction("milodikfxApi", …)` for the calls.
   **A plugin must never open a port** — several instances in one project would fight over it. A
@@ -403,6 +418,23 @@ Four things the plugin gets right that are easy to break again:
 
 The timer also reaps retired NAM models (`collectGarbage`), which nothing did before: every model
 change leaked one until the instance was destroyed.
+
+**Modifiers and the expression pedal.** `ModulationEngine` runs where the app runs it -- on the audio
+thread, just before the chain reads the parameters -- fed the block's input magnitude and, for a
+tempo-locked LFO, the BPM the *delay* holds here. MIDI input exists for exactly one reason: a wah is
+the contour frequency swept by a pedal, and in a host that pedal arrives as controller messages rather
+than from a device the plugin opens. `readControllers()` stores their values into atomics and does
+**no mapping dispatch** -- recalling a scene must be posted to the message thread, and posting
+allocates, which is precisely why the app does that work on JUCE's MIDI thread instead. Footswitch
+scenes and channels in the plugin are therefore still absent, deliberately and by name.
+
+Three interactions there that are each a bug if reversed:
+
+- Host automation of a modulated parameter goes to `setBase` first, so the write moves the sweep's
+  centre. Writing the atomic directly loses to the sweep every block.
+- `syncHostParametersFromChain` reports the *centre*, not the swept sample, or a preset load captures
+  wherever the LFO happened to be and pins the chain there.
+- Persisted state stores `baseOffset`, so a project saved mid-sweep reopens on the centre.
 
 `tests/smoke.ps1` does not cover the plugin. **`pluginval --strictness-level 10` does**, and CI runs it
 on every push — it is what catches state round-trips, odd bus layouts, extreme block sizes and
