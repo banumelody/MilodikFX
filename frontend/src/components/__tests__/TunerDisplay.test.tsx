@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -114,13 +114,23 @@ describe('TunerDisplay', () => {
     const { container } = await start(reading({ cents: 25 }));
 
     // 25 cents sharp is three quarters of the way across a -50..+50 scale.
-    expect(container.querySelector<HTMLElement>('.tuner__needle')?.style.left).toBe('75%');
+    //
+    // Waited for, not asserted outright: the reading arrives through the
+    // subscription callback, so the needle is a render behind the click. On this
+    // machine it lands within the same tick and a bare assertion passes; on a
+    // loaded CI runner it did not, and the test failed on a commit that changed
+    // nothing but three documentation files.
+    await waitFor(() =>
+      expect(container.querySelector<HTMLElement>('.tuner__needle')?.style.left).toBe('75%'),
+    );
   });
 
   it('pins the needle at the end of the scale rather than off it', async () => {
     const { container } = await start(reading({ cents: -400 }));
 
-    expect(container.querySelector<HTMLElement>('.tuner__needle')?.style.left).toBe('0%');
+    await waitFor(() =>
+      expect(container.querySelector<HTMLElement>('.tuner__needle')?.style.left).toBe('0%'),
+    );
   });
 
   it('shows no note at all when nothing is being played', async () => {

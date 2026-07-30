@@ -21,7 +21,47 @@ Build siap pakai ada di [halaman Releases](https://github.com/banumelody/Milodik
 Taruh di folder mana saja lalu jalankan. UI terbuka di jendelanya sendiri (butuh WebView2, sudah ada di
 Windows 10/11 modern).
 
-Untuk plugin-nya, salin `MilodikFX.vst3` ke `C:\Program Files\Common Files\VST3`.
+## Cara memasang
+
+### Cara termudah — installer
+
+Jalankan **`MilodikFX-x.x.x-setup.exe`**. Di halaman komponen, biarkan
+**"Pasang plugin VST3"** tercentang, lalu Next sampai selesai. Itu saja: aplikasi dan plugin
+terpasang sekaligus, dan plugin diletakkan di folder yang **sudah dipindai setiap DAW**, jadi tidak
+ada path yang perlu diatur.
+
+Installer tidak butuh hak administrator. Kalau dijalankan biasa, plugin masuk ke folder VST3
+milikmu sendiri; kalau dijalankan sebagai administrator, ke folder sistem. Keduanya dipindai host.
+
+> **Tutup DAW-mu dulu.** Selama sebuah host masih memuat `MilodikFX.vst3`, Windows mengunci
+> berkasnya dan installer akan gagal menimpanya. Ini berlaku untuk semua plugin, bukan cuma ini.
+
+Mencopot lewat Settings → Apps akan membersihkan keduanya — **preset di `Documents\MilodikFX`
+tidak ikut terhapus.**
+
+### Aplikasi saja, tanpa dipasang
+
+Unduh **`MilodikFX-x.x.x.exe`** (ASIO) atau **`MilodikFX-x.x.x-portable.exe`** (WASAPI/DirectSound),
+taruh di folder mana saja, lalu jalankan. Tidak ada yang perlu dipasang.
+
+### Plugin saja, manual
+
+Kalau kamu memakai exe portable dan tetap ingin plugin-nya, unduh
+**`MilodikFX-x.x.x-VST3.zip`**, ekstrak, lalu salin folder `MilodikFX.vst3` ke **salah satu**:
+
+| Lokasi | Untuk |
+|---|---|
+| `%LOCALAPPDATA%\Programs\Common\VST3` | Hanya untukmu — **tanpa perlu admin** |
+| `C:\Program Files\Common Files\VST3` | Semua pengguna di komputer ini (butuh admin) |
+
+Tempel path itu ke address bar Explorer. Buat foldernya kalau belum ada.
+
+Lalu di DAW-mu: **pindai ulang plugin** dan cari `MilodikFX`.
+Di Reaper: *Options → Preferences → Plug-ins → VST → Re-scan*.
+
+> **Yang dibutuhkan:** Windows 10 1809 ke atas, dan **Microsoft Edge WebView2 Runtime** untuk
+> tampilannya — sudah ada di Windows 11 dan Windows 10 modern. Installer akan memberi tahu kalau
+> tidak terdeteksi.
 
 ## Di dalam DAW (VST3)
 
