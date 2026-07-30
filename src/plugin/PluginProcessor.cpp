@@ -78,6 +78,38 @@ MilodikFXAudioProcessor::MilodikFXAudioProcessor()
     bypassParameter = dynamic_cast<juce::AudioParameterBool*> (
         parameters->getParameter (makeParameterId ("global", "bypass")));
 
+    for (auto& value : controllerValues)
+        value.store (-1, std::memory_order_relaxed);
+
+    // Capturing a preset while a modifier sweeps must store the value the
+    // parameter returns to, not the swept sample.
+    registry.baseValueProvider = [this] (const std::string& effectId, const std::string& parameterId, float& out)
+    {
+        return modulationEngine.getBaseValue (effectId, parameterId, out);
+    };
+
+    // Turning a modulated knob in the UI shifts the modifier's centre rather
+    // than fighting the sweep the audio thread writes every block.
+    registry.modulatedWriteHook = [this] (const std::string& effectId, const std::string& parameterId, float value)
+    {
+        return modulationEngine.setBase (effectId, parameterId, value);
+    };
+
+    // An expression source follows a live controller. Set once and never
+    // reassigned, so the audio thread only ever calls it -- the same discipline
+    // the parameter `set` closures follow.
+    modulationEngine.expressionProvider = [this] (int cc)
+    {
+        if (cc < 0 || cc >= kNumControllers)
+            return 0.5f;
+
+        const auto raw = controllerValues[(size_t) cc].load (std::memory_order_relaxed);
+
+        // Centre until the pedal has actually said something: a wah that
+        // slammed shut the moment it was assigned would be worse than useless.
+        return raw < 0 ? 0.5f : (float) raw / 127.0f;
+    };
+
     applyAllBindings();
 
     startTimer (kHousekeepingMs);
@@ -177,7 +209,8 @@ void MilodikFXAudioProcessor::buildBindings()
             const auto [hostParameter, source] = resolve (makeEnabledId (effect.id));
 
             if (hostParameter != nullptr && source != nullptr)
-                bindings.push_back ({ hostParameter, source, source->load(), nullptr, &effect });
+                bindings.push_back ({ hostParameter, source, source->load(), nullptr, &effect,
+                                      effect.id, {} });
         }
 
         for (const auto& parameter : effect.parameters)
@@ -188,7 +221,8 @@ void MilodikFXAudioProcessor::buildBindings()
             const auto [hostParameter, source] = resolve (makeParameterId (effect.id, parameter.id));
 
             if (hostParameter != nullptr && source != nullptr)
-                bindings.push_back ({ hostParameter, source, source->load(), &parameter, nullptr });
+                bindings.push_back ({ hostParameter, source, source->load(), &parameter, nullptr,
+                                      effect.id, parameter.id });
         }
     }
 }
@@ -230,11 +264,44 @@ void MilodikFXAudioProcessor::pollHostParameters() noexcept
         binding.last = value;
 
         if (binding.parameter != nullptr)
-            binding.parameter->set (juce::jlimit (binding.parameter->minValue,
-                                                  binding.parameter->maxValue,
-                                                  value));
+        {
+            const auto clamped = juce::jlimit (binding.parameter->minValue,
+                                               binding.parameter->maxValue,
+                                               value);
+
+            // Offered to the modulation engine first. If a modifier owns this
+            // parameter, the write sets the centre the sweep rides on -- host
+            // automation and the sweep would otherwise fight, and the sweep
+            // would win every block. setBase walks four fixed slots and stores
+            // one atomic: no allocation, safe here.
+            if (! modulationEngine.setBase (binding.effectId, binding.parameterId, clamped))
+                binding.parameter->set (clamped);
+        }
         else if (binding.effect != nullptr)
+        {
             binding.effect->setEnabled (value >= 0.5f);
+        }
+    }
+}
+
+void MilodikFXAudioProcessor::readControllers (const juce::MidiBuffer& midi) noexcept
+{
+    // Only controller values, and only into atomics. No mapping dispatch here:
+    // recalling a scene or loading a preset has to be posted to the message
+    // thread, and posting allocates -- which is exactly why the app does that
+    // work on JUCE's MIDI thread rather than in a callback like this one.
+    // Iterating a MidiBuffer allocates nothing.
+    for (const auto metadata : midi)
+    {
+        const auto message = metadata.getMessage();
+
+        if (! message.isController())
+            continue;
+
+        const auto cc = message.getControllerNumber();
+
+        if (cc >= 0 && cc < kNumControllers)
+            controllerValues[(size_t) cc].store (message.getControllerValue(), std::memory_order_relaxed);
     }
 }
 
@@ -281,6 +348,7 @@ void MilodikFXAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     const auto channels = juce::jmax (1, getTotalNumOutputChannels());
 
     engine.prepareToPlay (sampleRate, samplesPerBlock, channels);
+    modulationEngine.prepare (sampleRate);
 
     lastHostBpm = 0.0f;
 
@@ -308,10 +376,11 @@ bool MilodikFXAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts
     return true;
 }
 
-void MilodikFXAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void MilodikFXAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     const juce::ScopedNoDenormals noDenormals;
 
+    readControllers (midi);
     pollHostParameters();
     followHostTempo();
 
@@ -332,6 +401,15 @@ void MilodikFXAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         tunerAnalyzer.pushSamples (buffer.getReadPointer (0), numSamples);
 
     const auto inputPeak = buffer.getMagnitude (0, numSamples);
+
+    // Modifiers write their swept values into the parameter atomics just before
+    // the chain reads them -- the same place the app runs them. The input
+    // magnitude feeds the envelope follower, and a tempo-locked LFO needs the
+    // BPM, which here comes from the host through the delay.
+    if (chain.delay != nullptr)
+        modulationEngine.setBpm (chain.delay->getBpm());
+
+    modulationEngine.process (inputPeak, numSamples);
 
     engine.processBlock (buffer);
 
@@ -550,11 +628,22 @@ void MilodikFXAudioProcessor::syncHostParametersFromChain()
         float current = 0.0f;
 
         if (binding.parameter != nullptr && binding.parameter->get)
-            current = binding.parameter->get();
+        {
+            // A modifier owning this parameter makes get() a swept sample.
+            // Report the centre it returns to instead, or the host's lane would
+            // capture whatever the LFO happened to be doing at this instant --
+            // and then hold the chain there.
+            if (! modulationEngine.getBaseValue (binding.effectId, binding.parameterId, current))
+                current = binding.parameter->get();
+        }
         else if (binding.effect != nullptr && binding.effect->isEnabled)
+        {
             current = binding.effect->isEnabled() ? 1.0f : 0.0f;
+        }
         else
+        {
             continue;
+        }
 
         // Seed `last` first: the poll must not read this back as a host move and
         // write it straight into the chain again.

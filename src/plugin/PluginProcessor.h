@@ -2,7 +2,9 @@
 
 #include <JuceHeader.h>
 
+#include <array>
 #include <atomic>
+#include <string>
 #include <memory>
 #include <vector>
 
@@ -10,6 +12,7 @@
 #include "api/ParameterRegistry.h"
 #include "audio/AudioEngine.h"
 #include "dsp/ChainFactory.h"
+#include "dsp/ModulationEngine.h"
 #include "dsp/TunerAnalyzer.h"
 #include "preset/IrLibrary.h"
 #include "preset/NamLibrary.h"
@@ -57,7 +60,13 @@ public:
 
     const juce::String getName() const override { return JucePlugin_Name; }
 
-    bool acceptsMidi() const override { return false; }
+    /**
+     * MIDI comes in for one reason: an expression pedal driving a modifier.
+     * A wah is the contour frequency swept by a pedal, and in a host the pedal
+     * arrives as controller messages on this bus rather than from a device this
+     * plugin opens itself.
+     */
+    bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
 
@@ -86,6 +95,7 @@ public:
     milodikfx::preset::IrLibrary& getIrLibrary() noexcept { return irLibrary; }
     milodikfx::preset::NamLibrary& getNamLibrary() noexcept { return namLibrary; }
     milodikfx::dsp::TunerAnalyzer& getTuner() noexcept { return tunerAnalyzer; }
+    milodikfx::dsp::ModulationEngine& getModulation() noexcept { return modulationEngine; }
 
     /** The API surface the editor's WebView talks to. Built on first use. */
     PluginBackend& getBackend();
@@ -137,6 +147,11 @@ private:
 
         const milodikfx::api::ParameterDescriptor* parameter = nullptr;
         const milodikfx::api::EffectDescriptor* effect = nullptr;
+
+        // Held so an automated write can be offered to the modulation engine
+        // first. Copied once at construction; never touched again.
+        std::string effectId;
+        std::string parameterId;
     };
 
     juce::AudioProcessorValueTreeState::ParameterLayout buildLayout() const;
@@ -145,6 +160,9 @@ private:
 
     /** Applies whatever the host has moved since the last block. */
     void pollHostParameters() noexcept;
+
+    /** Records the host's controller values for the expression source. */
+    void readControllers (const juce::MidiBuffer& midi) noexcept;
 
     /** Follows the playhead's tempo when it reports one. */
     void followHostTempo() noexcept;
@@ -168,6 +186,18 @@ private:
     // because pitch detection has to see the raw pickup rather than a clipped,
     // cabinet-filtered version whose harmonics would fool it.
     milodikfx::dsp::TunerAnalyzer tunerAnalyzer;
+
+    // Also not in the chain: it writes swept values into the parameter atomics
+    // just before the chain reads them, exactly where the app runs it.
+    milodikfx::dsp::ModulationEngine modulationEngine;
+
+    /**
+     * The live value of every controller the host has sent, 0-127, or -1 for one
+     * never seen. Written on the audio thread as messages arrive, read there by
+     * the expression source -- plain atomics, so neither side ever waits.
+     */
+    static constexpr int kNumControllers = 128;
+    std::array<std::atomic<int>, kNumControllers> controllerValues;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState> parameters;
     std::unique_ptr<PluginBackend> backend;

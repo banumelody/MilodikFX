@@ -65,6 +65,9 @@ public:
     void applyLayout (const juce::var& layout);
 
 private:
+    juce::var captureModifiers() const;
+    void applyModifiers (const juce::var& value);
+
     MilodikFXAudioProcessor& processor;
 
     milodikfx::preset::SceneManager sceneManager;

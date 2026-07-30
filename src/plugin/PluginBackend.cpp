@@ -7,6 +7,7 @@
 #include "api/ParametersHandler.h"
 #include "api/PinsHandler.h"
 #include "api/PresetsHandler.h"
+#include "api/ModulationHandler.h"
 #include "api/ScenesHandler.h"
 #include "api/TunerHandler.h"
 #include "plugin/PluginProcessor.h"
@@ -18,6 +19,7 @@ namespace
 const juce::Identifier kScenesProperty { "scenes" };
 const juce::Identifier kChannelsProperty { "channels" };
 const juce::Identifier kPinsProperty { "pins" };
+const juce::Identifier kModifiersProperty { "modifiers" };
 } // namespace
 
 PluginBackend::PluginBackend (MilodikFXAudioProcessor& processorToUse)
@@ -77,12 +79,18 @@ PluginBackend::PluginBackend (MilodikFXAudioProcessor& processorToUse)
     auto pins = std::make_shared<PinsHandler> (pinnedControls, registry);
     pins->onChanged = touched;
 
+    // A wah is the contour frequency swept by a pedal; the pedal reaches the
+    // engine as controller messages on the plugin's MIDI bus.
+    auto modifiers = std::make_shared<ModulationHandler> (registry, processor.getModulation());
+    modifiers->onChanged = touched;
+
     dispatcher.registerHandler ("/api/effects", effects);
     dispatcher.registerHandler ("/api/parameters",
                                 std::make_shared<ParametersHandler> (registry, "master", "volumeDb"));
     dispatcher.registerHandler ("/api/presets", presets);
     dispatcher.registerHandler ("/api/scenes", scenes);
     dispatcher.registerHandler ("/api/pins", pins);
+    dispatcher.registerHandler ("/api/modifiers", modifiers);
     dispatcher.registerHandler ("/api/ir", std::make_shared<IrHandler> (processor.getIrLibrary()));
     dispatcher.registerHandler ("/api/nam", std::make_shared<NamHandler> (processor.getNamLibrary()));
     dispatcher.registerHandler ("/api/levels", levelsHandler);
@@ -119,8 +127,85 @@ juce::var PluginBackend::captureLayout() const
     root->setProperty (kScenesProperty, sceneManager.toVar());
     root->setProperty (kChannelsProperty, channelStore.toVar());
     root->setProperty (kPinsProperty, pinnedControls.toVar());
+    root->setProperty (kModifiersProperty, captureModifiers());
 
     return juce::var (root);
+}
+
+juce::var PluginBackend::captureModifiers() const
+{
+    juce::Array<juce::var> array;
+    auto& modulation = processor.getModulation();
+
+    for (int slot = 0; slot < milodikfx::dsp::ModulationEngine::kMaxModifiers; ++slot)
+    {
+        const auto info = modulation.getModifier (slot);
+
+        if (! info.active)
+            continue;
+
+        auto* entry = new juce::DynamicObject();
+        entry->setProperty ("slot", slot);
+        entry->setProperty ("effect", juce::String (info.effectId));
+        entry->setProperty ("parameter", juce::String (info.parameterId));
+        entry->setProperty ("source", info.source);
+        entry->setProperty ("low", info.low);
+        entry->setProperty ("high", info.high);
+        entry->setProperty ("rateHz", info.rateHz);
+        entry->setProperty ("expressionCc", info.expressionCc);
+        entry->setProperty ("syncDivision", info.syncDivision);
+
+        // The offset, not the swept sample: a project saved mid-sweep must
+        // reopen on the centre the knob shows, not wherever the LFO happened
+        // to be at the moment the host asked.
+        entry->setProperty ("baseOffset", info.baseOffset);
+
+        array.add (juce::var (entry));
+    }
+
+    return array;
+}
+
+void PluginBackend::applyModifiers (const juce::var& value)
+{
+    auto& modulation = processor.getModulation();
+    auto& registry = processor.getRegistry();
+
+    for (int slot = 0; slot < milodikfx::dsp::ModulationEngine::kMaxModifiers; ++slot)
+        modulation.clearModifier (slot);
+
+    const auto* array = value.getArray();
+
+    if (array == nullptr)
+        return;
+
+    for (const auto& item : *array)
+    {
+        const auto slot = (int) item["slot"];
+        const auto effectId = item["effect"].toString().toStdString();
+        const auto parameterId = item["parameter"].toString().toStdString();
+
+        if (! milodikfx::dsp::ModulationEngine::isValidSlot (slot))
+            continue;
+
+        // Resolved against this build's registry: a modifier naming something
+        // that no longer exists must not become a slot sweeping nothing.
+        const auto* target = registry.findParameter (effectId, parameterId);
+
+        if (target == nullptr)
+            continue;
+
+        milodikfx::dsp::ModulationEngine::Config config;
+        config.source = (milodikfx::dsp::ModulationEngine::Source) (int) item["source"];
+        config.low = (float) (double) item["low"];
+        config.high = (float) (double) item["high"];
+        config.rateHz = (float) (double) item["rateHz"];
+        config.expressionCc = item.hasProperty ("expressionCc") ? (int) item["expressionCc"] : -1;
+        config.syncDivision = (int) item["syncDivision"];
+        config.baseOffset = (float) (double) item["baseOffset"];
+
+        modulation.setModifier (slot, target, effectId, parameterId, config);
+    }
 }
 
 void PluginBackend::applyLayout (const juce::var& layout)
@@ -131,6 +216,7 @@ void PluginBackend::applyLayout (const juce::var& layout)
         // than leaving all four holding a default nobody chose.
         channelStore.resetToCurrent();
         sceneManager.resetToCurrent();
+        applyModifiers (juce::var());
         return;
     }
 
@@ -145,5 +231,6 @@ void PluginBackend::applyLayout (const juce::var& layout)
         channelStore.resetToCurrent();
 
     pinnedControls.fromVar (layout[kPinsProperty], &processor.getRegistry());
+    applyModifiers (layout[kModifiersProperty]);
 }
 } // namespace milodikfx::plugin

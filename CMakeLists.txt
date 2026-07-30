@@ -477,7 +477,10 @@ if(MILODIKFX_BUILD_PLUGIN)
     ICON_BIG "${CMAKE_SOURCE_DIR}/resources/icon.png"
     FORMATS VST3 Standalone
     IS_SYNTH FALSE
-    NEEDS_MIDI_INPUT FALSE
+    # Declares the event input bus. Without it a host has nowhere to send an
+    # expression pedal, and the modifier's expression source would sit at its
+    # centre forever no matter what the pedal did.
+    NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT FALSE
     NEEDS_WEBVIEW2 ${MILODIKFX_ENABLE_WEBVIEW}
     COPY_PLUGIN_AFTER_BUILD FALSE
