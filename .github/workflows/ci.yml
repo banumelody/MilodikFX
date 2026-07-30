@@ -70,12 +70,20 @@ jobs:
 
       # JUCE and the NAM core are fetched at configure time; caching them keeps
       # the job from re-cloning several hundred megabytes on every push.
+      #
+      # build/webview2 must be cached alongside build/_deps, not instead of it.
+      # The WebView2 NuGet package is declared with a SOURCE_DIR outside _deps,
+      # but FetchContent's "already populated" stamps live *inside* it -- so
+      # restoring _deps alone made configure skip the download while the headers
+      # were absent, and the build died on a missing WebView2.h.
       - name: Cache fetched dependencies
         uses: actions/cache@v4
         with:
-          path: build/_deps
-          key: deps-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
-          restore-keys: deps-${{ runner.os }}-
+          path: |
+            build/_deps
+            build/webview2
+          key: deps2-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: deps2-${{ runner.os }}-
 
       # The generator is deliberately not pinned. Locally this project uses
       # "Visual Studio 17 2022", but the windows-latest image has already moved
