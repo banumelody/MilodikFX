@@ -167,6 +167,14 @@
   .specs dd b { color: var(--text); font-weight: 600; }
   .specs .note { grid-column: 1 / -1; margin-top: 24px; color: var(--text-faint); font-size: 13.5px; }
 
+  /* ---- install steps ---- */
+  .steps { list-style: none; counter-reset: step; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; margin: 0; padding: 0; }
+  .steps li { background: var(--bg-card); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; }
+  .steps h3 { font-size: 15.5px; font-weight: 600; margin-bottom: 10px; color: var(--text); }
+  .steps p { color: var(--text-dim); font-size: 14.5px; line-height: 1.65; margin: 0; }
+  .steps code, .wrap > .note code { background: var(--bg-soft, rgba(255,255,255,0.06)); border-radius: 5px; padding: 1px 6px; font-size: 0.92em; }
+  .wrap > .note { margin-top: 22px; color: var(--text-faint); font-size: 13.5px; line-height: 1.7; }
+
   /* ---- download ---- */
   .dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(268px, 1fr)); gap: 16px; }
   .flavour { position: relative; background: var(--bg-card); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px; overflow: hidden; }
@@ -324,6 +332,36 @@
     </div>
   </section>
 
+  <section id="install">
+    <div class="wrap">
+      <p class="eyebrow" data-i18n="ins_eyebrow">Pasang</p>
+      <h2 data-i18n="ins_h2">Satu installer. Aplikasi dan plugin sekaligus.</h2>
+      <p class="sub" data-i18n="ins_sub">Tanpa hak administrator, tanpa mengatur path plugin di DAW.</p>
+
+      <ol class="steps">
+        <li>
+          <h3 data-i18n="ins_s1_h">1 &mdash; Tutup DAW-mu</h3>
+          <p data-i18n="ins_s1_p">Selama sebuah host masih memuat plugin, Windows mengunci berkasnya dan installer tidak bisa menimpanya. Berlaku untuk semua plugin, bukan cuma ini.</p>
+        </li>
+        <li>
+          <h3 data-i18n="ins_s2_h">2 &mdash; Jalankan installer</h3>
+          <p data-i18n="ins_s2_p">Unduh <code>MilodikFX-setup.exe</code> dari halaman Releases lalu jalankan. Tidak butuh administrator.</p>
+        </li>
+        <li>
+          <h3 data-i18n="ins_s3_h">3 &mdash; Biarkan &ldquo;Pasang plugin VST3&rdquo; tercentang</h3>
+          <p data-i18n="ins_s3_p">Plugin diletakkan di folder yang sudah dipindai setiap DAW, jadi tidak ada path yang perlu diatur.</p>
+        </li>
+        <li>
+          <h3 data-i18n="ins_s4_h">4 &mdash; Buka DAW-mu</h3>
+          <p data-i18n="ins_s4_p">Cari <code>MilodikFX</code> di daftar FX. Kalau belum muncul, pindai ulang plugin &mdash; di Reaper: Options &rarr; Preferences &rarr; Plug-ins &rarr; VST &rarr; Re-scan.</p>
+        </li>
+      </ol>
+
+      <p class="note" data-i18n="ins_manual">Lebih suka exe portable? Unduh <code>-VST3.zip</code>, ekstrak, lalu salin folder <code>MilodikFX.vst3</code> ke <code>%LOCALAPPDATA%\Programs\Common\VST3</code> (tanpa admin) atau <code>C:\Program Files\Common Files\VST3</code> (butuh admin).</p>
+      <p class="note" data-i18n="ins_uninstall">Mencopot lewat Settings &rarr; Apps membersihkan aplikasi dan plugin sekaligus. Presetmu di <code>Documents\MilodikFX</code> tidak ikut terhapus.</p>
+    </div>
+  </section>
+
   <section>
     <div class="wrap">
       <p class="eyebrow" data-i18n="voice_eyebrow">Sebelas pedal, satu blok</p>
@@ -473,6 +511,19 @@
         f14_p: "Dengan ASIO turun sampai 32 sampel; tanpa SDK jatuh mulus ke WASAPI. ~7,6% DSP dengan semua efek menyala.",
         f15_h: "Looper",
         f15_p: "Rekam satu frasa lalu bermain di atasnya — overdub berlapis, dicampur setelah master jadi loop tetap berbunyi walau bypass. Kendali kaki lewat footswitch.",
+        ins_eyebrow: "Pasang",
+        ins_h2: "Satu installer. Aplikasi dan plugin sekaligus.",
+        ins_sub: "Tanpa hak administrator, tanpa mengatur path plugin di DAW.",
+        ins_s1_h: "1 — Tutup DAW-mu",
+        ins_s1_p: "Selama sebuah host masih memuat plugin, Windows mengunci berkasnya dan installer tidak bisa menimpanya. Berlaku untuk semua plugin, bukan cuma ini.",
+        ins_s2_h: "2 — Jalankan installer",
+        ins_s2_p: "Unduh MilodikFX-setup.exe dari halaman Releases lalu jalankan. Tidak butuh administrator.",
+        ins_s3_h: "3 — Biarkan “Pasang plugin VST3” tercentang",
+        ins_s3_p: "Plugin diletakkan di folder yang sudah dipindai setiap DAW, jadi tidak ada path yang perlu diatur.",
+        ins_s4_h: "4 — Buka DAW-mu",
+        ins_s4_p: "Cari MilodikFX di daftar FX. Kalau belum muncul, pindai ulang plugin — di Reaper: Options → Preferences → Plug-ins → VST → Re-scan.",
+        ins_manual: "Lebih suka exe portable? Unduh -VST3.zip, ekstrak, lalu salin folder MilodikFX.vst3 ke %LOCALAPPDATA%\Programs\Common\VST3 (tanpa admin) atau C:\Program Files\Common Files\VST3 (butuh admin).",
+        ins_uninstall: "Mencopot lewat Settings → Apps membersihkan aplikasi dan plugin sekaligus. Presetmu di Documents\MilodikFX tidak ikut terhapus.",
         f16_h: "Plugin VST3",
         f16_p: "Rantai, UI, preset, dan file IR/NAM yang sama — di dalam DAW-mu. Modifier dan pedal ekspresi ikut jalan, tempo ikut host, latensi dilaporkan tepat. Dipasang lewat satu centang di installer.",
 
@@ -560,6 +611,19 @@
         f14_p: "With ASIO it drops to 32 samples; without the SDK it falls back smoothly to WASAPI. ~7.6% DSP with every effect on.",
         f15_h: "Looper",
         f15_p: "Record a phrase and play over it — layered overdubs, mixed in after the master so the loop keeps sounding through a bypass. Hands-free via a footswitch.",
+        ins_eyebrow: "Install",
+        ins_h2: "One installer. App and plugin together.",
+        ins_sub: "No administrator rights, no plugin paths to configure in your DAW.",
+        ins_s1_h: "1 — Close your DAW",
+        ins_s1_p: "While a host has the plugin loaded, Windows locks the file and the installer cannot overwrite it. True of every plugin, not just this one.",
+        ins_s2_h: "2 — Run the installer",
+        ins_s2_p: "Download MilodikFX-setup.exe from the Releases page and run it. No administrator rights needed.",
+        ins_s3_h: "3 — Leave “Install the VST3 plugin” ticked",
+        ins_s3_p: "The plugin goes where every VST3 host already looks, so there is no path to configure.",
+        ins_s4_h: "4 — Open your DAW",
+        ins_s4_p: "Look for MilodikFX in the FX list. If it is not there yet, rescan your plugins — in Reaper: Options → Preferences → Plug-ins → VST → Re-scan.",
+        ins_manual: "Prefer the portable exe? Download the -VST3.zip, extract it, and copy the MilodikFX.vst3 folder into %LOCALAPPDATA%\Programs\Common\VST3 (no admin) or C:\Program Files\Common Files\VST3 (admin).",
+        ins_uninstall: "Uninstalling via Settings → Apps removes both the app and the plugin. Your presets in Documents\MilodikFX are left alone.",
         f16_h: "VST3 plugin",
         f16_p: "The same chain, UI, presets and IR/NAM files — inside your DAW. Modifiers and an expression pedal work too, tempo follows the host, latency is reported correctly. Installed by one checkbox in the installer.",
 
