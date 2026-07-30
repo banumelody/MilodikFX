@@ -77,8 +77,14 @@ jobs:
           key: deps-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
           restore-keys: deps-${{ runner.os }}-
 
+      # The generator is deliberately not pinned. Locally this project uses
+      # "Visual Studio 17 2022", but the windows-latest image has already moved
+      # past it -- pinning it there failed with "could not find any instance of
+      # Visual Studio". Letting CMake pick whichever MSVC the runner ships keeps
+      # the job working across image bumps, and compiling against a newer
+      # toolchain is a stricter check, not a weaker one.
       - name: Configure
-        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+        run: cmake -S . -B build
 
       - name: Build engine, plugin and tests
         run: cmake --build build --config Release --target MilodikFX MilodikFX_Plugin_VST3 MilodikFX_tests --parallel
