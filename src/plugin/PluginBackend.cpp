@@ -45,9 +45,15 @@ PluginBackend::PluginBackend (MilodikFXAudioProcessor& processorToUse)
     // project has unsaved changes at all.
     const auto touched = [this] { processor.markStateChanged(); };
 
-    presets->onSelectionChanged = [this] (const juce::String& name)
+    presets->onSelectionChanged = [this, touched] (const juce::String& name)
     {
         processor.setCurrentPresetName (name);
+
+        // Which preset is loaded is part of the state the host saves, and it is
+        // not a parameter -- without this the project would reopen on whatever
+        // preset it had before.
+        touched();
+
         // A preset load moved the chain underneath the host's parameter values.
         processor.syncHostParametersFromChain();
     };
