@@ -8,6 +8,7 @@
 #include "api/PinsHandler.h"
 #include "api/PresetsHandler.h"
 #include "api/ScenesHandler.h"
+#include "api/TunerHandler.h"
 #include "plugin/PluginProcessor.h"
 
 namespace milodikfx::plugin
@@ -85,6 +86,13 @@ PluginBackend::PluginBackend (MilodikFXAudioProcessor& processorToUse)
     dispatcher.registerHandler ("/api/ir", std::make_shared<IrHandler> (processor.getIrLibrary()));
     dispatcher.registerHandler ("/api/nam", std::make_shared<NamHandler> (processor.getNamLibrary()));
     dispatcher.registerHandler ("/api/levels", levelsHandler);
+
+    // The processor taps the input before the chain for this; without the
+    // endpoint the tap was plumbed in and the panel had nothing to talk to.
+    // Analysis stays off until the panel switches it on, so an unopened tuner
+    // costs one atomic read per block.
+    dispatcher.registerHandler ("/api/tuner", std::make_shared<TunerHandler> (processor.getTuner()));
+
     dispatcher.registerHandler ("/api/health", std::make_shared<HealthHandler>());
 }
 

@@ -510,6 +510,8 @@ if(MILODIKFX_BUILD_PLUGIN)
       src/api/LevelsHandler.cpp
       src/api/ScenesHandler.h
       src/api/ScenesHandler.cpp
+      src/api/TunerHandler.h
+      src/api/TunerHandler.cpp
       src/api/PresetsHandler.h
       src/api/PresetsHandler.cpp
       ${MILODIKFX_ENGINE_SOURCES}
