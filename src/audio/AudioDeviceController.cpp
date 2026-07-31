@@ -172,6 +172,129 @@ void AudioDeviceController::setPreferred (double sampleRate, int bufferSize) noe
         preferredBufferSize.store (bufferSize, std::memory_order_relaxed);
 }
 
+std::vector<AudioInputPort> AudioDeviceController::listInputPortsOnMessageThread() const
+{
+    std::vector<AudioInputPort> ports;
+
+    auto* device = deviceManager.getCurrentAudioDevice();
+
+    if (device == nullptr)
+        return ports;
+
+    const auto names = device->getInputChannelNames();
+    const auto active = device->getActiveInputChannels();
+
+    // The callback receives one pointer per *active* channel, in channel order,
+    // so a port's position is its rank among the active ones -- not its index.
+    int position = 0;
+
+    for (int i = 0; i < names.size(); ++i)
+    {
+        AudioInputPort port;
+        port.name = names[i];
+        port.callbackPosition = active[i] ? position++ : -1;
+        ports.push_back (std::move (port));
+    }
+
+    return ports;
+}
+
+std::vector<AudioInputPort> AudioDeviceController::listInputPorts() const
+{
+    return runOnMessageThread ([this] { return listInputPortsOnMessageThread(); });
+}
+
+juce::String AudioDeviceController::getInputPortName (bool right) const
+{
+    const juce::ScopedLock lock (portLock);
+    return right ? wantedInputRight : wantedInputLeft;
+}
+
+void AudioDeviceController::setInputPortNames (const juce::String& left, const juce::String& right)
+{
+    {
+        const juce::ScopedLock lock (portLock);
+
+        if (wantedInputLeft == left && wantedInputRight == right)
+            return;
+
+        wantedInputLeft = left;
+        wantedInputRight = right;
+    }
+
+    runOnMessageThread ([this]
+    {
+        resolveInputPorts (deviceManager.getCurrentAudioDevice());
+        return true;
+    });
+
+    if (onInputPortsChanged)
+        onInputPortsChanged();
+}
+
+int AudioDeviceController::inputPositionFor (const juce::StringArray& channelNames,
+                                             const juce::BigInteger& activeChannels,
+                                             const juce::String& wanted,
+                                             int fallback) noexcept
+{
+    if (wanted.isEmpty())
+        return fallback;
+
+    int position = 0;
+
+    for (int i = 0; i < channelNames.size(); ++i)
+    {
+        // Inactive channels are not handed to the callback at all, so they do
+        // not advance the position -- this is exactly where an index-based
+        // mapping goes wrong.
+        if (! activeChannels[i])
+            continue;
+
+        if (channelNames[i] == wanted)
+            return position;
+
+        ++position;
+    }
+
+    return fallback;
+}
+
+void AudioDeviceController::resolveInputPorts (juce::AudioIODevice* device)
+{
+    juce::String left, right;
+
+    {
+        const juce::ScopedLock lock (portLock);
+        left = wantedInputLeft;
+        right = wantedInputRight;
+    }
+
+    if (device == nullptr)
+    {
+        resolvedLeft.store (0, std::memory_order_relaxed);
+        resolvedRight.store (1, std::memory_order_relaxed);
+        return;
+    }
+
+    const auto names = device->getInputChannelNames();
+    const auto active = device->getActiveInputChannels();
+
+    // Falling back to the first two active channels keeps a rig working when a
+    // named port has gone; silence would be the worse answer, and the harder
+    // one to diagnose, since nothing about it says which end broke.
+    const auto l = inputPositionFor (names, active, left, 0);
+    const auto r = inputPositionFor (names, active, right, 1);
+
+    if (left.isNotEmpty() && ! names.contains (left))
+        log ("Input port '" + left + "' is not on this device; using the first channel for L");
+
+    if (right.isNotEmpty() && ! names.contains (right))
+        log ("Input port '" + right + "' is not on this device; using the second channel for R");
+
+    resolvedLeft.store (l, std::memory_order_relaxed);
+    resolvedRight.store (r, std::memory_order_relaxed);
+}
+
 juce::String AudioDeviceController::initialise (const juce::XmlElement* savedState)
 {
     // The saved state is owned by the caller and may die before the message
@@ -239,7 +362,7 @@ juce::String AudioDeviceController::initialiseOnMessageThread (const juce::XmlEl
     if (isUsableSavedState (savedState))
     {
         const auto wantedType = savedState->getStringAttribute ("deviceType");
-        const auto error = deviceManager.initialise (2, 2, savedState, true);
+        const auto error = deviceManager.initialise (kMaxInputChannels, 2, savedState, true);
         const auto openedType = deviceManager.getCurrentAudioDeviceType();
 
         // A saved state naming a device type this build does not have -- ASIO in
@@ -342,7 +465,8 @@ juce::String AudioDeviceController::openPreferredType()
                 // records how many input channels are *needed* here. Going
                 // straight to setAudioDeviceSetup leaves that at zero and opens
                 // the device output-only.
-                error = deviceManager.initialise (2, 2, nullptr, false, setup.outputDeviceName, &setup);
+                error = deviceManager.initialise (kMaxInputChannels, 2, nullptr, false,
+                                                  setup.outputDeviceName, &setup);
 
                 if (error.isEmpty() && deviceManager.getCurrentAudioDevice() != nullptr)
                     break;

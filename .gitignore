@@ -47,3 +47,8 @@ dist/
 
 # Release artefacts produced by scripts/build-release.ps1
 dist/
+
+# Cypress screenshot output: the docs images are committed under docs/img,
+# these are the raw captures the shots spec writes on the way there.
+frontend/cypress/screenshots/
+frontend/cypress/videos/

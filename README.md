@@ -117,6 +117,16 @@ duplikasi blok, jadi preset lama tetap utuh. Mode **crossover** (Linkwitz-Riley)
 jalur dan high ke jalur lain: low bersih, high di-drive, gerakan klasik rig bass. Mati secara default,
 dan saat mati rantainya bit-identik dengan sebelumnya.
 
+**Gitar dua jack** (mis. pickup magnetik + piezo): pilih port fisik untuk kanal L dan R di panel
+Audio Device, lalu pakai mode split **L/R** — kanal L ke jalur A, kanal R ke jalur B. Hasilnya dua
+chain penuh dengan kenop masing-masing, digabung di Mixer. Stereo saja tidak cukup untuk ini: satu
+overdrive memproses kedua kanal dengan **nilai kenop yang sama**, jadi L dan R baru bisa disetel
+berbeda kalau masing-masing punya jalur sendiri. **Invert B** di Mixer membalik polaritas jalur B,
+untuk dua pickup yang saling meniadakan sebagian saat diblend.
+
+Pemilihan port melekat pada **perangkat**, bukan preset — ia menggambarkan kabel di rig, jadi preset
+tetap bermakna di interface lain.
+
 Fitur kontrol ala rig panggung: **channel A/B/C/D** per efek (empat sound bernama tiap blok), **scene**
 4 slot yang membawa channel tiap efek, **Perform view** (layar besar untuk manggung — tombol scene
 raksasa dengan huruf channel, tuner besar, kontrol looper, pintasan keyboard), dan **modifier** — LFO

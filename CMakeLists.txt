@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(MilodikFX VERSION 0.28.0 LANGUAGES CXX)
+project(MilodikFX VERSION 0.29.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -602,6 +602,7 @@ target_sources(MilodikFX_tests
     tests/PinTests.cpp
     tests/ChainOrderTests.cpp
     tests/SplitTests.cpp
+    tests/InputRoutingTests.cpp
     tests/UndoTests.cpp
     tests/InputTrimTests.cpp
     tests/DriveVoicingTests.cpp
@@ -611,6 +612,10 @@ target_sources(MilodikFX_tests
     tests/NamTests.cpp
     tests/PerformanceTests.cpp
     ${MILODIKFX_ENGINE_SOURCES}
+    # Not part of the shared engine sources -- the plugin has no device to
+    # control -- but the input port mapping is pure and worth testing here,
+    # because getting it wrong is silent rather than loud.
+    src/audio/AudioDeviceController.cpp
 )
 
 # Point the NAM tests at the example models that came with the fetched core, so

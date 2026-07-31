@@ -98,6 +98,20 @@ MainComponent::MainComponent (juce::PropertiesFile& settingsFileToUse)
                                       settingsFile.getDoubleValue (kKeyAudioSampleRatePreference, 48000.0));
     inputMode.store (juce::jlimit (0, 3, settingsFile.getIntValue (kKeyInputMode, (int) InputMode::monoLeft)));
 
+    // Which jack feeds which engine channel. Stored by channel *name*, because
+    // a name survives the device being reopened with a different channel count
+    // and an index does not. Empty means "first available", which is what a
+    // fresh install and every mono rig want.
+    deviceController.setInputPortNames (settingsFile.getValue (kKeyInputPortL),
+                                        settingsFile.getValue (kKeyInputPortR));
+
+    deviceController.onInputPortsChanged = [this]
+    {
+        settingsFile.setValue (kKeyInputPortL, deviceController.getInputPortName (false));
+        settingsFile.setValue (kKeyInputPortR, deviceController.getInputPortName (true));
+        settingsFile.setNeedsToBeSaved (true);
+    };
+
     buildChain();
 
     // Needs the built chain to map effect ids onto processor indices.
@@ -744,6 +758,8 @@ void MainComponent::saveSettingsIfNeeded (bool force)
     settingsFile.setValue (kKeyAudioBufferPreference, desiredBufferSize);
     settingsFile.setValue (kKeyAudioSampleRatePreference, desiredSampleRate);
     settingsFile.setValue (kKeyInputMode, inputMode.load (std::memory_order_relaxed));
+    settingsFile.setValue (kKeyInputPortL, deviceController.getInputPortName (false));
+    settingsFile.setValue (kKeyInputPortR, deviceController.getInputPortName (true));
 
     if (presetsHandler != nullptr)
         settingsFile.setValue (kKeyPresetSelectedName, presetsHandler->getSelectedName());
@@ -1039,6 +1055,11 @@ void MainComponent::audioDeviceAboutToStart (juce::AudioIODevice* device)
     currentSampleRate = device->getCurrentSampleRate();
     currentBlockSize = device->getCurrentBufferSizeSamples();
 
+    // Recompute where the chosen jacks land before a single block is processed.
+    // The mapping depends on which channels this device happens to have active,
+    // so it cannot be worked out once at startup and reused.
+    deviceController.resolveInputPorts (device);
+
     log ("Audio device starting: " + device->getName()
          + " @ " + juce::String (currentSampleRate) + " Hz"
          + ", block " + juce::String (currentBlockSize)
@@ -1103,8 +1124,14 @@ void MainComponent::audioDeviceIOCallbackWithContext (const float* const* inputC
     auto* left = engineBuffer.getWritePointer (0);
     auto* right = engineBuffer.getWritePointer (1);
 
-    const auto* in0 = numInputChannels > 0 ? inputChannelData[0] : nullptr;
-    const auto* in1 = numInputChannels > 1 ? inputChannelData[1] : nullptr;
+    // Not channels 0 and 1: the chosen ports, resolved to positions in this
+    // callback's array whenever the device changed. A port that has gone away
+    // reads as nullptr here and the mode switch below already handles that.
+    const auto sourceL = deviceController.getResolvedInput (false);
+    const auto sourceR = deviceController.getResolvedInput (true);
+
+    const auto* in0 = juce::isPositiveAndBelow (sourceL, numInputChannels) ? inputChannelData[sourceL] : nullptr;
+    const auto* in1 = juce::isPositiveAndBelow (sourceR, numInputChannels) ? inputChannelData[sourceR] : nullptr;
 
     const auto mode = (InputMode) inputMode.load (std::memory_order_relaxed);
 

@@ -45,6 +45,18 @@ public:
     float getPanB() const noexcept { return panB.load (std::memory_order_relaxed); }
 
     /**
+     * Flips the polarity of path B before it is folded in.
+     *
+     * For two pickups on one guitar rather than for stereo width: a piezo and a
+     * magnetic pickup sense the same string from different places, and blended
+     * they can partially cancel. This is not a timing problem -- both arrive
+     * through the same converter on the same sample -- so a delay would not fix
+     * it and an invert can.
+     */
+    void setInvertB (bool shouldInvert) noexcept { invertB.store (shouldInvert, std::memory_order_relaxed); }
+    bool getInvertB() const noexcept { return invertB.load (std::memory_order_relaxed); }
+
+    /**
      * Folds `pathB` into `pathA` with each bus's level and pan applied.
      * Called by DSPChainManager on the audio thread at the mix point.
      */
@@ -57,5 +69,6 @@ private:
     std::atomic<float> levelB { 1.0f };
     std::atomic<float> panA { 0.0f };
     std::atomic<float> panB { 0.0f };
+    std::atomic<bool> invertB { false };
 };
 } // namespace milodikfx::dsp

@@ -52,6 +52,15 @@ const ENUM_OPTIONS: Record<string, string[]> = {
   // Order fixed by DelayProcessor::SyncDivision; the index is what the engine
   // stores, so these labels must stay lined up with it.
   'delay.syncMode': ['Mati', '1/4', '1/8.', '1/8', '1/8T', '1/16'],
+  // Order fixed by SplitProcessor::Mode. L/R is the odd one out: it routes two
+  // sources rather than dividing one, which is what a guitar with a magnetic
+  // and a piezo pickup needs.
+  'split.mode': [
+    'Sama ke dua jalur',
+    'Crossover - low ke A, high ke B',
+    'L/R - kanal L ke A, kanal R ke B',
+  ],
+  'mixer.invertB': ['Normal', 'Dibalik'],
 };
 
 /**
@@ -61,6 +70,9 @@ const ENUM_OPTIONS: Record<string, string[]> = {
  */
 const OVERRIDDEN_BY: Record<string, { parameter: string; whenNot: number }> = {
   'delay.timeMs': { parameter: 'syncMode', whenNot: 0 },
+  // The crossover frequency only means anything in crossover mode. Showing it
+  // live in the other two would be a knob that does nothing.
+  'split.freqHz': { parameter: 'mode', whenNot: 1 },
 };
 
 /**

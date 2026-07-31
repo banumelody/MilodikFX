@@ -628,3 +628,87 @@ describe('EffectRack A/B paths', () => {
     expect(onBusChange).toHaveBeenCalledWith('overdrive', 'B');
   });
 });
+
+describe('EffectRack split modes', () => {
+  const split = (mode: number): EffectDescriptor => ({
+    id: 'split',
+    label: 'Split',
+    description: 'Belah sinyal jadi dua jalur - A dan B',
+    enabled: true,
+    toggleable: true,
+    parameters: [
+      {
+        id: 'mode',
+        label: 'Mode',
+        unit: '',
+        min: 0,
+        max: 2,
+        step: 1,
+        default: 0,
+        type: 'float',
+        value: mode,
+      },
+      {
+        id: 'freqHz',
+        label: 'Frekuensi',
+        unit: 'Hz',
+        min: 60,
+        max: 2000,
+        step: 1,
+        default: 250,
+        type: 'float',
+        value: 250,
+      },
+    ],
+  });
+
+  it('offers all three modes, L/R included', () => {
+    renderRack(split(0));
+
+    const select = screen.getByLabelText('Mode') as HTMLSelectElement;
+    expect(select.querySelectorAll('option')).toHaveLength(3);
+
+    // The one that makes a two-pickup guitar work: two sources routed, not one
+    // signal divided.
+    expect(screen.getByRole('option', { name: /L\/R - kanal L ke A/ })).toBeInTheDocument();
+  });
+
+  it('keeps the crossover frequency live only in crossover mode', () => {
+    const { unmount } = render(
+      <EffectRack effect={split(1)} onParameterChange={vi.fn()} onEnabledChange={vi.fn()} />,
+    );
+
+    // The knob signals its state through aria-disabled and the tab order, not
+    // through a `disabled` attribute -- it is a div with role="slider".
+    expect(screen.getByRole('slider', { name: /Frekuensi/ })).toHaveAttribute(
+      'aria-disabled',
+      'false',
+    );
+    unmount();
+
+    // In L/R mode the crossover filter is not in the path at all, so a live
+    // frequency knob would be a control that does nothing.
+    render(
+      <EffectRack effect={split(2)} onParameterChange={vi.fn()} onEnabledChange={vi.fn()} />,
+    );
+
+    const knob = screen.getByRole('slider', { name: /Frekuensi/ });
+    expect(knob).toHaveAttribute('aria-disabled', 'true');
+    expect(knob).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('writes the chosen mode straight through as its index', () => {
+    const onParameterChange = vi.fn();
+
+    render(
+      <EffectRack
+        effect={split(0)}
+        onParameterChange={onParameterChange}
+        onEnabledChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText('Mode'), { target: { value: '2' } });
+    expect(onParameterChange).toHaveBeenCalledWith('split', 'mode', 2);
+  });
+});

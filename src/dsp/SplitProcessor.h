@@ -47,7 +47,25 @@ public:
          * Crossover block. Linkwitz-Riley (two cascaded Butterworth sections),
          * so the two halves sum back to flat when nothing else is in the way.
          */
-        crossover = 1
+        crossover = 1,
+
+        /**
+         * The left input channel becomes path A, the right becomes path B.
+         *
+         * Not a split at all, strictly: with two sources there is nothing to
+         * divide, only to route. A guitar with a magnetic and a piezo pickup
+         * arrives as two independent signals, and this is what gives each of
+         * them its own chain with its own knob values -- something stereo input
+         * alone cannot do, since one overdrive processes both channels with one
+         * set of parameters.
+         *
+         * This is Fractal's pair of Input blocks ("Left Only" on one, "Right
+         * Only" on the other) expressed as a split mode, because the engine has
+         * a single entry point rather than four. Each side is duplicated to both
+         * of its channels so the dual-mono stages downstream see a centred
+         * signal and the mixer's pan is what places it.
+         */
+        leftRight = 2
     };
 
     void prepareToPlay (double sampleRate, int samplesPerBlock, int numChannels) override;

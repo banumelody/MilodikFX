@@ -361,14 +361,16 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         e.isEnabled = [p] { return p->isEnabled(); };
         e.setEnabled = [p] (bool v) { p->setEnabled (v); };
 
-        // 0 = the same signal down both paths, 1 = low to A and high to B.
-        // The crossover is the bass move: clean lows, driven highs.
-        e.parameters.push_back (makeParam ("mode", "Mode", "", 0.0f, 1.0f, 1.0f, 0.0f,
+        // 0 = the same signal down both paths, 1 = low to A and high to B,
+        // 2 = left channel to A and right to B. The crossover is the bass move
+        // (clean lows, driven highs); L/R is for two sources rather than one,
+        // such as a guitar with a magnetic and a piezo pickup.
+        e.parameters.push_back (makeParam ("mode", "Mode", "", 0.0f, 2.0f, 1.0f, 0.0f,
                                            [p] { return (float) (int) p->getMode(); },
                                            [p] (float v)
                                            {
-                                               p->setMode (v >= 0.5f ? SplitProcessor::Mode::crossover
-                                                                     : SplitProcessor::Mode::even);
+                                               const auto index = juce::jlimit (0, 2, (int) std::lround (v));
+                                               p->setMode ((SplitProcessor::Mode) index);
                                            }));
 
         e.parameters.push_back (makeParam ("freqHz", "Frekuensi", "Hz",
@@ -402,6 +404,12 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         e.parameters.push_back (makeParam ("panB", "Pan B", "", -1.0f, 1.0f, 0.01f, 0.0f,
                                            [p] { return p->getPanB(); },
                                            [p] (float v) { p->setPanB (v); }));
+
+        // Two pickups on one guitar can partially cancel when blended; this is
+        // the fix, and it belongs on the mixer because that is where they meet.
+        e.parameters.push_back (makeParam ("invertB", "Invert B", "", 0.0f, 1.0f, 1.0f, 0.0f,
+                                           [p] { return p->getInvertB() ? 1.0f : 0.0f; },
+                                           [p] (float v) { p->setInvertB (v >= 0.5f); }));
 
         registry.addEffect (std::move (e));
     }

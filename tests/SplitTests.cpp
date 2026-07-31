@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "api/ParameterRegistry.h"
 #include "dsp/ChainFactory.h"
 #include "dsp/ChainOrder.h"
 #include "dsp/DSPChainManager.h"
@@ -368,6 +369,142 @@ public:
             expect (buffer.getMagnitude (0, 0, kBlock) > 0.05f, "the signal was lost entirely");
         }
 
+        beginTest ("L/R mode routes each input channel to its own path");
+        {
+            // The two-pickup case: a magnetic and a piezo arrive as two
+            // independent signals, and each must reach its own chain intact.
+            // Marker gains rather than a tone, so which path a sample came down
+            // is readable from its value alone.
+            milodikfx::dsp::DSPChainManager chain;
+
+            auto* split = dynamic_cast<SplitProcessor*> (
+                chain.addProcessor (std::make_unique<SplitProcessor>()));
+
+            chain.addProcessor (std::make_unique<GainMarker> (2.0f));   // A
+            chain.addProcessor (std::make_unique<GainMarker> (4.0f));   // B
+
+            auto* mixer = dynamic_cast<MixerProcessor*> (
+                chain.addProcessor (std::make_unique<MixerProcessor>()));
+
+            chain.setParallelStages (split, mixer);
+            chain.prepareToPlay (kRate, kBlock, 2);
+
+            split->setEnabled (true);
+            split->setMode (SplitProcessor::Mode::leftRight);
+            chain.setStageOnBusB (2, true);
+
+            // Both paths centred, deliberately. Hard-panning them apart makes
+            // this test pass in `even` mode too -- A's left and B's right carry
+            // the same samples either way -- and a test that cannot fail is
+            // worse than no test, because it reads as evidence.
+            juce::AudioBuffer<float> buffer (2, kBlock);
+
+            for (int i = 0; i < kBlock; ++i)
+            {
+                buffer.setSample (0, i, 0.10f);   // "magnetic" on the left
+                buffer.setSample (1, i, 0.01f);   // "piezo" on the right
+            }
+
+            chain.processBlock (buffer);
+
+            // Each source is duplicated across its own path's two channels, so
+            // the mix is (left * 2) + (right * 4) and both outputs carry it
+            // equally. Centred constant-power gain times the sqrt(2)
+            // compensation is exactly unity.
+            constexpr auto expected = 0.10f * 2.0f + 0.01f * 4.0f;
+
+            expectWithinAbsoluteError (buffer.getSample (0, 0), expected, 1.0e-4f);
+            expectWithinAbsoluteError (buffer.getSample (1, 0), expected, 1.0e-4f);
+
+            // And the same rig in `even` mode must land somewhere else, or the
+            // assertions above are measuring something other than the routing.
+            split->setMode (SplitProcessor::Mode::even);
+
+            juce::AudioBuffer<float> evenRun (2, kBlock);
+
+            for (int i = 0; i < kBlock; ++i)
+            {
+                evenRun.setSample (0, i, 0.10f);
+                evenRun.setSample (1, i, 0.01f);
+            }
+
+            chain.processBlock (evenRun);
+
+            expectWithinAbsoluteError (evenRun.getSample (0, 0), 0.10f * 2.0f + 0.10f * 4.0f, 1.0e-4f);
+            expect (std::abs (evenRun.getSample (0, 0) - buffer.getSample (0, 0)) > 0.1f,
+                    "L/R and even produced the same output; the mode is not being applied");
+        }
+
+        beginTest ("L/R mode with identical channels is the same as even mode");
+        {
+            // A mono rig feeds both channels the same thing, and then the two
+            // modes describe the same routing -- so they must not disagree.
+            const auto run = [] (SplitProcessor::Mode mode)
+            {
+                milodikfx::dsp::DSPChainManager chain;
+
+                auto* split = dynamic_cast<SplitProcessor*> (
+                    chain.addProcessor (std::make_unique<SplitProcessor>()));
+                chain.addProcessor (std::make_unique<GainMarker> (1.0f));
+                chain.addProcessor (std::make_unique<GainMarker> (0.5f));
+                auto* mixer = dynamic_cast<MixerProcessor*> (
+                    chain.addProcessor (std::make_unique<MixerProcessor>()));
+
+                chain.setParallelStages (split, mixer);
+                chain.prepareToPlay (kRate, kBlock, 2);
+                split->setEnabled (true);
+                split->setMode (mode);
+                chain.setStageOnBusB (2, true);
+
+                juce::AudioBuffer<float> buffer (2, kBlock);
+                fillTone (buffer);
+                buffer.copyFrom (1, 0, buffer, 0, 0, kBlock);   // mono: L == R
+
+                chain.processBlock (buffer);
+                return buffer;
+            };
+
+            const auto even = run (SplitProcessor::Mode::even);
+            const auto leftRight = run (SplitProcessor::Mode::leftRight);
+
+            for (int ch = 0; ch < 2; ++ch)
+                for (int i = 0; i < kBlock; ++i)
+                    expectWithinAbsoluteError (leftRight.getSample (ch, i), even.getSample (ch, i), 1.0e-6f);
+        }
+
+        beginTest ("Inverting path B cancels a duplicate instead of doubling it");
+        {
+            // What the control is for: two pickups sensing the same string can
+            // partially cancel when blended, and the fix is polarity, not delay.
+            milodikfx::dsp::DSPChainManager chain;
+
+            auto* split = dynamic_cast<SplitProcessor*> (
+                chain.addProcessor (std::make_unique<SplitProcessor>()));
+            chain.addProcessor (std::make_unique<GainMarker> (1.0f));
+            auto* mixer = dynamic_cast<MixerProcessor*> (
+                chain.addProcessor (std::make_unique<MixerProcessor>()));
+
+            chain.setParallelStages (split, mixer);
+            chain.prepareToPlay (kRate, kBlock, 2);
+            split->setEnabled (true);   // even mode: both paths carry the same
+
+            expect (! mixer->getInvertB(), "invert must default to off");
+
+            juce::AudioBuffer<float> summed (2, kBlock);
+            fillTone (summed);
+            chain.processBlock (summed);
+            expect (summed.getMagnitude (0, 0, kBlock) > 0.1f, "the sum vanished");
+
+            mixer->setInvertB (true);
+
+            juce::AudioBuffer<float> cancelled (2, kBlock);
+            fillTone (cancelled);
+            chain.processBlock (cancelled);
+
+            for (int i = 0; i < kBlock; ++i)
+                expectWithinAbsoluteError (cancelled.getSample (0, i), 0.0f, 1.0e-6f);
+        }
+
         beginTest ("The real chain exposes the split and the mixer as stages");
         {
             milodikfx::dsp::DSPChainManager manager;
@@ -386,6 +523,44 @@ public:
 
             // And the split must be off out of the box.
             expect (! chain.split->isEnabled());
+        }
+
+        beginTest ("The registry exposes all three split modes and the invert");
+        {
+            milodikfx::dsp::DSPChainManager manager;
+            const auto chain = milodikfx::dsp::buildGuitarChain (manager);
+
+            milodikfx::api::ParameterRegistry registry;
+            milodikfx::dsp::registerChainParameters (registry, chain, manager);
+
+            const auto* mode = registry.findParameter ("split", "mode");
+            expect (mode != nullptr, "split.mode is missing");
+
+            // The range has to reach 2 or L/R can never be selected -- and a
+            // clamped-away mode is invisible rather than merely broken.
+            expectWithinAbsoluteError (mode->maxValue, 2.0f, 1.0e-6f);
+            expectWithinAbsoluteError (mode->defaultValue, 0.0f, 1.0e-6f);
+
+            mode->set (2.0f);
+            expect (chain.split->getMode() == SplitProcessor::Mode::leftRight);
+            expectWithinAbsoluteError (mode->get(), 2.0f, 1.0e-6f);
+
+            // Out of range must land somewhere real rather than on a mode that
+            // does not exist: the setter clamps rather than casting blindly.
+            mode->set (9.0f);
+            expect (chain.split->getMode() == SplitProcessor::Mode::leftRight);
+
+            mode->set (0.0f);
+            expect (chain.split->getMode() == SplitProcessor::Mode::even);
+
+            const auto* invert = registry.findParameter ("mixer", "invertB");
+            expect (invert != nullptr, "mixer.invertB is missing");
+            expectWithinAbsoluteError (invert->defaultValue, 0.0f, 1.0e-6f);
+
+            invert->set (1.0f);
+            expect (chain.mixer->getInvertB());
+            invert->set (0.0f);
+            expect (! chain.mixer->getInvertB());
         }
     }
 };

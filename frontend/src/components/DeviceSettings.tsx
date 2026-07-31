@@ -29,6 +29,7 @@ function DeviceSettingsBase({
 
   const current = devices?.current;
   const available = devices?.available;
+  const routing = devices?.inputRouting;
 
   const currentType = available?.types.find((type) => type.name === available.currentType);
 
@@ -158,6 +159,44 @@ function DeviceSettingsBase({
             </select>
           </label>
 
+          {routing && routing.ports.length > 1 ? (
+            <>
+              <label>
+                <span>Kanal L dari</span>
+                <select
+                  value={routing.left}
+                  disabled={busy}
+                  onChange={(event) => onApply({ inputPortLeft: event.target.value })}
+                >
+                  <option value="">Otomatis (port pertama)</option>
+                  {routing.ports.map((port) => (
+                    <option key={port.name} value={port.name} disabled={!port.available}>
+                      {port.name}
+                      {port.available ? '' : ' - tidak aktif'}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                <span>Kanal R dari</span>
+                <select
+                  value={routing.right}
+                  disabled={busy}
+                  onChange={(event) => onApply({ inputPortRight: event.target.value })}
+                >
+                  <option value="">Otomatis (port kedua)</option>
+                  {routing.ports.map((port) => (
+                    <option key={port.name} value={port.name} disabled={!port.available}>
+                      {port.name}
+                      {port.available ? '' : ' - tidak aktif'}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          ) : null}
+
           <button type="button" className="btn btn--ghost" onClick={onRefresh} disabled={busy}>
             Pindai ulang
           </button>
@@ -166,6 +205,14 @@ function DeviceSettingsBase({
             Buffer terkecil memberi latensi terendah. Kalau suara mulai putus-putus, naikkan satu
             langkah. ASIO muncul di daftar ini setelah aplikasi dibangun dengan Steinberg ASIO SDK.
           </p>
+
+          {routing && routing.ports.length > 1 ? (
+            <p className="device-form__hint">
+              Pilihan port melekat pada perangkat, bukan pada preset - ia menggambarkan kabel di
+              rig-mu. Untuk gitar dua jack (magnetik + piezo), colok ke dua port lalu pakai mode
+              split <strong>L/R</strong> supaya tiap pickup dapat chain sendiri.
+            </p>
+          ) : null}
         </div>
       ) : null}
     </section>

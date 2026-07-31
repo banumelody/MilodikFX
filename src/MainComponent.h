@@ -75,6 +75,8 @@ private:
     static constexpr const char* kKeyAudioSampleRatePreference = "audio.sampleRatePreference";
     static constexpr const char* kKeyPresetSelectedName = "ui.preset.selectedName";
     static constexpr const char* kKeyInputMode = "audio.inputMode";
+    static constexpr const char* kKeyInputPortL = "audio.inputPortL";
+    static constexpr const char* kKeyInputPortR = "audio.inputPortR";
     static constexpr const char* kKeyMidiDevice = "midi.device";
     static constexpr const char* kKeyScenes = "ui.scenes";
     static constexpr const char* kKeyChannels = "ui.channels";

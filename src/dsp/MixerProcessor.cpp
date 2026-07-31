@@ -43,7 +43,10 @@ void MixerProcessor::combine (juce::AudioBuffer<float>& pathA, const juce::Audio
         return;
 
     const auto gainA = levelA.load (std::memory_order_relaxed);
-    const auto gainB = levelB.load (std::memory_order_relaxed);
+
+    // Polarity folds into B's gain rather than costing a branch per sample.
+    const auto gainB = levelB.load (std::memory_order_relaxed)
+                     * (invertB.load (std::memory_order_relaxed) ? -1.0f : 1.0f);
 
     float aLeft = 1.0f, aRight = 1.0f, bLeft = 1.0f, bRight = 1.0f;
     panGains (panA.load (std::memory_order_relaxed), aLeft, aRight);

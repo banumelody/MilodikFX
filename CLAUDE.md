@@ -212,17 +212,34 @@ behind) and calls `divide()` / `combine()`.
   asserts that against a chain built without the stages at all.
 - **Bus assignment is a bitmask**, one bit per processor index, published exactly like the order:
   one acquire load per block, no allocation, no lock.
-- **Split modes**: `even` (the same signal both ways) and `crossover` — Linkwitz-Riley 4th order, two
-  cascaded Butterworth sections per side, so the halves sum back to flat. A single section per side
-  would leave a 3 dB bump right at the crossover, which on a bass rig is exactly where it is heard.
-  Measured in the suite: 80 Hz into path B at 0.0002 against 0.2998 into A, and the sum flat within
-  a tenth of a dB from 100 Hz to 3 kHz.
+- **Split modes**: `even` (the same signal both ways), `crossover`, and `leftRight`.
+- **`crossover`** — Linkwitz-Riley 4th order, two cascaded Butterworth sections per side, so the
+  halves sum back to flat. A single section per side would leave a 3 dB bump right at the crossover,
+  which on a bass rig is exactly where it is heard. Measured in the suite: 80 Hz into path B at
+  0.0002 against 0.2998 into A, and the sum flat within a tenth of a dB from 100 Hz to 3 kHz.
+- **`leftRight`** is not a split at all, strictly: with two sources there is nothing to divide, only
+  to route. The left input channel becomes path A and the right becomes path B, each duplicated
+  across its own path's two channels so the dual-mono stages downstream see a centred signal and the
+  mixer's pan is what places it. This is what a guitar with a magnetic and a piezo pickup needs, and
+  it is the one thing **stereo input alone cannot do** — one overdrive processes both channels with
+  one set of parameter values, so L and R cannot be dialled differently without a bus each. It is
+  Fractal's pair of Input blocks ("Left Only" on one, "Right Only" on the other) expressed as a
+  split mode, because the engine has a single entry point rather than four.
 - **Pan is constant power** (sin/cos), with a `sqrt(2)` compensation so "split with everything
   centred" matches "no split at all". Without it a centred split arrives 3 dB down — the kind of
   thing nobody notices until they A/B it. `mixer.panA/B` is a legitimate modifier target, so a
   pan law that dipped in the middle would make an auto-panner pump.
+- **`mixer.invertB`** flips path B's polarity, folded into its gain rather than costing a branch per
+  sample. For two pickups on one guitar, not for stereo width: a piezo and a magnetic pickup sense
+  the same string from different places and can partially cancel when blended. Not a timing problem
+  — both arrive through the same converter on the same sample — so a delay would not fix it.
 - **A mixer dragged in front of its split** would strand path B. The run loop folds it back at the
   end of the chain rather than silently discarding half the signal.
+
+A test that hard-pans the two paths apart **cannot tell `leftRight` from `even`** — A's left and B's
+right carry the same samples either way. `tests/SplitTests.cpp` therefore leaves both paths centred
+and asserts the two modes land on different numbers; the sabotage that motivated it is the same
+class as the NAM stereo bug below.
 
 `/api/chain/buses` (PUT) alongside `/api/chain/order`; the assignment persists in the preset
 (schema 7) and the settings file. The UI only offers the A/B selector on stages that actually sit
@@ -425,14 +442,39 @@ run on arbitrary Winsock threads and must never touch the device manager directl
 Device selection walks preferred types: ASIO -> WASAPI Exclusive -> WASAPI Low Latency -> WASAPI shared
 -> DirectSound. Three things it gets right that are easy to break again:
 
-- `initialise(2, 2, ...)` is what tells the manager how many input channels are *needed*. Calling only
-  `setAudioDeviceSetup` leaves that at zero and opens the device output-only.
+- `initialise(kMaxInputChannels, 2, ...)` is what tells the manager how many input channels are
+  *needed*. Calling only `setAudioDeviceSetup` leaves that at zero and opens the device output-only.
+  It is a maximum, not a demand — a two-in interface still opens with two. It used to be literally
+  `2`, which made every jack past the second unreachable: on a Scarlett 4i4 the two rear line inputs
+  could not be selected at all, because the device was never opened wide enough to see them. The
+  same 4i4 now reports six (Input 1–4 plus the two loopback channels).
 - The saved state is only restored when it is a real `DEVICESETUP` element. The manager silently ignores
   an unrecognised one, opens the default device, and reports no error — which looks exactly like success.
 - Buffer/rate **preferences** change only when the user asks. Adopting whatever the device happened to
   open at once made the app treat a 2048-sample fallback as its target forever after.
 
 On the developer's Scarlett this reaches 288 samples at 96 kHz, 12 ms round trip, ~2.4 % CPU in Release.
+
+#### Input port mapping
+
+Which physical jack feeds the engine's left channel and which feeds its right. Stored by channel
+**name** in the settings file (`audio.inputPortL/R`), never in a preset: it describes the cables in
+the rig rather than a sound, so a preset carrying it would be wrong the moment it was opened on
+another interface — and wrong silently. A name also survives a device reopening with a different
+channel count, which an index does not.
+
+The load-bearing subtlety: **JUCE hands the callback one pointer per *active* channel, in order —
+not one per physical port.** With only ports 2 and 4 streaming, `inputChannelData[0]` is port 2. So
+a port's position is its rank among the active channels, it has to be recomputed **every time the
+device changes** (`resolveInputPorts` from `audioDeviceAboutToStart`), and resolving it once at
+startup would survive exactly until the first device change. The failure is silent: the wrong jack,
+or nothing at all. `AudioDeviceController::inputPositionFor` is a pure static so it can be tested
+without hardware — `tests/InputRoutingTests.cpp` covers the sparse-mask case directly. A name the
+device does not have falls back to the first/second channel rather than to silence, and logs.
+
+`GET /api/devices` carries `inputRouting {ports, left, right}`; `POST` accepts `inputPortLeft` /
+`inputPortRight`, applied before any device change in the same body so the routing lands on the
+device about to be opened. Hidden in the plugin — the host owns the I/O.
 
 ### Performance
 

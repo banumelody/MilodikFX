@@ -67,10 +67,31 @@ void SplitProcessor::divide (juce::AudioBuffer<float>& pathA, juce::AudioBuffer<
     if (numSamples <= 0 || numChannels <= 0)
         return;
 
-    if ((Mode) splitMode.load (std::memory_order_relaxed) == Mode::even)
+    const auto mode = (Mode) splitMode.load (std::memory_order_relaxed);
+
+    if (mode == Mode::even)
     {
         for (int ch = 0; ch < numChannels; ++ch)
             pathB.copyFrom (ch, 0, pathA, ch, 0, numSamples);
+
+        return;
+    }
+
+    if (mode == Mode::leftRight)
+    {
+        if (numChannels < 2)
+        {
+            // One channel in: there is no right to route, so both paths carry
+            // the same thing rather than one of them going silent.
+            pathB.copyFrom (0, 0, pathA, 0, 0, numSamples);
+            return;
+        }
+
+        // Order matters: the right channel has to be read out of pathA before
+        // pathA's own right channel is overwritten with the left.
+        pathB.copyFrom (0, 0, pathA, 1, 0, numSamples);
+        pathB.copyFrom (1, 0, pathA, 1, 0, numSamples);
+        pathA.copyFrom (1, 0, pathA, 0, 0, numSamples);
 
         return;
     }

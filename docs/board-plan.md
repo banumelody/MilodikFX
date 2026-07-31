@@ -23,7 +23,29 @@ membuktikan bentuk UX-nya benar.
 
 ---
 
-## v0.29.0 — "Panel input" (P11)
+## v0.29.0 — "Panel input" (P11) — **SELESAI (31 Jul 2026)**
+
+> **Terkirim sesuai rencana, dengan satu temuan yang layak dicatat.**
+>
+> Lubangnya lebih besar dari dugaan: `initialise(2, 2, ...)` membuat 4i4 hanya pernah membuka dua
+> channel. Setelah dibuka lebar, perangkat yang sama melaporkan **enam** — Input 1–4 plus dua
+> channel loopback. Jadi ini bukan penyempurnaan, ini memang lubang.
+>
+> **Test L/R saya lolos karena alasan yang salah, dan itu ketahuan sebelum rilis.** Versi pertama
+> mem-pan kedua jalur ke sisi berlawanan lalu memeriksa tiap kanal output — dan angka itu **identik**
+> di mode `even`, karena kiri-jalur-A dan kanan-jalur-B membawa sampel yang sama di kedua mode.
+> Diperbaiki dengan membiarkan kedua jalur di tengah dan menambah assertion bahwa `even` mendarat di
+> angka lain. Dibuktikan dengan sengaja merusak routing-nya: 0.6 lawan 0.24, tiga assertion gagal.
+> Ini kelas kesalahan yang sama dengan bug stereo NAM — test yang tidak bisa gagal lebih buruk
+> daripada tidak ada test, karena ia terbaca sebagai bukti.
+>
+> Satu perubahan yang perlu disebut terang-terangan: **rentang `split.mode` tumbuh dari 0..1 jadi
+> 0..2.** Preset dan settings menyimpan nilai polos jadi tidak terpengaruh, tapi otomasi host VST3
+> menyimpan nilai ternormalisasi — sebuah lajur otomasi lama yang menulis 1.0 (dulu `crossover`)
+> sekarang mendarat di `leftRight`. Split baru ada sejak v0.28, jadi dampaknya nyaris nol, tapi
+> harganya dibayar sadar, bukan tidak sengaja.
+
+## v0.29.0 — rencana awal (P11)
 
 **Tujuan:** gitar dengan dua output jack — magnetik + piezo — masuk ke Scarlett port 1 dan 2,
 menjadi dua chain penuh dengan kenop masing-masing, digabung di Mixer. Ditambah: memilih port
@@ -126,11 +148,14 @@ flowchart LR
 - **Plugin:** panel port disembunyikan (`isPluginHost()` — host yang punya I/O). Mode L/R tetap
   bekerja atas stereo yang host serahkan; didokumentasikan di kartu Split.
 
-### Definition of done v0.29
+### Definition of done v0.29 — tercapai
 
-Suite backend penuh (SplitTests bertambah), vitest + type-check + lint, E2E round-trip pemetaan
-port, smoke, pluginval strictness 10, CI hijau, README + landing page + CLAUDE.md (bagian *Audio
-device* dan *Parallel paths*), rilis + installer. **Effort: ~1 weekend.**
+**1.820.585 assertion backend** (SplitTests +4, InputRoutingTests baru dengan 8 kasus pemetaan
+port), **229 test frontend** (DeviceSettings +6, EffectRack split modes +3), type-check, lint,
+**E2E 54/54**, smoke, **pluginval strictness 10 exit 0**, CLAUDE.md + README + landing page,
+rilis + installer. Diverifikasi terhadap Scarlett 4i4 sungguhan: enam port terbaca, round-trip
+pemetaan benar, nama port asing jatuh ke fallback dan tercatat di log, pilihan bertahan setelah
+restart.
 
 ---
 

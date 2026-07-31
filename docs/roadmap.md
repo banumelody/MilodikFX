@@ -1284,7 +1284,7 @@ atas-B/bawah-A, Mixer otomatis mengikuti Splitter, aturan letak) dan **Fractal F
 terhubung jack fisik, inventaris blok *tetap* — 2 Amp/3 Drive/4 Delay — dan rig magnetik+piezo
 dua-chain yang terdokumentasi di forum mereka).
 
-## v0.29.0 — "Panel input" (P11) — ~1 weekend
+## v0.29.0 — "Panel input" (P11) — **SELESAI (31 Jul 2026)**
 
 Rig gitar dua-jack (magnetik + piezo) selesai di rilis ini. **P11-1** buka semua port input
 device (hari ini `initialise(2,2)` membuat port 3/4 di 4i4 tak terjangkau) + pemetaan

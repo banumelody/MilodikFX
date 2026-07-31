@@ -95,6 +95,26 @@ export interface DeviceTypeInfo {
   outputs: string[];
 }
 
+/** One physical jack on the open interface. */
+export interface InputPort {
+  name: string;
+  /** False when the device is not streaming this channel, so it cannot be picked. */
+  available: boolean;
+}
+
+/**
+ * Which jack feeds each engine channel.
+ *
+ * Stored by name in the settings file rather than in a preset: it describes the
+ * cables in the rig, not a sound, so a preset that carried it would be wrong the
+ * moment it was opened on another interface. Empty means "first available".
+ */
+export interface InputRouting {
+  ports: InputPort[];
+  left: string;
+  right: string;
+}
+
 export interface DevicesResponse {
   current: DeviceState;
   available: {
@@ -103,6 +123,7 @@ export interface DevicesResponse {
     availableSampleRates: number[];
     availableBufferSizes: number[];
   };
+  inputRouting: InputRouting;
 }
 
 export interface DeviceRequest {
@@ -111,6 +132,8 @@ export interface DeviceRequest {
   outputDevice?: string;
   sampleRate?: number;
   bufferSize?: number;
+  inputPortLeft?: string;
+  inputPortRight?: string;
 }
 
 export interface PresetMetadata {
@@ -193,7 +216,7 @@ export const getLevels = () => request<Levels>('/levels');
 export const getDevices = () => request<DevicesResponse>('/devices');
 
 export const setDevice = (body: DeviceRequest) =>
-  request<{ current: DeviceState }>('/devices', {
+  request<{ current: DeviceState; inputRouting?: InputRouting }>('/devices', {
     method: 'POST',
     body: JSON.stringify(body),
   });

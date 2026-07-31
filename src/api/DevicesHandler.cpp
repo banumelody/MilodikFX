@@ -28,6 +28,30 @@ juce::var snapshotToVar (const milodikfx::audio::AudioDeviceSnapshot& snapshot)
 
     return juce::var (object);
 }
+
+/** The physical jacks, plus which one currently feeds each engine channel. */
+juce::var inputRoutingToVar (const milodikfx::audio::AudioDeviceController& controller)
+{
+    juce::Array<juce::var> ports;
+
+    for (const auto& port : controller.listInputPorts())
+    {
+        auto* entry = new juce::DynamicObject();
+        entry->setProperty ("name", port.name);
+
+        // A port the device is not currently streaming cannot be chosen; saying
+        // so here means the UI does not have to guess from the channel count.
+        entry->setProperty ("available", port.callbackPosition >= 0);
+        ports.add (juce::var (entry));
+    }
+
+    auto* routing = new juce::DynamicObject();
+    routing->setProperty ("ports", ports);
+    routing->setProperty ("left", controller.getInputPortName (false));
+    routing->setProperty ("right", controller.getInputPortName (true));
+
+    return juce::var (routing);
+}
 } // namespace
 
 HttpHandler::Response DevicesHandler::handleGet (const std::string&, const std::string&) const
@@ -37,6 +61,7 @@ HttpHandler::Response DevicesHandler::handleGet (const std::string&, const std::
         auto* root = new juce::DynamicObject();
         root->setProperty ("current", snapshotToVar (controller.getSnapshot()));
         root->setProperty ("available", controller.describeAvailable());
+        root->setProperty ("inputRouting", inputRoutingToVar (controller));
 
         return jsonOk (juce::var (root));
     }
@@ -70,6 +95,22 @@ HttpHandler::Response DevicesHandler::handlePost (const std::string& path, const
         if (! parsed.isObject())
             return jsonError (400, "Body must be a JSON object");
 
+        // Port routing arrives on the same endpoint as the rest of the device
+        // setup, and is applied first: it does not reopen anything, so a body
+        // carrying both a new device and a new routing lands the routing on the
+        // device that is about to be opened rather than the one on its way out.
+        if (parsed.hasProperty ("inputPortLeft") || parsed.hasProperty ("inputPortRight"))
+        {
+            const auto left = parsed.hasProperty ("inputPortLeft")
+                                ? parsed["inputPortLeft"].toString().trim()
+                                : controller.getInputPortName (false);
+            const auto right = parsed.hasProperty ("inputPortRight")
+                                 ? parsed["inputPortRight"].toString().trim()
+                                 : controller.getInputPortName (true);
+
+            controller.setInputPortNames (left, right);
+        }
+
         milodikfx::audio::AudioDeviceRequest request;
 
         request.typeName = parsed["type"].toString().trim();
@@ -91,6 +132,7 @@ HttpHandler::Response DevicesHandler::handlePost (const std::string& path, const
 
         auto* root = new juce::DynamicObject();
         root->setProperty ("current", snapshotToVar (controller.getSnapshot()));
+        root->setProperty ("inputRouting", inputRoutingToVar (controller));
 
         return jsonOk (juce::var (root));
     }
