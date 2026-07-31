@@ -1261,13 +1261,63 @@ Perform view tidak berubah.
 ## Backlog eksplisit (tidak dijadwalkan, dengan alasan)
 
 - **Dual NAM (amp per sisi):** 2× CPU model (~29% → ~58% budget di 96k/32 dengan model Standard).
-  Baru layak kalau v0.25 (stereo cab) + v0.28 (split) terbukti kurang lebar. Prasyarat teknis
-  sudah ada di P10 (bus assignment) — tinggal biaya instance kedua.
-- **Grid penuh ala Fractal + instance ganda:** membayar id per-instance (`drive1.drivePct`) di
-  seluruh persistensi + editor graph. Keputusan sadar: hanya jika ada kebutuhan konkret yang
-  split A/B tidak bisa jawab. Bahkan FM9 membatasi 14×6 kiri-ke-kanan tanpa loop.
+  Baru layak kalau jatah v0.31 terbukti kurang; menaikkan jatah = menambah parameter VST3
+  (append-only, aman untuk otomasi lama).
 - **Urutan per-scene:** ditolak permanen — scene hanya memanggil yang terlihat; chain yang menata
   ulang diri saat pindah scene di tengah lagu adalah kejutan yang aturan scene larang.
+- **Output block ala FM9 / seksi paralel ganda / multi-entry:** lihat tabel "di luar cakupan" di
+  [`board-plan.md`](board-plan.md).
 
 **Total estimasi P9-S + P9 + P10: ±6.5–7 weekend**, empat titik rilis (v0.25 → v0.28), tiap
 rilis berdiri sendiri dan bisa berhenti kapan pun tanpa ada yang setengah jadi.
+
+# P11–P13 — Panel input, board kosong, blok ganda (direncanakan 31 Jul 2026)
+
+> Rencana penuh — deliverable per versi, diagram alur, aturan migrasi, definition of done — ada
+> di **[`board-plan.md`](board-plan.md)**. Prototipe interaktif:
+> <https://claude.ai/code/artifact/62bb34ac-fd11-423c-9ef6-16ef0e4c7603>; alur UX:
+> [`pedalboard-ux.md`](pedalboard-ux.md). Ringkasannya di sini supaya roadmap tetap satu tempat
+> untuk melihat semuanya.
+
+Sumber desain yang divalidasi dari dokumen primernya: **Logic Pro Pedalboard** (router dua garis
+atas-B/bawah-A, Mixer otomatis mengikuti Splitter, aturan letak) dan **Fractal FM9** (blok Input
+terhubung jack fisik, inventaris blok *tetap* — 2 Amp/3 Drive/4 Delay — dan rig magnetik+piezo
+dua-chain yang terdokumentasi di forum mereka).
+
+## v0.29.0 — "Panel input" (P11) — ~1 weekend
+
+Rig gitar dua-jack (magnetik + piezo) selesai di rilis ini. **P11-1** buka semua port input
+device (hari ini `initialise(2,2)` membuat port 3/4 di 4i4 tak terjangkau) + pemetaan
+port→kanal L/R di settings (`audio.inputPortL/R`, disimpan sebagai nama channel — deskripsi
+kabel, bukan suara, maka bukan di preset; jebakan: `inputChannelData` berindeks urutan channel
+*aktif*, bukan port fisik). **P11-2** mode Splitter `L/R` (kanal L→jalur A, R→jalur B,
+mono-duplikat ala "Left Only" FM9 — padanan dua blok Input Fractal untuk board dua jalur) +
+`mixer.invertB` (polaritas piezo). **P11-3** dropdown port di panel Device, label sumber di
+router (`A ← Input 1 · INST`), disembunyikan di plugin (host yang punya I/O).
+
+## v0.30.0 — "Board kosong" (P12) — ~2 weekend
+
+Board mulai kosong = kabel lurus (shunt Fractal); prosesor tetap semua dibangun — "di board"
+adalah status (`placed` + disabled saat tidak), registry dan daftar parameter VST3 tidak
+berubah. Palet di sisi kanan; **Splitter dari palet membuka jalur B, Mixer menyusul otomatis**
+dan ikut hilang bersama Splitter-nya (kutipan Apple); dua aturan letak Logic ditegakkan dengan
+*koreksi*, bukan penolakan. ChainStrip jadi router dua garis. Schema preset 8 (`board`).
+Migrasi: preset lama = semua stage di board — bunyi tak berubah sesudah update. Scene tetap
+hanya menyentuh enable flags stage yang di board; penempatan milik preset, bukan scene.
+
+## v0.31.0 — "Inventaris blok ganda" (P13) — ~2.5–3 weekend
+
+Cara FM9, bukan registry dinamis: **3 Overdrive, 2× hampir semua yang lain, NAM tetap 1**
+(batas CPU, bukan format) — semua instance dibangun saat startup, 24 stage / ±133 parameter.
+Keputusan kunci yang menghapus migrasi: **instance 1 memakai id polos yang sekarang**
+(`overdrive` tetap `overdrive`, yang baru `overdrive2`) — preset/settings/MIDI/modifier lama
+jalan tanpa tabel migrasi, parameter VST3 bertambah append-only sehingga lajur otomasi DAW lama
+tidak bergeser. Harga teknisnya: packing urutan 4-bit×16 diganti **snapshot yang dipublikasikan
+lewat pointer** (pola Slot NAM; sekalian menyatukan urutan+bus+penempatan dalam satu objek,
+menutup celah baca-sobek dua atomic). Jatah dikunci *setelah* pengukuran memori & CPU, bukan
+sebelum. Ini menggantikan entri backlog lama "grid penuh ala Fractal + instance ganda" — id
+per-instance ternyata tidak perlu dibayar di seluruh persistensi, cukup di id baru.
+
+**Total P11–P13: ±5.5–6 weekend**, tiga titik rilis, risiko terbesar (jantung audio thread)
+paling akhir. Tiap rilis berhenti bersih; v0.29 sendirian sudah menyelesaikan use case dua
+pickup.
