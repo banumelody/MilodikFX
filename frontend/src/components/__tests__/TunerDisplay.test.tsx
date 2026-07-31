@@ -48,6 +48,14 @@ async function start(next: TunerReading | null = reading()) {
   const view = render(<TunerDisplay />);
   await user.click(screen.getByRole('button', { name: 'Mulai' }));
 
+  // The reading arrives through the subscription callback, and the panel only
+  // subscribes once setTunerEnabled resolves -- so it is at least one render
+  // behind the click. On this machine it lands within the same tick and bare
+  // assertions pass; on a loaded CI runner they did not, and the suite went red
+  // on a commit that changed nothing but documentation. Waiting once here
+  // covers every assertion below instead of patching them one at a time.
+  if (next?.detected) await screen.findByText(next.note);
+
   return { user, ...view };
 }
 
