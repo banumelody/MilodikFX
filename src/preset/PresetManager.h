@@ -46,15 +46,19 @@ struct PresetDocument
 
     /** The chain's processing order, as an array of effect ids. */
     juce::var chainOrder;
+
+    /** Which stages run on path B of the parallel section, as effect ids. */
+    juce::var chainBusB;
 };
 
 class PresetManager final
 {
 public:
     /** 3 added metadata and scenes; 4 added per-effect channels; 5 added the
-        pinned Perform controls; 6 added the chain's processing order. Older
-        files still load; the new fields simply come back empty. */
-    static constexpr int kSchemaVersion = 6;
+        pinned Perform controls; 6 added the chain's processing order; 7 added
+        the A/B path assignment. Older files still load; the new fields simply
+        come back empty. */
+    static constexpr int kSchemaVersion = 7;
 
     explicit PresetManager (juce::File presetsDirectoryIn);
 

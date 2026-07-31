@@ -9,8 +9,9 @@
 /**
  * /api/chain
  *
- *   GET /api/chain/order   { order: [ids], fixed: [ids] }
- *   PUT /api/chain/order   { order: [ids] }  -> the order actually applied
+ *   GET /api/chain/order   { order: [ids], fixed: [ids], busB: [ids] }
+ *   PUT /api/chain/order   { order: [ids] }   -> the order actually applied
+ *   PUT /api/chain/buses   { busB: [ids] }    -> which stages run on path B
  *
  * The order is a list of effect ids rather than positions, because an id
  * survives a version change and a position does not. Unknown ids are ignored and
@@ -31,8 +32,13 @@ public:
 
         const auto segments = pathSegmentsAfter (path, "/api/chain");
 
-        if (segments.size() != 1 || toLowerAscii (segments[0]) != "order")
-            return jsonError (404, "Expected /api/chain/order");
+        if (segments.size() != 1)
+            return jsonError (404, "Expected /api/chain/order or /api/chain/buses");
+
+        const auto action = toLowerAscii (segments[0]);
+
+        if (action != "order" && action != "buses")
+            return jsonError (404, "Expected /api/chain/order or /api/chain/buses");
 
         return jsonOk (stateVar());
     }
@@ -43,8 +49,34 @@ public:
 
         const auto segments = pathSegmentsAfter (path, "/api/chain");
 
-        if (segments.size() != 1 || toLowerAscii (segments[0]) != "order")
-            return jsonError (404, "Expected /api/chain/order");
+        if (segments.size() != 1)
+            return jsonError (404, "Expected /api/chain/order or /api/chain/buses");
+
+        const auto action = toLowerAscii (segments[0]);
+
+        if (action == "buses")
+        {
+            const auto parsedBuses = parseBody (body);
+            const auto* onB = parsedBuses["busB"].getArray();
+
+            if (onB == nullptr)
+                return jsonError (400, "Body must contain a 'busB' array of effect ids");
+
+            std::vector<std::string> ids;
+
+            for (const auto& item : *onB)
+                ids.push_back (item.toString().toStdString());
+
+            order.setBusBIds (ids);
+
+            if (onChanged)
+                onChanged();
+
+            return jsonOk (stateVar());
+        }
+
+        if (action != "order")
+            return jsonError (404, "Expected /api/chain/order or /api/chain/buses");
 
         const auto parsed = parseBody (body);
         const auto* list = parsed["order"].getArray();
@@ -82,9 +114,15 @@ private:
             if (order.isFixed (id))
                 fixed.add (juce::String (id));
 
+        juce::Array<juce::var> busB;
+
+        for (const auto& id : order.getBusBIds())
+            busB.add (juce::String (id));
+
         auto* root = new juce::DynamicObject();
         root->setProperty ("order", current);
         root->setProperty ("fixed", fixed);
+        root->setProperty ("busB", busB);
 
         return juce::var (root);
     }

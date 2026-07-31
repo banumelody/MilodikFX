@@ -600,6 +600,26 @@ void MainComponent::loadSettingsIntoRegistry()
                 }
             }
         }
+
+        const auto storedBuses = settingsFile.getValue (kKeyChainBusB, {});
+
+        if (storedBuses.isNotEmpty())
+        {
+            juce::var parsed;
+
+            if (juce::JSON::parse (storedBuses, parsed).wasOk())
+            {
+                if (const auto* array = parsed.getArray())
+                {
+                    std::vector<std::string> ids;
+
+                    for (const auto& item : *array)
+                        ids.push_back (item.toString().toStdString());
+
+                    chainOrder->setBusBIds (ids);
+                }
+            }
+        }
     }
 
     // Pinned Perform knobs follow the same pattern again: they belong to a
@@ -742,6 +762,13 @@ void MainComponent::saveSettingsIfNeeded (bool force)
             ids.add (juce::String (id));
 
         settingsFile.setValue (kKeyChainOrder, juce::JSON::toString (juce::var (ids), true));
+
+        juce::Array<juce::var> busB;
+
+        for (const auto& id : chainOrder->getBusBIds())
+            busB.add (juce::String (id));
+
+        settingsFile.setValue (kKeyChainBusB, juce::JSON::toString (juce::var (busB), true));
     }
 
     if (looperProcessor != nullptr)

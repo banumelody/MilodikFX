@@ -1976,6 +1976,43 @@ input[type='text']:disabled {
   height: 12px;
 }
 
+/* ------------------------------------------------------------ A/B paths
+   Only shown on stages that actually sit inside the parallel section, so the
+   control never appears where it would do nothing. */
+.rack__bus {
+  display: flex;
+  gap: 2px;
+  margin-right: 10px;
+  flex: 0 0 auto;
+  align-self: flex-start;
+}
+
+.rack__bus-btn {
+  width: 22px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--line, #232833);
+  border-radius: 5px;
+  background: var(--bg-sunken, #0a0c11);
+  color: var(--text-faint, #6d7685);
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.rack__bus-btn:hover:not(:disabled) {
+  color: var(--text, #e6e9ef);
+}
+
+.rack__bus-btn--active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.04);
+}
+
 /* ------------------------------------------------------- Drag to reorder
    Pointer-driven, so nothing moves until the engine answers: the dragged card
    dims, the target shows an insertion edge, and a refusal simply leaves both

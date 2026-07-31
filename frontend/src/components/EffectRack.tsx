@@ -174,6 +174,12 @@ export interface EffectRackProps {
   isDragging?: boolean;
   /** The drop would land here. */
   isDropTarget?: boolean;
+  /**
+   * Which path this stage runs on, or undefined when it sits outside the
+   * parallel section (or there is no split).
+   */
+  bus?: 'A' | 'B';
+  onBusChange?: (effectId: string, bus: 'A' | 'B') => void;
   disabled?: boolean;
   /** Only affects where the tone curve puts Nyquist; harmless when unknown. */
   sampleRate?: number;
@@ -203,6 +209,8 @@ function EffectRackBase({
   dragHandleProps,
   isDragging = false,
   isDropTarget = false,
+  bus,
+  onBusChange,
   disabled = false,
   sampleRate,
 }: EffectRackProps) {
@@ -326,6 +334,24 @@ function EffectRackBase({
                 </svg>
               </span>
             )}
+          </div>
+        ) : null}
+        {bus && onBusChange ? (
+          <div className="rack__bus" role="group" aria-label={`Jalur ${effect.label}`}>
+            {(['A', 'B'] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                className={`rack__bus-btn${bus === option ? ' rack__bus-btn--active' : ''}`}
+                disabled={disabled}
+                aria-pressed={bus === option}
+                aria-label={`Jalankan ${effect.label} di jalur ${option}`}
+                title={`Jalur ${option}`}
+                onClick={() => onBusChange(effect.id, option)}
+              >
+                {option}
+              </button>
+            ))}
           </div>
         ) : null}
         <div className="rack__titles">

@@ -122,6 +122,9 @@ bool PresetManager::saveDocument (const juce::String& presetName, const PresetDo
     if (document.chainOrder.isArray())
         root->setProperty ("chainOrder", document.chainOrder);
 
+    if (document.chainBusB.isArray())
+        root->setProperty ("chainBusB", document.chainBusB);
+
     root->setProperty ("state", document.state);
 
     return file.replaceWithText (juce::JSON::toString (juce::var (root), false));
@@ -160,6 +163,7 @@ bool PresetManager::loadDocument (const juce::String& presetName, PresetDocument
     outDocument.channels = parsed["channels"];
     outDocument.pins = parsed["pins"];
     outDocument.chainOrder = parsed["chainOrder"];
+    outDocument.chainBusB = parsed["chainBusB"];
 
     // Absent in a version 2 file, which is fine: the fields simply stay empty
     // rather than the whole preset being refused.
@@ -218,6 +222,7 @@ juce::String PresetManager::importPreset (const juce::String& presetName, const 
     document.channels = parsed["channels"];
     document.pins = parsed["pins"];
     document.chainOrder = parsed["chainOrder"];
+    document.chainBusB = parsed["chainBusB"];
     document.metadata.description = parsed["description"].toString();
     document.metadata.notes = parsed["notes"].toString();
     document.metadata.favourite = (bool) parsed["favourite"];

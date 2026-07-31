@@ -10,6 +10,9 @@
 
 namespace milodikfx::dsp
 {
+class SplitProcessor;
+class MixerProcessor;
+
 class DSPChainManager final
 {
 public:
@@ -89,6 +92,28 @@ public:
 
     /** @} */
 
+    //==============================================================================
+    /** @name Parallel paths
+     *
+     * Between a SplitProcessor and a MixerProcessor the chain runs two buffers,
+     * and each stage in between is assigned to one of them. Modelled on Logic's
+     * Pedalboard: a stage is *assigned* to a bus, never duplicated onto one, so
+     * there is still exactly one overdrive and the registry's flat id set holds.
+     *
+     * The assignment is a bitmask, one bit per processor index, published the
+     * same way the order is -- read once per block, no allocation, no lock.
+     */
+    /** @{ */
+
+    /** Tells the manager which stages orchestrate the split. Build time only. */
+    void setParallelStages (SplitProcessor* split, MixerProcessor* mixer) noexcept;
+
+    /** false = path A, true = path B. Ignored for stages outside the split. */
+    void setStageOnBusB (int processorIndex, bool onBusB) noexcept;
+    bool isStageOnBusB (int processorIndex) const noexcept;
+
+    /** @} */
+
     // Find the first processor of type T in the chain (uses RTTI/dynamic_cast)
     template<typename T>
     T* findProcessor() noexcept
@@ -131,6 +156,21 @@ private:
     std::atomic<juce::uint64> packedOrder { 0 };
     int leadingFixedStages = 0;
     int trailingFixedStages = 0;
+
+    // One bit per processor index: set means the stage runs on path B.
+    std::atomic<juce::uint32> busBMask { 0 };
+
+    // Recognised by pointer so a reorder cannot leave a stale position behind.
+    SplitProcessor* splitStage = nullptr;
+    MixerProcessor* mixerStage = nullptr;
+
+    /** True when a split stage exists and is switched on. */
+    bool splitIsActive() const noexcept;
+    void divideAtSplit (juce::AudioBuffer<float>& pathA, juce::AudioBuffer<float>& b) noexcept;
+    void combineAtMixer (juce::AudioBuffer<float>& pathA, const juce::AudioBuffer<float>& b) noexcept;
+
+    /** Path B's buffer. Allocated once, never resized while audio runs. */
+    juce::AudioBuffer<float> pathB;
 
     std::atomic<bool> bypassed { false };
     double currentSampleRate = 0.0;

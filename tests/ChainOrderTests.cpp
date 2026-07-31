@@ -228,7 +228,7 @@ public:
             const auto chain = milodikfx::dsp::buildGuitarChain (manager);
 
             const auto count = manager.getNumProcessors();
-            expectEquals (count, 12);
+            expectEquals (count, 14);
 
             std::vector<int> order;
             for (int i = 0; i < count; ++i)

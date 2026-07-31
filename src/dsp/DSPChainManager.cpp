@@ -2,6 +2,9 @@
 
 #include <array>
 
+#include "dsp/MixerProcessor.h"
+#include "dsp/SplitProcessor.h"
+
 namespace milodikfx::dsp
 {
 DSPChainManager::DSPChainManager()
@@ -9,6 +12,11 @@ DSPChainManager::DSPChainManager()
     // Allocated up front and never resized: prepareToPlay must not move memory
     // that a block already in flight on the audio thread is reading.
     dryCopy.setSize (kMaxChannels, kMaxBlockSize, false, true, false);
+
+    // Path B, for the parallel section. Allocated here for the same reason
+    // dryCopy is: prepareToPlay must never move memory a block in flight is
+    // reading, and the audio thread must never allocate.
+    pathB.setSize (kMaxChannels, kMaxBlockSize, false, true, false);
 }
 
 void DSPChainManager::prepareToPlay (double sampleRate, int samplesPerBlock, int numChannels)
@@ -70,15 +78,65 @@ void DSPChainManager::processChain (juce::AudioBuffer<float>& buffer)
     // One acquire load for the whole block: either the old order or the new one,
     // never a mix of the two, and no allocation on either side of the handover.
     const auto order = packedOrder.load (std::memory_order_acquire);
+    const auto buses = busBMask.load (std::memory_order_acquire);
     const auto count = (int) processors.size();
+
+    // The parallel section, if there is one. `running` turns on at the split
+    // stage and off at the mixer; while it is on, each stage runs on whichever
+    // buffer its bus bit names.
+    const auto canSplit = splitStage != nullptr
+                          && mixerStage != nullptr
+                          && numChannels > 0
+                          && numSamples > 0
+                          && numSamples <= pathB.getNumSamples();
+
+    juce::AudioBuffer<float> pathBView (pathB.getArrayOfWritePointers(), numChannels, numSamples);
+    auto running = false;
 
     for (int position = 0; position < count; ++position)
     {
         const auto index = (int) ((order >> (position * 4)) & 0xFULL);
 
-        if (index < count && processors[(size_t) index] != nullptr)
-            processors[(size_t) index]->processBlock (buffer);
+        if (index >= count || processors[(size_t) index] == nullptr)
+            continue;
+
+        auto* processor = processors[(size_t) index].get();
+
+        if (processor == splitStage)
+        {
+            // Only a split that is switched on opens a second path; otherwise
+            // the chain stays serial and byte-for-byte what it was before any of
+            // this existed.
+            if (canSplit && splitIsActive())
+            {
+                divideAtSplit (buffer, pathBView);
+                running = true;
+            }
+
+            continue;
+        }
+
+        if (processor == mixerStage)
+        {
+            if (running)
+            {
+                combineAtMixer (buffer, pathBView);
+                running = false;
+            }
+
+            continue;
+        }
+
+        const auto onBusB = (buses & (1u << (unsigned) index)) != 0;
+
+        processor->processBlock (running && onBusB ? pathBView : buffer);
     }
+
+    // A mixer dragged in front of its split would otherwise leave path B
+    // hanging and silently discard everything on it. Fold it back rather than
+    // losing half the signal.
+    if (running)
+        combineAtMixer (buffer, pathBView);
 
     if (! needsFade)
         return;
@@ -179,6 +237,51 @@ juce::uint64 DSPChainManager::identityOrder() const noexcept
         packed |= ((juce::uint64) (unsigned) i) << (i * 4);
 
     return packed;
+}
+
+void DSPChainManager::setParallelStages (SplitProcessor* split, MixerProcessor* mixer) noexcept
+{
+    splitStage = split;
+    mixerStage = mixer;
+}
+
+bool DSPChainManager::splitIsActive() const noexcept
+{
+    return splitStage != nullptr && splitStage->isEnabled();
+}
+
+void DSPChainManager::divideAtSplit (juce::AudioBuffer<float>& pathA, juce::AudioBuffer<float>& b) noexcept
+{
+    if (splitStage != nullptr)
+        splitStage->divide (pathA, b);
+}
+
+void DSPChainManager::combineAtMixer (juce::AudioBuffer<float>& pathA,
+                                      const juce::AudioBuffer<float>& b) noexcept
+{
+    if (mixerStage != nullptr)
+        mixerStage->combine (pathA, b);
+}
+
+void DSPChainManager::setStageOnBusB (int processorIndex, bool onBusB) noexcept
+{
+    if (processorIndex < 0 || processorIndex >= kMaxOrderedProcessors)
+        return;
+
+    const auto bit = 1u << (unsigned) processorIndex;
+
+    if (onBusB)
+        busBMask.fetch_or (bit, std::memory_order_release);
+    else
+        busBMask.fetch_and (~bit, std::memory_order_release);
+}
+
+bool DSPChainManager::isStageOnBusB (int processorIndex) const noexcept
+{
+    if (processorIndex < 0 || processorIndex >= kMaxOrderedProcessors)
+        return false;
+
+    return (busBMask.load (std::memory_order_acquire) & (1u << (unsigned) processorIndex)) != 0;
 }
 
 void DSPChainManager::setFixedStages (int leadingFixed, int trailingFixed) noexcept

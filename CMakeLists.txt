@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(MilodikFX VERSION 0.27.0 LANGUAGES CXX)
+project(MilodikFX VERSION 0.28.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -229,6 +229,10 @@ set(MILODIKFX_ENGINE_SOURCES
   src/dsp/DelayProcessor.cpp
   src/dsp/MasterOutProcessor.h
   src/dsp/MasterOutProcessor.cpp
+  src/dsp/SplitProcessor.h
+  src/dsp/SplitProcessor.cpp
+  src/dsp/MixerProcessor.h
+  src/dsp/MixerProcessor.cpp
   src/dsp/MetronomeProcessor.h
   src/dsp/MetronomeProcessor.cpp
   src/dsp/LooperProcessor.h
@@ -597,6 +601,7 @@ target_sources(MilodikFX_tests
     tests/ChannelTests.cpp
     tests/PinTests.cpp
     tests/ChainOrderTests.cpp
+    tests/SplitTests.cpp
     tests/UndoTests.cpp
     tests/InputTrimTests.cpp
     tests/DriveVoicingTests.cpp

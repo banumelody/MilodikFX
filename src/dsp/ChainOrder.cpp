@@ -15,6 +15,7 @@ ChainOrder::ChainOrder (const GuitarChain& chain, DSPChainManager& managerToUse)
         { chain.noiseGate, "noiseGate" },
         { chain.cleanBoost, "cleanBoost" },
         { chain.compressor, "compressor" },
+        { chain.split, "split" },
         { chain.overdrive, "overdrive" },
         { chain.eq, "eq" },
         { chain.toneStack, "toneStack" },
@@ -22,6 +23,7 @@ ChainOrder::ChainOrder (const GuitarChain& chain, DSPChainManager& managerToUse)
         { chain.cabinet, "cabinet" },
         { chain.delay, "delay" },
         { chain.reverb, "reverb" },
+        { chain.mixer, "mixer" },
         { chain.masterOut, "master" },
     };
 
@@ -94,6 +96,26 @@ bool ChainOrder::applyIds (const std::vector<std::string>& ids)
     // The manager has the final word: it refuses anything that moves a pinned
     // stage, so that rule is enforced in one place rather than trusted here.
     return manager.setOrder (indices);
+}
+
+std::vector<std::string> ChainOrder::getBusBIds() const
+{
+    std::vector<std::string> ids;
+
+    for (size_t i = 0; i < stageIds.size(); ++i)
+        if (manager.isStageOnBusB ((int) i))
+            ids.push_back (stageIds[i]);
+
+    return ids;
+}
+
+void ChainOrder::setBusBIds (const std::vector<std::string>& ids)
+{
+    for (size_t i = 0; i < stageIds.size(); ++i)
+    {
+        const auto wanted = std::find (ids.begin(), ids.end(), stageIds[i]) != ids.end();
+        manager.setStageOnBusB ((int) i, wanted);
+    }
 }
 
 void ChainOrder::reset()

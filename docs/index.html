@@ -172,6 +172,8 @@
   .shot img { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 24px 60px rgba(0,0,0,0.5); }
   .shot figcaption { margin-top: 16px; color: var(--text-faint); font-size: 13.5px; line-height: 1.7; max-width: 68ch; }
 
+  .split-h { font-family: var(--serif); font-size: clamp(21px, 2.6vw, 27px); font-weight: 500; margin: 64px 0 0; }
+
   /* ---- install steps ---- */
   .steps { list-style: none; counter-reset: step; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; margin: 0; padding: 0; }
   .steps li { background: var(--bg-card); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; }
@@ -352,6 +354,20 @@
           height="950"
         />
         <figcaption data-i18n="shot_caption">Di sini EQ sudah dipindah ke depan Overdrive. Input dan Master bergembok: yang satu karena meter mengandalkan posisinya, yang satu karena membawa limiter pengaman.</figcaption>
+      </figure>
+
+      <h3 class="split-h" data-i18n="split_h">Dan bisa dibelah jadi dua jalur.</h3>
+      <p class="sub" data-i18n="split_sub">Blok <b>Split</b> membelah sinyal, blok <b>Mixer</b> menggabungkannya lagi &mdash; dengan level dan pan sendiri per jalur. Tiap blok di antaranya tinggal ditandai A atau B.</p>
+
+      <figure class="shot">
+        <img
+          src="img/split-ab.png"
+          alt="Rack MilodikFX: blok Split aktif di 250 Hz mode crossover, dan kartu Overdrive bertanda jalur B"
+          loading="lazy"
+          width="1114"
+          height="715"
+        />
+        <figcaption data-i18n="split_caption">Split dalam mode crossover di 250 Hz: low tetap bersih di jalur A, high masuk Overdrive di jalur B &mdash; gerakan klasik rig bass. Pan A dan B ke sisi berlawanan, dan itu jadi rig stereo.</figcaption>
       </figure>
     </div>
   </section>
@@ -539,6 +555,9 @@
         shot_h2: "Susunannya milikmu. Seret, dan rantainya berubah.",
         shot_sub: "Sepuluh dari dua belas blok bisa dipindah — di kartu rack maupun di strip rantai. Urutannya ikut tersimpan di preset.",
         shot_caption: "Di sini EQ sudah dipindah ke depan Overdrive. Input dan Master bergembok: yang satu karena meter mengandalkan posisinya, yang satu karena membawa limiter pengaman.",
+        split_h: "Dan bisa dibelah jadi dua jalur.",
+        split_sub: "Blok Split membelah sinyal, blok Mixer menggabungkannya lagi — dengan level dan pan sendiri per jalur. Tiap blok di antaranya tinggal ditandai A atau B.",
+        split_caption: "Split dalam mode crossover di 250 Hz: low tetap bersih di jalur A, high masuk Overdrive di jalur B — gerakan klasik rig bass. Pan A dan B ke sisi berlawanan, dan itu jadi rig stereo.",
         ins_eyebrow: "Pasang",
         ins_h2: "Satu installer. Aplikasi dan plugin sekaligus.",
         ins_sub: "Tanpa hak administrator, tanpa mengatur path plugin di DAW.",
@@ -643,6 +662,9 @@
         shot_h2: "The order is yours. Drag, and the chain changes.",
         shot_sub: "Ten of the twelve blocks can be moved — from the rack card or from the chain strip. The order travels inside the preset.",
         shot_caption: "Here the EQ has been moved in front of the Overdrive. Input and Master carry a padlock: one because the input meter relies on its position, the other because it carries the safety limiter.",
+        split_h: "And it can be split into two paths.",
+        split_sub: "A Split block divides the signal and a Mixer block brings it back, each path with its own level and pan. Every block in between is simply marked A or B.",
+        split_caption: "The split in crossover mode at 250 Hz: lows stay clean on path A, highs go through the Overdrive on path B — the classic bass move. Pan A and B to opposite sides and it becomes a stereo rig.",
         ins_eyebrow: "Install",
         ins_h2: "One installer. App and plugin together.",
         ins_sub: "No administrator rights, no plugin paths to configure in your DAW.",

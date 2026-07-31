@@ -146,6 +146,12 @@ GuitarChain buildGuitarChain (DSPChainManager& chain, ChainOptions options)
     result.noiseGate = add<NoiseGateProcessor> (chain);
     result.cleanBoost = add<GainProcessor> (chain);
     result.compressor = add<CompressorProcessor> (chain);
+
+    // The parallel section's opening bracket. Sits here by default -- after the
+    // dynamics, before the drive -- which is where splitting is most useful:
+    // clean low end down one path, drive down the other. Both brackets are
+    // draggable, so this is a starting point rather than a rule.
+    result.split = add<SplitProcessor> (chain);
     result.overdrive = add<OverdriveProcessor> (chain);
     result.eq = add<EQProcessor> (chain);
     result.toneStack = add<ToneStackProcessor> (chain);
@@ -155,6 +161,9 @@ GuitarChain buildGuitarChain (DSPChainManager& chain, ChainOptions options)
     result.cabinet = add<CabinetProcessor> (chain);
     result.delay = add<DelayProcessor> (chain);
     result.reverb = add<ReverbProcessor> (chain);
+    // The closing bracket, immediately before the master stage.
+    result.mixer = add<MixerProcessor> (chain);
+
     result.masterOut = add<MasterOutProcessor> (chain);
 
     // The trim and the master stage are the two that may never be moved once the
@@ -163,6 +172,7 @@ GuitarChain buildGuitarChain (DSPChainManager& chain, ChainOptions options)
     // and that arithmetic is only true while the trim is first. The master,
     // because it carries the safety limiter and the final clamp.
     chain.setFixedStages (1, 1);
+    chain.setParallelStages (result.split, result.mixer);
 
     // Not a stage of the chain: mixed in afterwards so bypass cannot silence it.
     if (options.withMetronome)
@@ -339,6 +349,60 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         e.parameters.push_back (makeToggle ("autoMakeup", "Auto Makeup", true,
                                             [p] { return p->getAutoMakeupGain(); },
                                             [p] (bool v) { p->setAutoMakeupGain (v); }));
+        registry.addEffect (std::move (e));
+    }
+
+    if (auto* p = chain.split)
+    {
+        EffectDescriptor e;
+        e.id = "split";
+        e.label = "Split";
+        e.description = "Belah sinyal jadi dua jalur - A dan B";
+        e.isEnabled = [p] { return p->isEnabled(); };
+        e.setEnabled = [p] (bool v) { p->setEnabled (v); };
+
+        // 0 = the same signal down both paths, 1 = low to A and high to B.
+        // The crossover is the bass move: clean lows, driven highs.
+        e.parameters.push_back (makeParam ("mode", "Mode", "", 0.0f, 1.0f, 1.0f, 0.0f,
+                                           [p] { return (float) (int) p->getMode(); },
+                                           [p] (float v)
+                                           {
+                                               p->setMode (v >= 0.5f ? SplitProcessor::Mode::crossover
+                                                                     : SplitProcessor::Mode::even);
+                                           }));
+
+        e.parameters.push_back (makeParam ("freqHz", "Frekuensi", "Hz",
+                                           SplitProcessor::kMinFrequencyHz,
+                                           SplitProcessor::kMaxFrequencyHz,
+                                           1.0f, 250.0f,
+                                           [p] { return p->getFrequencyHz(); },
+                                           [p] (float v) { p->setFrequencyHz (v); }));
+
+        registry.addEffect (std::move (e));
+    }
+
+    if (auto* p = chain.mixer)
+    {
+        EffectDescriptor e;
+        e.id = "mixer";
+        e.label = "Mixer";
+        e.description = "Gabungkan jalur A dan B - level dan pan tiap jalur";
+        e.isEnabled = [] { return true; };
+        e.setEnabled = nullptr; // always in the path; the split is what switches
+
+        e.parameters.push_back (makeParam ("levelA", "Level A", "", 0.0f, 2.0f, 0.01f, 1.0f,
+                                           [p] { return p->getLevelA(); },
+                                           [p] (float v) { p->setLevelA (v); }));
+        e.parameters.push_back (makeParam ("panA", "Pan A", "", -1.0f, 1.0f, 0.01f, 0.0f,
+                                           [p] { return p->getPanA(); },
+                                           [p] (float v) { p->setPanA (v); }));
+        e.parameters.push_back (makeParam ("levelB", "Level B", "", 0.0f, 2.0f, 0.01f, 1.0f,
+                                           [p] { return p->getLevelB(); },
+                                           [p] (float v) { p->setLevelB (v); }));
+        e.parameters.push_back (makeParam ("panB", "Pan B", "", -1.0f, 1.0f, 0.01f, 0.0f,
+                                           [p] { return p->getPanB(); },
+                                           [p] (float v) { p->setPanB (v); }));
+
         registry.addEffect (std::move (e));
     }
 

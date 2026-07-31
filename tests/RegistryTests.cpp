@@ -274,9 +274,13 @@ public:
         milodikfx::dsp::DSPChainManager manager;
         const auto chain = milodikfx::dsp::buildGuitarChain (manager);
 
-        // Twelve stages the guitar passes through. The metronome is deliberately
-        // not one of them -- it is mixed in afterwards, outside bypass.
-        expectEquals (manager.getNumProcessors(), 12);
+        // Fourteen stages: the twelve the guitar passes through plus the two
+        // brackets of the parallel section. The metronome is deliberately not
+        // one of them -- it is mixed in afterwards, outside bypass.
+        expectEquals (manager.getNumProcessors(), 14);
+        expect (chain.split != nullptr);
+        expect (chain.mixer != nullptr);
+        expect (! chain.split->isEnabled(), "the split must be off by default");
         expect (chain.metronome != nullptr);
 
         // Ahead of the gate, so the gate threshold tracks the trim rather than
@@ -308,9 +312,8 @@ public:
         expect (hostChain.metronome == nullptr, "a plugin must not carry a metronome");
         expect (hostChain.looper == nullptr, "a plugin must not carry a looper");
 
-        // The twelve stages the guitar passes through are unchanged: only the
-        // post-master mixers are gone.
-        expectEquals (hostManager.getNumProcessors(), 12);
+        // The chain stages are unchanged: only the post-master mixers are gone.
+        expectEquals (hostManager.getNumProcessors(), 14);
         expect (hostChain.masterOut != nullptr);
 
         beginTest ("Tempo survives without a metronome to hold it");
@@ -397,8 +400,8 @@ public:
 
         libraryRoot.deleteRecursively();
 
-        expectEquals ((int) pluginRegistry.getEffects().size(), 14);
-        expectEquals ((int) appRegistry.getEffects().size(), 14);
+        expectEquals ((int) pluginRegistry.getEffects().size(), 16);
+        expectEquals ((int) appRegistry.getEffects().size(), 16);
 
         // The plugin has the Input card too, with the trim but without Mode.
         const auto* pluginInput = pluginRegistry.findEffect ("input");
@@ -480,9 +483,12 @@ public:
             expect (foundBypass, "global stage must expose a bypass parameter");
         }
 
-        // Every other effect must still be bypassable.
+        // Every other effect must still be bypassable. The mixer joins the list
+        // that cannot be: it is the closing bracket of the parallel section, and
+        // what actually switches the section on and off is the split.
         for (const auto& effect : appRegistry.getEffects())
-            if (effect.id != "master" && effect.id != "input" && effect.id != "global")
+            if (effect.id != "master" && effect.id != "input" && effect.id != "global"
+                && effect.id != "mixer")
                 expect (effect.setEnabled != nullptr,
                         juce::String (effect.id) + " should be toggleable");
 

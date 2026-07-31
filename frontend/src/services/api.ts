@@ -522,6 +522,14 @@ export const getPins = () => request<PinsState>('/pins');
 export interface ChainOrderState {
   order: string[];
   fixed: string[];
+  /**
+   * Stages running on path B of the parallel section.
+   *
+   * Only meaningful between `split` and `mixer`; a stage outside that range
+   * keeps its flag, so dragging one out of the section and back does not lose
+   * which side it was on.
+   */
+  busB?: string[];
 }
 
 export const getChainOrder = () => request<ChainOrderState>('/chain/order');
@@ -530,6 +538,12 @@ export const setChainOrder = (order: string[]) =>
   request<ChainOrderState>('/chain/order', {
     method: 'PUT',
     body: JSON.stringify({ order }),
+  });
+
+export const setChainBuses = (busB: string[]) =>
+  request<ChainOrderState>('/chain/buses', {
+    method: 'PUT',
+    body: JSON.stringify({ busB }),
   });
 
 export const togglePin = (effect: string, parameter: string) =>

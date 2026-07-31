@@ -154,6 +154,13 @@ HttpHandler::Response PresetsHandler::handlePost (const std::string& path, const
                     ids.add (juce::String (id));
 
                 document.chainOrder = juce::var (ids);
+
+                juce::Array<juce::var> busB;
+
+                for (const auto& id : chainOrder->getBusBIds())
+                    busB.add (juce::String (id));
+
+                document.chainBusB = juce::var (busB);
             }
 
             if (! presetManager.saveDocument (name, document))
@@ -221,6 +228,16 @@ HttpHandler::Response PresetsHandler::handlePost (const std::string& path, const
                 {
                     chainOrder->reset();
                 }
+
+                // Path assignment travels with the order. A file that predates
+                // it simply puts everything back on path A.
+                std::vector<std::string> busB;
+
+                if (const auto* onB = document.chainBusB.getArray())
+                    for (const auto& item : *onB)
+                        busB.push_back (item.toString().toStdString());
+
+                chainOrder->setBusBIds (busB);
             }
 
             if (pinnedControls != nullptr)

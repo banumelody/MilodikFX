@@ -596,3 +596,35 @@ describe('EffectRack chain order', () => {
     expect(locked).toHaveAttribute('title', expect.stringContaining('limiter pengaman'));
   });
 });
+
+describe('EffectRack A/B paths', () => {
+  it('offers no path selector when the stage is outside the parallel section', () => {
+    // A selector on a stage the split does not reach would do nothing at all.
+    renderRack(overdrive);
+
+    expect(screen.queryByRole('button', { name: /jalur A/ })).not.toBeInTheDocument();
+  });
+
+  it('shows which path the stage runs on and switches it', () => {
+    const onBusChange = vi.fn();
+
+    render(
+      <EffectRack
+        effect={overdrive}
+        onParameterChange={vi.fn()}
+        onEnabledChange={vi.fn()}
+        bus="A"
+        onBusChange={onBusChange}
+      />,
+    );
+
+    const a = screen.getByRole('button', { name: 'Jalankan Overdrive di jalur A' });
+    const b = screen.getByRole('button', { name: 'Jalankan Overdrive di jalur B' });
+
+    expect(a).toHaveAttribute('aria-pressed', 'true');
+    expect(b).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(b);
+    expect(onBusChange).toHaveBeenCalledWith('overdrive', 'B');
+  });
+});

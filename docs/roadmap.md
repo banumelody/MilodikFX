@@ -90,7 +90,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - **P4-5 Looper** — mandiri dan tidak menyentuh arsitektur lain, tapi bukan kebutuhan inti; paling akhir sejak awal.
 - **P2-5 Multi-view** — sidebar masih terbaca dalam satu layar, jadi tab Perform/Edit/Library/Settings belum menyelesaikan masalah nyata. Akan terasa perlu begitu panelnya bertambah lagi.
 
-**Rilis terbaru:** v0.27.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.27.0
+**Rilis terbaru:** v0.28.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.28.0
 
 **Catatan P4-1 yang lahir dari implementasi:** tiga hal yang hanya ketahuan lewat pengukuran, bukan pembacaan kode. (1) Split butuh dua filter sungguhan; mengurangi salinan low-pass *tampak* setara tapi menyisakan selisih fasa yang lalu kena gain penuh clipper — Tube Screamer terukur mendistorsi bass lebih keras daripada drive full-range, persis terbalik. (2) Tahap kaskade harus membagi gain; dua tahap gain penuh mengotakkan sinyal, DC blocker menengahkannya, dan harmonik genap — alasan utama memilih voicing asimetris — hilang sama sekali. (3) Test harmoniknya sempat mengukur kebocoran spektralnya sendiri; di luar bin analisis, fundamental menyebar di sekitar −43 dB, satu orde dengan harmonik yang diukur, sehingga kurva simetris tampak punya harmonik genap sebanyak yang asimetris. Tepat di bin, kurva simetris terbaca 0,000000.
 
@@ -1201,7 +1201,28 @@ dipertahankan sebagai fallback a11y.
 Suite penuh + pluginval; CLAUDE.md bagian *Signal chain* (klaim "fixed order" harus diganti),
 README, kartu situs dwibahasa, roadmap. **Effort:** ~1 hari.
 
-## v0.28.0 — "Split A/B ala Pedalboard" (P10)
+## v0.28.0 — "Split A/B ala Pedalboard" (P10) — **SELESAI (31 Jul 2026)**
+
+> **Terkirim, dan lebih rapi dari rencananya.** Rencana awal memperlakukan titik split/mix sebagai
+> posisi dalam array urutan. Yang dikerjakan lebih baik: **Split dan Mixer jadi stage sungguhan di
+> dalam chain**, jadi keduanya otomatis ikut sistem drag & drop dari v0.27 — menggeser Split *adalah*
+> cara memindahkan awal seksi paralel, persis Router-nya Pedalboard. `DSPChainManager` mengenalinya
+> **lewat pointer**, jadi penataan ulang tidak mungkin meninggalkan posisi basi.
+>
+> Kunci yang divalidasi dari Logic terbukti menyelamatkan proyek ini: **blok ditugaskan ke bus, tidak
+> pernah diduplikasi.** Tetap ada satu overdrive; ia cuma tinggal di jalur A atau B. Jadi id registry
+> tetap datar dan stabil, preset tidak pecah, otomasi DAW tidak tersentuh.
+>
+> **Mati secara default, dan mati berarti bit-identik** — diuji terhadap chain yang dibangun tanpa
+> stage-nya sama sekali. Crossover Linkwitz-Riley terukur: 80 Hz ke jalur B cuma **0.0002** lawan
+> 0.2998 ke A, dan jumlahnya **rata 0.3000** dari 100 Hz sampai 3 kHz. Pan constant-power dengan
+> kompensasi √2, supaya "split dengan semua di tengah" sama persis dengan "tanpa split" — tanpa itu
+> hasilnya 3 dB lebih pelan, hal yang baru ketahuan saat orang membandingkannya berdampingan.
+>
+> Satu jebakan dari pengerjaan: **test crossover pertama gagal karena harness-nya**, bukan DSP-nya.
+> Mengisi ulang tone dari fase 0 tiap blok menaruh diskontinuitas di tiap batas blok, dan step itu
+> broadband — terbaca sebagai 80 Hz membanjiri jalur high dan jumlah 4 dB terlalu keras. Fase dibuat
+> kontinu, angkanya langsung benar.
 
 Model **Pedalboard Logic Pro** yang tervalidasi: satu **Split node** → Bus A/B → satu **Mixer
 node** ber-pan per bus. Kunci arsitekturnya (temuan validasi): pedal **tidak diduplikasi** —

@@ -111,6 +111,12 @@ Semuanya untuk **gitar maupun bass**. Sorotan:
 Master terkunci karena meter mengandalkan posisi trim dan Master membawa limiter pengaman. Urutannya
 ikut tersimpan di preset.
 
+**Split A/B**: blok **Split** membelah sinyal jadi dua jalur, blok **Mixer** menggabungkannya lagi
+dengan level dan pan sendiri per jalur. Tiap blok di antaranya tinggal ditandai A atau B — tanpa
+duplikasi blok, jadi preset lama tetap utuh. Mode **crossover** (Linkwitz-Riley) mengirim low ke satu
+jalur dan high ke jalur lain: low bersih, high di-drive, gerakan klasik rig bass. Mati secara default,
+dan saat mati rantainya bit-identik dengan sebelumnya.
+
 Fitur kontrol ala rig panggung: **channel A/B/C/D** per efek (empat sound bernama tiap blok), **scene**
 4 slot yang membawa channel tiap efek, **Perform view** (layar besar untuk manggung — tombol scene
 raksasa dengan huruf channel, tuner besar, kontrol looper, pintasan keyboard), dan **modifier** — LFO

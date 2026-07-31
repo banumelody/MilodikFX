@@ -42,6 +42,7 @@ import {
   setEffectEnabled,
   setParameter,
   setPresetMetadata,
+  setChainBuses,
   setChainOrder,
   subscribeLevels,
   togglePin,
@@ -249,6 +250,39 @@ export function App() {
       })();
     },
     [refreshEffects],
+  );
+
+  // Which stages sit between the split and the mixer. Those are the only ones
+  // where "path A or path B" means anything, so they are the only ones offered
+  // the choice -- a selector on a stage outside the section would do nothing.
+  const parallelSection = useMemo(() => {
+    const order = chainOrder?.order ?? [];
+    const from = order.indexOf('split');
+    const to = order.indexOf('mixer');
+
+    if (from < 0 || to < 0 || to <= from + 1) return new Set<string>();
+
+    return new Set(order.slice(from + 1, to));
+  }, [chainOrder]);
+
+  const busB = useMemo(() => new Set(chainOrder?.busB ?? []), [chainOrder]);
+
+  const handleBusChange = useCallback(
+    (effectId: string, bus: 'A' | 'B') => {
+      void (async () => {
+        try {
+          const current = new Set(chainOrder?.busB ?? []);
+
+          if (bus === 'B') current.add(effectId);
+          else current.delete(effectId);
+
+          setChain(await setChainBuses([...current]));
+        } catch {
+          /* the engine keeps whatever it had */
+        }
+      })();
+    },
+    [chainOrder],
   );
 
   const { state: dragState, handleProps: dragHandleProps } = useChainReorder({
@@ -965,6 +999,8 @@ export function App() {
                 dragState.overId === effect.id &&
                 dragState.overId !== dragState.activeId
               }
+              bus={parallelSection.has(effect.id) ? (busB.has(effect.id) ? 'B' : 'A') : undefined}
+              onBusChange={handleBusChange}
               movable={!(chainOrder?.fixed ?? []).includes(effect.id)}
               canMoveUp={index > 0 && !(chainOrder?.fixed ?? []).includes(rackEffects[index - 1].id)}
               canMoveDown={

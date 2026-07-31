@@ -12,11 +12,13 @@
 #include "dsp/InputTrimProcessor.h"
 #include "dsp/LooperProcessor.h"
 #include "dsp/MasterOutProcessor.h"
+#include "dsp/MixerProcessor.h"
 #include "dsp/MetronomeProcessor.h"
 #include "dsp/NamProcessor.h"
 #include "dsp/NoiseGateProcessor.h"
 #include "dsp/OverdriveProcessor.h"
 #include "dsp/ReverbProcessor.h"
+#include "dsp/SplitProcessor.h"
 #include "dsp/ToneStackProcessor.h"
 #include "preset/IrLibrary.h"
 #include "preset/NamLibrary.h"
@@ -35,6 +37,16 @@ struct GuitarChain
     OverdriveProcessor* overdrive = nullptr;
     EQProcessor* eq = nullptr;
     ToneStackProcessor* toneStack = nullptr;
+
+    /**
+     * Where the signal becomes two paths, and where they become one again.
+     *
+     * Both are ordinary stages, so dragging them is how the parallel section is
+     * positioned -- the same idea as Pedalboard's Router. Off by default: with
+     * the split disabled the chain is serial and bit-identical to before.
+     */
+    SplitProcessor* split = nullptr;
+    MixerProcessor* mixer = nullptr;
 
     /** The amp head, between the tone shaping and the cabinet. */
     NamProcessor* nam = nullptr;

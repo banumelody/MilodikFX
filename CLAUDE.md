@@ -189,6 +189,45 @@ no local state to unwind. Card rects are measured once at drag start (nothing re
 hit-tested via `data-chain-stage`. A keyboard path runs alongside rather than behind it — Enter lifts,
 arrows move, Enter drops, Escape cancels — and the ↑▼ buttons stay as the plain fallback.
 
+#### Parallel paths (split A/B)
+
+Two extra stages: `SplitProcessor` and `MixerProcessor` (`src/dsp/SplitProcessor.*`,
+`MixerProcessor.*`). Between them the chain runs two buffers and each stage in between is assigned to
+one of them.
+
+The model is **Logic Pro's Pedalboard, not Fractal's grid**, and the difference is the whole reason
+this was affordable: **a stage is assigned to a bus, never duplicated onto one**. There is still
+exactly one overdrive — it simply lives on path A or path B. So the registry keeps its flat, stable
+id set (`overdrive.drivePct` means one thing), presets do not break, and host automation is
+untouched. Duplicating blocks the way Fractal does (Amp 1/Amp 2, Drive 1–3) would mean per-instance
+ids through every layer of persistence; that is a different project, and it stays out of scope.
+
+Both brackets are **ordinary stages in the order array**, so dragging them is how the parallel
+section is positioned — the same idea as Pedalboard's Router. Neither processes audio on its own:
+`DSPChainManager` recognises them **by pointer** (so a reorder can never leave a stale position
+behind) and calls `divide()` / `combine()`.
+
+- **Off by default, and off means bit-identical.** With the split disabled the run loop never opens
+  path B and the chain is byte-for-byte what it was before any of this existed. `tests/SplitTests.cpp`
+  asserts that against a chain built without the stages at all.
+- **Bus assignment is a bitmask**, one bit per processor index, published exactly like the order:
+  one acquire load per block, no allocation, no lock.
+- **Split modes**: `even` (the same signal both ways) and `crossover` — Linkwitz-Riley 4th order, two
+  cascaded Butterworth sections per side, so the halves sum back to flat. A single section per side
+  would leave a 3 dB bump right at the crossover, which on a bass rig is exactly where it is heard.
+  Measured in the suite: 80 Hz into path B at 0.0002 against 0.2998 into A, and the sum flat within
+  a tenth of a dB from 100 Hz to 3 kHz.
+- **Pan is constant power** (sin/cos), with a `sqrt(2)` compensation so "split with everything
+  centred" matches "no split at all". Without it a centred split arrives 3 dB down — the kind of
+  thing nobody notices until they A/B it. `mixer.panA/B` is a legitimate modifier target, so a
+  pan law that dipped in the middle would make an auto-panner pump.
+- **A mixer dragged in front of its split** would strand path B. The run loop folds it back at the
+  end of the chain rather than silently discarding half the signal.
+
+`/api/chain/buses` (PUT) alongside `/api/chain/order`; the assignment persists in the preset
+(schema 7) and the settings file. The UI only offers the A/B selector on stages that actually sit
+between the split and the mixer — elsewhere it would do nothing.
+
 #### What each stage does with two channels
 
 The chain carries stereo end to end. Every stage falls into one of four kinds, and which one is a

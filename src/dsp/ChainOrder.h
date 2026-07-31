@@ -51,6 +51,16 @@ public:
     /** True for a stage that may never be moved. */
     bool isFixed (const std::string& id) const noexcept;
 
+    /**
+     * Which stages run on path B of the parallel section, as effect ids.
+     *
+     * Only meaningful between the split and the mixer; a stage outside that
+     * range keeps its flag but the engine ignores it, so dragging a stage out of
+     * the section and back does not lose which side it was on.
+     */
+    std::vector<std::string> getBusBIds() const;
+    void setBusBIds (const std::vector<std::string>& ids);
+
 private:
     std::vector<std::string> stageIds;
     DSPChainManager& manager;
