@@ -111,7 +111,22 @@ describe('MidiMapping', () => {
 
   async function renderPanel(disabled = false) {
     const view = render(<MidiMapping effects={effects} disabled={disabled} />);
+
+    // Waiting for getMidi to have been *called* only proves the request went
+    // out. Until its result lands in state the panel holds `busy`, every
+    // control is disabled, and a click on MIDI Learn silently does nothing --
+    // which is how this went red on CI with "Number of calls: 0" while passing
+    // on every developer machine. Wait for something the response produces.
     await waitFor(() => expect(getMidi).toHaveBeenCalled());
+
+    // The panel holds `busy` until state arrives, so an enabled control is the
+    // marker that works whatever the response happened to contain -- one test
+    // replaces the device list entirely, so waiting on a device name would only
+    // move the flake somewhere else.
+    if (!disabled) {
+      await waitFor(() => expect(screen.getByLabelText('Perangkat')).toBeEnabled());
+    }
+
     return view;
   }
 
