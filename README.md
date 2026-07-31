@@ -106,6 +106,11 @@ Semuanya untuk **gitar maupun bass**. Sorotan:
 - **Looper**: rekam satu frasa lalu bermain di atasnya (overdub berlapis), dicampur setelah master jadi
   loop tetap berbunyi walau bypass. Bisa dikendalikan lewat footswitch.
 
+**Urutan rantai bisa ditata ulang** — seret kartu rack atau chip di strip rantai (atau pakai tombol
+↑▼, atau keyboard: Enter angkat, panah pindah). Sepuluh dari dua belas blok bebas digeser; Input dan
+Master terkunci karena meter mengandalkan posisi trim dan Master membawa limiter pengaman. Urutannya
+ikut tersimpan di preset.
+
 Fitur kontrol ala rig panggung: **channel A/B/C/D** per efek (empat sound bernama tiap blok), **scene**
 4 slot yang membawa channel tiap efek, **Perform view** (layar besar untuk manggung — tombol scene
 raksasa dengan huruf channel, tuner besar, kontrol looper, pintasan keyboard), dan **modifier** — LFO

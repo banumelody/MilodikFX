@@ -180,6 +180,15 @@ in the plugin's state blob. **`EffectsHandler` emits the effects in chain order*
 a reorder appear in the rack and the chain strip at once — neither component knows the order exists,
 they just draw the array they are given.
 
+On the UI side, `useChainReorder` (`frontend/src/hooks/useChainReorder.ts`) drives both surfaces.
+**Pointer events, not the HTML5 drag-and-drop API** — that API is awkward in WebView2, cannot be
+driven in jsdom, and gives no control over the drag image; pointer capture is the discipline `Knob`
+already uses here. Nothing is reordered locally while the pointer moves: the engine is asked once on
+release and the rack redraws from what it answers, so a refusal leaves everything where it was with
+no local state to unwind. Card rects are measured once at drag start (nothing reflows mid-drag) and
+hit-tested via `data-chain-stage`. A keyboard path runs alongside rather than behind it — Enter lifts,
+arrows move, Enter drops, Escape cancels — and the ↑▼ buttons stay as the plain fallback.
+
 #### What each stage does with two channels
 
 The chain carries stereo end to end. Every stage falls into one of four kinds, and which one is a

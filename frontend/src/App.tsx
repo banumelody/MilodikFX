@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { useChainReorder } from './hooks/useChainReorder';
+
 import { AppFooter } from './components/AppFooter';
 import { ChainStrip } from './components/ChainStrip';
 import { DeviceSettings } from './components/DeviceSettings';
@@ -232,6 +234,28 @@ export function App() {
       }
     })();
   }, [refreshEffects]);
+
+  // Applies a whole new order at once -- what a drag or a keyboard move
+  // produces -- rather than one step at a time.
+  const applyChainOrder = useCallback(
+    (next: string[]) => {
+      void (async () => {
+        try {
+          setChain(await setChainOrder(next));
+          await refreshEffects();
+        } catch {
+          /* refused (a pinned stage): the rack keeps what the engine still has */
+        }
+      })();
+    },
+    [refreshEffects],
+  );
+
+  const { state: dragState, handleProps: dragHandleProps } = useChainReorder({
+    order: chainOrder?.order ?? [],
+    fixed: chainOrder?.fixed ?? [],
+    onReorder: applyChainOrder,
+  });
 
   const handleTogglePin = useCallback((effectId: string, parameterId: string) => {
     void (async () => {
@@ -908,6 +932,9 @@ export function App() {
         disabled={offline}
         onSelect={scrollToEffect}
         onToggle={toggleEffect}
+        dragHandleProps={chainOrder ? dragHandleProps : undefined}
+        draggingId={dragState.activeId}
+        dropTargetId={dragState.overId}
       />
 
       <main className="layout">
@@ -931,6 +958,13 @@ export function App() {
               pinnedParams={pinnedParams}
               onTogglePin={handleTogglePin}
               onMove={chainOrder ? handleMoveStage : undefined}
+              dragHandleProps={chainOrder ? dragHandleProps(effect.id) : undefined}
+              isDragging={dragState.activeId === effect.id}
+              isDropTarget={
+                dragState.activeId !== null &&
+                dragState.overId === effect.id &&
+                dragState.overId !== dragState.activeId
+              }
               movable={!(chainOrder?.fixed ?? []).includes(effect.id)}
               canMoveUp={index > 0 && !(chainOrder?.fixed ?? []).includes(rackEffects[index - 1].id)}
               canMoveDown={

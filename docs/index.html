@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>MilodikFX — multi-efek gitar & bass realtime untuk Windows</title>
-<meta name="description" content="MilodikFX: satu executable C++/JUCE mandiri untuk memproses gitar dan bass secara realtime di Windows — 11 voicing overdrive/distorsi/fuzz, amp head NAM, cabinet IR, tuner, delay/reverb, channel A/B/C/D, scene, Perform view, modifier LFO/envelope, kontrol MIDI, dan latensi ASIO rendah." />
+<meta name="description" content="MilodikFX: satu executable C++/JUCE mandiri untuk memproses gitar dan bass secara realtime di Windows — 11 voicing overdrive/distorsi/fuzz, amp head NAM, cabinet IR, tuner, delay/reverb, rantai sinyal yang bisa ditata ulang (drag & drop), channel A/B/C/D, scene, Perform view, modifier LFO/envelope, kontrol MIDI, dan latensi ASIO rendah." />
 <meta property="og:title" content="MilodikFX" />
 <meta property="og:description" content="Multi-efek gitar & bass realtime untuk Windows — satu exe mandiri, latensi ASIO rendah, kontrol lengkap ala rig panggung." />
 <meta property="og:type" content="website" />
@@ -166,6 +166,11 @@
   .specs dd { margin: 0; color: var(--text-dim); font-size: 15px; }
   .specs dd b { color: var(--text); font-weight: 600; }
   .specs .note { grid-column: 1 / -1; margin-top: 24px; color: var(--text-faint); font-size: 13.5px; }
+
+  /* ---- screenshot ---- */
+  .shot { margin: 34px 0 0; }
+  .shot img { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 24px 60px rgba(0,0,0,0.5); }
+  .shot figcaption { margin-top: 16px; color: var(--text-faint); font-size: 13.5px; line-height: 1.7; max-width: 68ch; }
 
   /* ---- install steps ---- */
   .steps { list-style: none; counter-reset: step; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; margin: 0; padding: 0; }
@@ -329,6 +334,25 @@
           <p data-i18n="f16_p">Rantai, UI, preset, dan file IR/NAM yang sama — di dalam DAW-mu. Tempo ikut host, bypass host memakai crossfade engine, latensi dilaporkan tepat. Lolos pluginval strictness 10.</p>
         </div>
       </div>
+    </div>
+  </section>
+
+  <section id="chain">
+    <div class="wrap">
+      <p class="eyebrow" data-i18n="shot_eyebrow">Rantai sinyal</p>
+      <h2 data-i18n="shot_h2">Susunannya milikmu. Seret, dan rantainya berubah.</h2>
+      <p class="sub" data-i18n="shot_sub">Sepuluh dari dua belas blok bisa dipindah &mdash; di kartu rack maupun di strip rantai. Urutannya ikut tersimpan di preset.</p>
+
+      <figure class="shot">
+        <img
+          src="img/chain-reorder.png"
+          alt="Jendela MilodikFX: strip rantai menunjukkan EQ sebelum Overdrive, kartu Input bergembok karena posisinya terkunci"
+          loading="lazy"
+          width="1500"
+          height="950"
+        />
+        <figcaption data-i18n="shot_caption">Di sini EQ sudah dipindah ke depan Overdrive. Input dan Master bergembok: yang satu karena meter mengandalkan posisinya, yang satu karena membawa limiter pengaman.</figcaption>
+      </figure>
     </div>
   </section>
 
@@ -511,6 +535,10 @@
         f14_p: "Dengan ASIO turun sampai 32 sampel; tanpa SDK jatuh mulus ke WASAPI. ~7,6% DSP dengan semua efek menyala.",
         f15_h: "Looper",
         f15_p: "Rekam satu frasa lalu bermain di atasnya — overdub berlapis, dicampur setelah master jadi loop tetap berbunyi walau bypass. Kendali kaki lewat footswitch.",
+        shot_eyebrow: "Rantai sinyal",
+        shot_h2: "Susunannya milikmu. Seret, dan rantainya berubah.",
+        shot_sub: "Sepuluh dari dua belas blok bisa dipindah — di kartu rack maupun di strip rantai. Urutannya ikut tersimpan di preset.",
+        shot_caption: "Di sini EQ sudah dipindah ke depan Overdrive. Input dan Master bergembok: yang satu karena meter mengandalkan posisinya, yang satu karena membawa limiter pengaman.",
         ins_eyebrow: "Pasang",
         ins_h2: "Satu installer. Aplikasi dan plugin sekaligus.",
         ins_sub: "Tanpa hak administrator, tanpa mengatur path plugin di DAW.",
@@ -611,6 +639,10 @@
         f14_p: "With ASIO it drops to 32 samples; without the SDK it falls back smoothly to WASAPI. ~7.6% DSP with every effect on.",
         f15_h: "Looper",
         f15_p: "Record a phrase and play over it — layered overdubs, mixed in after the master so the loop keeps sounding through a bypass. Hands-free via a footswitch.",
+        shot_eyebrow: "Signal chain",
+        shot_h2: "The order is yours. Drag, and the chain changes.",
+        shot_sub: "Ten of the twelve blocks can be moved — from the rack card or from the chain strip. The order travels inside the preset.",
+        shot_caption: "Here the EQ has been moved in front of the Overdrive. Input and Master carry a padlock: one because the input meter relies on its position, the other because it carries the safety limiter.",
         ins_eyebrow: "Install",
         ins_h2: "One installer. App and plugin together.",
         ins_sub: "No administrator rights, no plugin paths to configure in your DAW.",

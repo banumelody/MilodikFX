@@ -90,7 +90,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - **P4-5 Looper** — mandiri dan tidak menyentuh arsitektur lain, tapi bukan kebutuhan inti; paling akhir sejak awal.
 - **P2-5 Multi-view** — sidebar masih terbaca dalam satu layar, jadi tab Perform/Edit/Library/Settings belum menyelesaikan masalah nyata. Akan terasa perlu begitu panelnya bertambah lagi.
 
-**Rilis terbaru:** v0.26.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.26.0
+**Rilis terbaru:** v0.27.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.27.0
 
 **Catatan P4-1 yang lahir dari implementasi:** tiga hal yang hanya ketahuan lewat pengukuran, bukan pembacaan kode. (1) Split butuh dua filter sungguhan; mengurangi salinan low-pass *tampak* setara tapi menyisakan selisih fasa yang lalu kena gain penuh clipper — Tube Screamer terukur mendistorsi bass lebih keras daripada drive full-range, persis terbalik. (2) Tahap kaskade harus membagi gain; dua tahap gain penuh mengotakkan sinyal, DC blocker menengahkannya, dan harmonik genap — alasan utama memilih voicing asimetris — hilang sama sekali. (3) Test harmoniknya sempat mengukur kebocoran spektralnya sendiri; di luar bin analisis, fundamental menyebar di sekitar −43 dB, satu orde dengan harmonik yang diukur, sehingga kurva simetris tampak punya harmonik genap sebanyak yang asimetris. Tepat di bin, kurva simetris terbaca 0,000000.
 
@@ -1172,7 +1172,17 @@ Sepasang tombol di header kartu rack (stage dipatok: gembok + tooltip alasan). O
 (geser overdrive melewati EQ → muat ulang → urutan bertahan).
 **Effort:** ~setengah weekend. **Titik rilis alami: fungsional penuh tanpa DnD.**
 
-## v0.27.0 — "Drag & drop" (P9-4..P9-5)
+## v0.27.0 — "Drag & drop" (P9-4..P9-5) — **SELESAI (31 Jul 2026)**
+
+> **Terkirim.** `useChainReorder` menggerakkan dua permukaan: kartu rack (grip ⋮⋮ di header) dan
+> chip di chain strip. **Pointer events, bukan HTML5 DnD** — sesuai rencana, dan alasannya terbukti:
+> jalur pointer-capture yang sama dengan `Knob` bisa diuji di jsdom, sedangkan HTML5 DnD tidak.
+> Tidak ada state lokal yang ditata ulang selama pointer bergerak: engine ditanya sekali saat
+> dilepas, dan rack menggambar ulang dari jawabannya — jadi penolakan (stage terkunci) cukup
+> meninggalkan semuanya di tempat, tanpa apa pun yang perlu di-rollback. Jalur keyboard berjalan
+> **berdampingan**, bukan di belakang: Enter mengangkat, panah memindah, Enter menjatuhkan, Esc
+> membatalkan; tombol ↑▼ tetap ada sebagai fallback paling sederhana. Screenshot aplikasi masuk ke
+> situs (`docs/img/chain-reorder.png`), dwibahasa.
 
 ### P9-4. DnD pointer-events di rack + ChainStrip
 

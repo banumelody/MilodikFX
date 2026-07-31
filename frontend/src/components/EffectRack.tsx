@@ -168,6 +168,12 @@ export interface EffectRackProps {
   movable?: boolean;
   canMoveUp?: boolean;
   canMoveDown?: boolean;
+  /** Pointer/keyboard handlers for the drag grip, from useChainReorder. */
+  dragHandleProps?: Record<string, unknown>;
+  /** This card is the one being dragged or lifted. */
+  isDragging?: boolean;
+  /** The drop would land here. */
+  isDropTarget?: boolean;
   disabled?: boolean;
   /** Only affects where the tone curve puts Nyquist; harmless when unknown. */
   sampleRate?: number;
@@ -194,6 +200,9 @@ function EffectRackBase({
   movable = true,
   canMoveUp = false,
   canMoveDown = false,
+  dragHandleProps,
+  isDragging = false,
+  isDropTarget = false,
   disabled = false,
   sampleRate,
 }: EffectRackProps) {
@@ -237,9 +246,16 @@ function EffectRackBase({
 
   return (
     <section
-      className={`rack${effect.enabled ? '' : ' rack--off'}`}
+      className={
+        `rack${effect.enabled ? '' : ' rack--off'}` +
+        `${isDragging ? ' rack--dragging' : ''}` +
+        `${isDropTarget ? ' rack--drop' : ''}`
+      }
       aria-label={effect.label}
       id={`rack-${effect.id}`}
+      // Hit-testing target for the drag: useChainReorder measures every element
+      // carrying this attribute when a drag begins.
+      data-chain-stage={dragHandleProps ? effect.id : undefined}
       style={{ '--accent': accent } as React.CSSProperties}
     >
       <header className="rack__head">
@@ -247,6 +263,24 @@ function EffectRackBase({
           <div className="rack__move" role="group" aria-label={`Posisi ${effect.label}`}>
             {movable ? (
               <>
+                {dragHandleProps ? (
+                  <span
+                    className="rack__grip"
+                    role="button"
+                    aria-label={`Seret ${effect.label} untuk menata ulang rantai`}
+                    title="Seret untuk menata ulang — atau Enter lalu panah"
+                    {...dragHandleProps}
+                  >
+                    <svg viewBox="0 0 10 16" aria-hidden="true" focusable="false">
+                      <circle cx="3" cy="3" r="1.1" fill="currentColor" />
+                      <circle cx="7" cy="3" r="1.1" fill="currentColor" />
+                      <circle cx="3" cy="8" r="1.1" fill="currentColor" />
+                      <circle cx="7" cy="8" r="1.1" fill="currentColor" />
+                      <circle cx="3" cy="13" r="1.1" fill="currentColor" />
+                      <circle cx="7" cy="13" r="1.1" fill="currentColor" />
+                    </svg>
+                  </span>
+                ) : null}
                 <button
                   type="button"
                   className="rack__move-btn"

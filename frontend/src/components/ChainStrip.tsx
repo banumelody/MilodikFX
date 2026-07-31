@@ -10,6 +10,16 @@ export interface ChainStripProps {
   onSelect: (effectId: string) => void;
   onToggle: (effectId: string, enabled: boolean) => void;
   disabled?: boolean;
+  /**
+   * Drag handlers per stage, from useChainReorder.
+   *
+   * The strip is the better place to reorder: dragging a small chip across a row
+   * beats dragging a card the height of the screen past four others. It is also
+   * where the order is actually legible, so a change here reads immediately.
+   */
+  dragHandleProps?: (effectId: string) => Record<string, unknown>;
+  draggingId?: string | null;
+  dropTargetId?: string | null;
 }
 
 /**
@@ -18,7 +28,15 @@ export interface ChainStripProps {
  * The rack below is a wrapping grid, which gives no hint that these stages run
  * in series. This strip is where the order is actually visible.
  */
-function ChainStripBase({ effects, onSelect, onToggle, disabled = false }: ChainStripProps) {
+function ChainStripBase({
+  effects,
+  onSelect,
+  onToggle,
+  disabled = false,
+  dragHandleProps,
+  draggingId = null,
+  dropTargetId = null,
+}: ChainStripProps) {
   // Input routing, the global controls and the metronome are not stages the
   // guitar passes through, so they stay out of the picture. The metronome is
   // genuinely outside the chain -- it is mixed in after the master stage.
@@ -34,17 +52,31 @@ function ChainStripBase({ effects, onSelect, onToggle, disabled = false }: Chain
         const accent = EFFECT_ACCENTS[effect.id] ?? '#4da3ff';
         const canToggle = effect.toggleable !== false;
 
+        const dragProps = dragHandleProps?.(effect.id);
+
         return (
           <div className="chain__item" key={effect.id}>
             <span className="chain__link" aria-hidden="true" />
             <button
               type="button"
-              className={`chain__block${effect.enabled ? '' : ' chain__block--off'}`}
+              className={
+                `chain__block${effect.enabled ? '' : ' chain__block--off'}` +
+                `${draggingId === effect.id ? ' chain__block--dragging' : ''}` +
+                `${
+                  dropTargetId === effect.id && draggingId !== effect.id
+                    ? ' chain__block--drop'
+                    : ''
+                }`
+              }
               style={{ '--accent': accent } as React.CSSProperties}
               disabled={disabled}
+              // Measured by useChainReorder when a drag starts, so the strip is a
+              // drop target as well as a drag source.
+              data-chain-stage={dragProps ? effect.id : undefined}
+              {...(dragProps ?? {})}
               title={
                 canToggle
-                  ? `${effect.label} — klik untuk menuju, klik kanan untuk hidup/mati`
+                  ? `${effect.label} — klik untuk menuju, seret untuk menata ulang, klik kanan untuk hidup/mati`
                   : effect.label
               }
               aria-label={effect.label}

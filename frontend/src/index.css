@@ -1976,6 +1976,68 @@ input[type='text']:disabled {
   height: 12px;
 }
 
+/* ------------------------------------------------------- Drag to reorder
+   Pointer-driven, so nothing moves until the engine answers: the dragged card
+   dims, the target shows an insertion edge, and a refusal simply leaves both
+   where they were. */
+.rack__grip {
+  width: 22px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  color: var(--text-faint, #6d7685);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  margin-bottom: 2px;
+}
+
+.rack__grip:hover,
+.rack__grip:focus-visible {
+  color: var(--text, #e6e9ef);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.rack__grip:active {
+  cursor: grabbing;
+}
+
+.rack__grip svg {
+  width: 9px;
+  height: 14px;
+}
+
+.rack--dragging {
+  opacity: 0.45;
+  transform: scale(0.985);
+}
+
+.rack--drop {
+  outline: 2px dashed var(--accent);
+  outline-offset: 3px;
+}
+
+/* A lifted stage says so: the keyboard path is not a lesser one. */
+.rack__grip[aria-grabbed='true'] {
+  color: var(--accent);
+  background: rgba(77, 163, 255, 0.14);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.chain__block {
+  touch-action: none;
+}
+
+.chain__block--dragging {
+  opacity: 0.4;
+}
+
+.chain__block--drop {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
 /* ------------------------------------------------- Pinned controls
    The pin button stays out of the way until the knob is hovered or the pin is
    already set -- a rack of forty knobs each wearing a permanent badge would be
