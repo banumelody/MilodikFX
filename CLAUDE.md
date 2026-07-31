@@ -99,7 +99,17 @@ Two things that bit when that job was added, both of them PowerShell rather than
 The E2E suite is not in CI; it needs a running engine and is run locally. Two things about it:
 
 - **Two concurrent runs against one engine contaminate each other's state.** A run reporting 1-3
-  failures is worth repeating alone before believing it.
+  failures is worth repeating alone before believing it. But repeating is not a diagnosis: v0.30's
+  intermittent device-panel failure was a real layout bug (an unbounded palette pushing the panel out
+  of the sidebar's scroll area) that only fired when enough blocks happened to be unplaced.
+
+**A panel that renders before its data arrives is the project's most common flaky test**, and it has
+now reddened CI three times in different files. `LooperPanel`, `MidiMapping`, `ModulationPanel` and
+`SceneGrid` all compute `busy = disabled || state == null` and disable every control until their
+first fetch lands. `findByRole` resolves as soon as the element exists, so a click on a
+found-but-disabled button does nothing and the assertion reports `Number of calls: 0` -- green on a
+fast machine, red on a loaded runner. **Wait for a control to be *enabled*, not merely present**, and
+do it once in the file's shared render helper rather than per assertion.
 - **It defaults to the Release build, and says how old that build is.** It used to default to Debug,
   and when no Debug build had been made in over a week it happily ran against the stale one and
   reported a clean pass for code that was not in it. The script now prints the executable's build

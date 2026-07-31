@@ -64,6 +64,17 @@ describe('SceneGrid', () => {
       <SceneGrid effects={effects} onRecalled={onRecalled} {...props} />,
     );
     await waitFor(() => expect(getScenes).toHaveBeenCalled());
+
+    // Called is not loaded: the grid holds `busy` until the response lands and
+    // every button is disabled until then, so a click would go nowhere. Skipped
+    // when the caller asked for a disabled grid -- there the controls are meant
+    // to stay dead and waiting for one to wake would simply time out.
+    if (!props.disabled) {
+      await waitFor(() =>
+        expect(screen.getByRole('rowheader', { name: /Clean/ })).toBeEnabled(),
+      );
+    }
+
     return { ...view, onRecalled };
   }
 

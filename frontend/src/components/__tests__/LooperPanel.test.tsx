@@ -49,6 +49,12 @@ describe('LooperPanel', () => {
     render(<LooperPanel />);
     const rec = await screen.findByRole('button', { name: 'Rekam' });
 
+    // Enabled, not merely present. The panel renders the button straight away
+    // but holds every control disabled until the first /api/looper lands, so a
+    // click on a found-but-disabled button silently does nothing -- which is
+    // how this went red on CI with "Number of calls: 0" while passing here.
+    await waitFor(() => expect(rec).toBeEnabled());
+
     fireEvent.click(rec);
 
     await waitFor(() => expect(looperAction).toHaveBeenCalledWith('record'));
@@ -59,8 +65,10 @@ describe('LooperPanel', () => {
     render(<LooperPanel />);
 
     expect(await screen.findByRole('button', { name: 'Overdub' })).toBeInTheDocument();
-    // A loop exists, so Hapus is enabled.
-    fireEvent.click(screen.getByRole('button', { name: 'Hapus' }));
+    // A loop exists, so Hapus is enabled -- once the state has arrived.
+    const clear = screen.getByRole('button', { name: 'Hapus' });
+    await waitFor(() => expect(clear).toBeEnabled());
+    fireEvent.click(clear);
 
     await waitFor(() => expect(looperAction).toHaveBeenCalledWith('clear'));
   });

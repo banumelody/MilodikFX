@@ -43,9 +43,16 @@ const effects: EffectDescriptor[] = [
   },
 ];
 
-function renderPanel() {
+async function renderPanel() {
   const onModifiersChanged = vi.fn();
   render(<ModulationPanel effects={effects} onModifiersChanged={onModifiersChanged} />);
+
+  // The target list comes straight from the `effects` prop, so its options are
+  // on screen immediately -- but every control stays disabled until the first
+  // /api/modifiers lands. Waiting for the element would prove nothing; waiting
+  // for it to be usable is the point.
+  await waitFor(() => expect(screen.getByLabelText('Parameter')).toBeEnabled());
+
   return { onModifiersChanged };
 }
 
@@ -58,12 +65,12 @@ beforeEach(() => {
 
 describe('ModulationPanel', () => {
   it('offers the numeric parameters as sweep targets', async () => {
-    renderPanel();
+    await renderPanel();
     expect(await screen.findByRole('option', { name: 'Overdrive — Drive' })).toBeInTheDocument();
   });
 
   it('adds a modifier into the first free slot for the chosen target and source', async () => {
-    const { onModifiersChanged } = renderPanel();
+    const { onModifiersChanged } = await renderPanel();
     await screen.findByRole('option', { name: 'Overdrive — Drive' });
 
     fireEvent.change(screen.getByLabelText('Parameter'), { target: { value: 'overdrive.drivePct' } });
@@ -82,7 +89,7 @@ describe('ModulationPanel', () => {
   });
 
   it('offers an expression-pedal source with a CC field', async () => {
-    renderPanel();
+    await renderPanel();
     await screen.findByRole('option', { name: 'Overdrive — Drive' });
 
     fireEvent.change(screen.getByLabelText('Parameter'), { target: { value: 'overdrive.drivePct' } });
@@ -101,7 +108,7 @@ describe('ModulationPanel', () => {
   });
 
   it('locks an LFO to the tempo through the sync division', async () => {
-    renderPanel();
+    await renderPanel();
     await screen.findByRole('option', { name: 'Overdrive — Drive' });
 
     fireEvent.change(screen.getByLabelText('Parameter'), { target: { value: 'overdrive.drivePct' } });
@@ -123,7 +130,7 @@ describe('ModulationPanel', () => {
       ],
     });
 
-    renderPanel();
+    await renderPanel();
 
     const clear = await screen.findByRole('button', { name: 'Hapus modifier 0' });
     fireEvent.click(clear);
