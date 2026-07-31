@@ -61,6 +61,23 @@ public:
     std::vector<std::string> getBusBIds() const;
     void setBusBIds (const std::vector<std::string>& ids);
 
+    /**
+     * Which stages are on the board, as effect ids.
+     *
+     * `setPlacedIds` takes the **complete** set: anything not named is taken
+     * off. Fixed stages are put back regardless of what the caller said, so a
+     * preset can never arrive and remove the limiter.
+     *
+     * A document that predates board placement simply has no list, and the
+     * caller leaves this alone -- everything stays placed, which is what makes
+     * an existing preset sound exactly as it did before the feature existed.
+     */
+    std::vector<std::string> getPlacedIds() const;
+    void setPlacedIds (const std::vector<std::string>& ids);
+
+    /** Puts every stage back on the board. */
+    void placeAll();
+
 private:
     std::vector<std::string> stageIds;
     DSPChainManager& manager;

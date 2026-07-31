@@ -23,6 +23,13 @@ export interface ChainReorderOptions {
   fixed: string[];
   /** Called with the whole new order once a drag or a keyboard move commits. */
   onReorder: (next: string[]) => void;
+  /**
+   * Called when a stage is dragged off the palette onto the board.
+   *
+   * `beforeId` is the stage it was dropped on, or null for "at the end" -- which
+   * is what a drop on empty space and the keyboard path both mean.
+   */
+  onPlace?: (id: string, beforeId: string | null) => void;
 }
 
 export interface DropState {
@@ -61,7 +68,7 @@ export function reorderByDelta(order: string[], id: string, delta: number): stri
   return next;
 }
 
-export function useChainReorder({ order, fixed, onReorder }: ChainReorderOptions) {
+export function useChainReorder({ order, fixed, onReorder, onPlace }: ChainReorderOptions) {
   const [state, setState] = useState<DropState>({
     activeId: null,
     overId: null,
@@ -192,5 +199,57 @@ export function useChainReorder({ order, fixed, onReorder }: ChainReorderOptions
     [fixedSet, measure, idAtPoint, commit, cancel, state, order, onReorder],
   );
 
-  return { state, handleProps };
+  /**
+   * Props for a palette chip -- a stage that is not on the board yet.
+   *
+   * Deliberately the same pointer discipline as `handleProps` rather than a
+   * second mechanism: the hit-testing, the measure-once rule and the
+   * commit-on-release behaviour are all already here, and a palette that
+   * dragged differently from the rack would feel like a different app.
+   */
+  const paletteProps = useCallback(
+    (id: string) => ({
+      onPointerDown: (event: React.PointerEvent<HTMLElement>) => {
+        if (event.button !== 0) return;
+
+        event.preventDefault();
+        measure();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        setState({ activeId: id, overId: null, dragging: true, lifted: false });
+      },
+
+      onPointerMove: (event: React.PointerEvent<HTMLElement>) => {
+        setState((current) => {
+          if (!current.dragging || current.activeId !== id) return current;
+
+          const over = idAtPoint(event.clientX, event.clientY);
+          return over === current.overId ? current : { ...current, overId: over };
+        });
+      },
+
+      onPointerUp: (event: React.PointerEvent<HTMLElement>) => {
+        const over = idAtPoint(event.clientX, event.clientY);
+
+        if (event.currentTarget.hasPointerCapture(event.pointerId))
+          event.currentTarget.releasePointerCapture(event.pointerId);
+
+        cancel();
+        onPlace?.(id, over);
+      },
+
+      onPointerCancel: cancel,
+
+      // Enter and Space put it at the end of the chain, so the board can be
+      // built without a pointer at all.
+      onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+
+        event.preventDefault();
+        onPlace?.(id, null);
+      },
+    }),
+    [measure, idAtPoint, cancel, onPlace],
+  );
+
+  return { state, handleProps, paletteProps };
 }

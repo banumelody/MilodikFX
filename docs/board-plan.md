@@ -159,7 +159,28 @@ restart.
 
 ---
 
-## v0.30.0 — "Board kosong" (P12)
+## v0.30.0 — "Board kosong" (P12) — **SELESAI (1 Agu 2026)**
+
+> **Terkirim, dengan dua koreksi yang datang dari mencoba menjalankannya.**
+>
+> **"Board kosong" ternyata tidak pernah berarti nol.** Input dan Master pinned, jadi rack selalu
+> berisi keduanya dan pemeriksaan `length === 0` tidak pernah menyala. Kondisinya diganti jadi
+> *tidak ada blok yang bisa dibuang sedang terpasang*. Chain strip pun tetap menampilkan Master —
+> dan itu jujur, bukan cacat: Master memang ada di jalur.
+>
+> **Palet yang tumbuh bebas mengubur panel device.** Sidebar-nya `overflow-y: auto`, jadi palet
+> mendorong panel Audio Device keluar dari area yang terlihat — dan sejauh apa tergantung berapa
+> blok yang kebetulan belum dipasang, yang berarti panel di bawahnya bergeser karena alasan yang
+> tidak dipilih siapa pun. Muncul sebagai **kegagalan E2E di dua dari empat run**, yang terbaca
+> seperti flake dan bukan. Palet sekarang punya tinggi terbatas dan scroll di dalam dirinya
+> sendiri; tiga run E2E berturut-turut bersih setelahnya.
+>
+> Aturan migrasi ditegakkan dengan test dan diverifikasi terhadap engine hidup: preset yang ditulis
+> tanpa `chainBoard` dimuat sebagai **board penuh**. Membacanya sebagai board kosong akan
+> mengosongkan rig setiap orang secara diam-diam, dan itu satu-satunya kesalahan di rilis ini yang
+> tidak akan terlihat sampai terlambat.
+
+## v0.30.0 — rencana awal (P12)
 
 **Tujuan:** board mulai kosong = kabel lurus (shunt-nya Fractal); user menyusun rig dengan drag
 & drop dari palet; Splitter dan Mixer adalah blok yang ditaruh, bukan mode yang dinyalakan.
@@ -219,11 +240,14 @@ events, bukan HTML5 DnD):
   (konvensi Apple: A lurus terus, B memutar di atasnya); satu garis di luar seksi paralel.
 - Kartu Splitter/Mixer bergaya utilitas (garis putus, warna bus, tanpa nomor instance).
 
-### Definition of done v0.30
+### Definition of done v0.30 — tercapai
 
-26 pemeriksaan prototipe menjadi vitest sungguhan; test migrasi (preset schema 7 → semua
-di board); invarian tidak-di-board⇒disabled di suite backend; E2E taruh/buang/round-trip; smoke;
-pluginval; CI; dokumentasi + screenshot + landing page. **Effort: ~2 weekend.**
+**1.821.370 assertion backend** (BoardTests baru: 9 kasus, termasuk *off the board is bit-identical
+to a chain built without it*), **248 test frontend** (BoardPalette +7, ChainStrip router +6,
+useChainReorder palette +3, EffectRack removal +3), type-check, lint, **E2E 54/54 tiga kali
+berturut-turut**, smoke, **pluginval strictness 10 exit 0**, plus **18 probe terhadap engine hidup**
+— termasuk preset tanpa `chainBoard` yang dimuat sebagai board penuh. Dokumentasi + dua screenshot
++ landing page.
 
 ---
 

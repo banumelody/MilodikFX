@@ -1295,7 +1295,7 @@ mono-duplikat ala "Left Only" FM9 — padanan dua blok Input Fractal untuk board
 `mixer.invertB` (polaritas piezo). **P11-3** dropdown port di panel Device, label sumber di
 router (`A ← Input 1 · INST`), disembunyikan di plugin (host yang punya I/O).
 
-## v0.30.0 — "Board kosong" (P12) — ~2 weekend
+## v0.30.0 — "Board kosong" (P12) — **SELESAI (1 Agu 2026)**
 
 Board mulai kosong = kabel lurus (shunt Fractal); prosesor tetap semua dibangun — "di board"
 adalah status (`placed` + disabled saat tidak), registry dan daftar parameter VST3 tidak

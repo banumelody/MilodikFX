@@ -13,15 +13,33 @@ constexpr const char* kPrefix = "/api/effects";
 
 void EffectsHandler::augment (juce::var& effectVar) const
 {
-    if (channelStore_ == nullptr)
-        return;
-
     auto* object = effectVar.getDynamicObject();
 
     if (object == nullptr)
         return;
 
     const auto id = object->getProperty ("id").toString().toStdString();
+
+    // Whether the stage is on the board. Only reported for stages the chain
+    // actually contains -- the global card and the metronome are not placeable,
+    // and a `placed` flag on them would invite the UI to offer removing them.
+    if (placementProvider_)
+    {
+        const auto board = placementProvider_();
+
+        if (std::find (board.stageIds.begin(), board.stageIds.end(), id) != board.stageIds.end())
+        {
+            object->setProperty ("placed",
+                                 std::find (board.placed.begin(), board.placed.end(), id)
+                                     != board.placed.end());
+            object->setProperty ("removable",
+                                 std::find (board.fixed.begin(), board.fixed.end(), id)
+                                     == board.fixed.end());
+        }
+    }
+
+    if (channelStore_ == nullptr)
+        return;
 
     object->setProperty ("channel", channelStore_->getActive (id));
 

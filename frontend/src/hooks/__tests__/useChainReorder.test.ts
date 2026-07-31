@@ -163,3 +163,75 @@ describe('useChainReorder', () => {
     });
   });
 });
+
+describe('useChainReorder palette', () => {
+  it('places at the end when Enter is pressed on a chip', () => {
+    const onPlace = vi.fn();
+    const { result } = renderHook(() =>
+      useChainReorder({ order: ['a', 'b'], fixed: [], onReorder: vi.fn(), onPlace }),
+    );
+
+    const props = result.current.paletteProps('delay');
+    props.onKeyDown({ key: 'Enter', preventDefault: vi.fn() } as never);
+
+    // null means "at the end" -- the keyboard path has no drop position, and
+    // guessing one would put blocks somewhere the user did not point at.
+    expect(onPlace).toHaveBeenCalledWith('delay', null);
+  });
+
+  it('ignores keys that are not Enter or Space', () => {
+    const onPlace = vi.fn();
+    const { result } = renderHook(() =>
+      useChainReorder({ order: ['a'], fixed: [], onReorder: vi.fn(), onPlace }),
+    );
+
+    result.current.paletteProps('delay').onKeyDown({
+      key: 'ArrowDown',
+      preventDefault: vi.fn(),
+    } as never);
+
+    expect(onPlace).not.toHaveBeenCalled();
+  });
+
+  it('reports the drop target on release', () => {
+    const onPlace = vi.fn();
+    const { result } = renderHook(() =>
+      useChainReorder({ order: ['a', 'b'], fixed: [], onReorder: vi.fn(), onPlace }),
+    );
+
+    const target = document.createElement('div');
+    target.dataset.chainStage = 'b';
+    target.getBoundingClientRect = () =>
+      ({ left: 0, right: 100, top: 0, bottom: 50 }) as DOMRect;
+    document.body.appendChild(target);
+
+    const capture = {
+      setPointerCapture: vi.fn(),
+      hasPointerCapture: vi.fn(() => true),
+      releasePointerCapture: vi.fn(),
+    };
+
+    const props = result.current.paletteProps('delay');
+
+    act(() => {
+      props.onPointerDown({
+        button: 0,
+        pointerId: 1,
+        preventDefault: vi.fn(),
+        currentTarget: capture,
+      } as never);
+    });
+
+    act(() => {
+      props.onPointerUp({
+        clientX: 50,
+        clientY: 25,
+        pointerId: 1,
+        currentTarget: capture,
+      } as never);
+    });
+
+    expect(onPlace).toHaveBeenCalledWith('delay', 'b');
+    document.body.removeChild(target);
+  });
+});

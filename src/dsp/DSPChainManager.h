@@ -114,6 +114,29 @@ public:
 
     /** @} */
 
+    //==============================================================================
+    /** @name Board placement
+     *
+     * A stage that is not on the board is not in the chain at all: the run loop
+     * skips it, so the result is bit-identical to a chain built without it.
+     *
+     * That is deliberately **not** the same as bypassing it. A bypassed delay
+     * still runs, which is what keeps its spillover tail decaying after the
+     * footswitch -- the whole point of bypass. A delay that is off the board has
+     * no tail to keep, because it is not there.
+     *
+     * One bit per processor index, published exactly like the order and the bus
+     * assignment: one acquire load per block, no allocation, no lock. Everything
+     * starts placed, so a build that never calls this behaves as it always did.
+     */
+    /** @{ */
+
+    /** Refuses to remove a fixed stage; the limiter cannot be taken off. */
+    void setStagePlaced (int processorIndex, bool placed) noexcept;
+    bool isStagePlaced (int processorIndex) const noexcept;
+
+    /** @} */
+
     // Find the first processor of type T in the chain (uses RTTI/dynamic_cast)
     template<typename T>
     T* findProcessor() noexcept
@@ -159,6 +182,13 @@ private:
 
     // One bit per processor index: set means the stage runs on path B.
     std::atomic<juce::uint32> busBMask { 0 };
+
+    // One bit per processor index: set means the stage is on the board. All set
+    // by default, so nothing that never touches placement changes behaviour.
+    std::atomic<juce::uint32> placedMask { ~0u };
+
+    /** True when the index is inside the fixed head or tail of the chain. */
+    bool isFixedStage (int processorIndex) const noexcept;
 
     // Recognised by pointer so a reorder cannot leave a stale position behind.
     SplitProcessor* splitStage = nullptr;

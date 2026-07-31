@@ -161,6 +161,13 @@ HttpHandler::Response PresetsHandler::handlePost (const std::string& path, const
                     busB.add (juce::String (id));
 
                 document.chainBusB = juce::var (busB);
+
+                juce::Array<juce::var> board;
+
+                for (const auto& id : chainOrder->getPlacedIds())
+                    board.add (juce::String (id));
+
+                document.chainBoard = juce::var (board);
             }
 
             if (! presetManager.saveDocument (name, document))
@@ -238,6 +245,25 @@ HttpHandler::Response PresetsHandler::handlePost (const std::string& path, const
                         busB.push_back (item.toString().toStdString());
 
                 chainOrder->setBusBIds (busB);
+
+                // Placement travels with the order too. A file that predates the
+                // board says nothing about it, and *absent must mean everything
+                // placed*: such a preset described a full chain, so loading it
+                // has to sound exactly as it always did rather than arriving
+                // with an empty board.
+                if (const auto* onBoard = document.chainBoard.getArray())
+                {
+                    std::vector<std::string> placed;
+
+                    for (const auto& item : *onBoard)
+                        placed.push_back (item.toString().toStdString());
+
+                    chainOrder->setPlacedIds (placed);
+                }
+                else
+                {
+                    chainOrder->placeAll();
+                }
             }
 
             if (pinnedControls != nullptr)

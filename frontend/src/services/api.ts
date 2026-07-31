@@ -38,6 +38,13 @@ export interface EffectDescriptor {
   channel?: number;
   /** The four channel names, e.g. ["A","B","C","D"]. */
   channels?: string[];
+  /**
+   * Whether this stage is on the board. Only present for stages the chain
+   * actually contains -- the global card and the metronome are not placeable.
+   */
+  placed?: boolean;
+  /** False for the pinned stages: the input trim and the master limiter. */
+  removable?: boolean;
 }
 
 export interface EffectsResponse {
@@ -553,6 +560,14 @@ export interface ChainOrderState {
    * which side it was on.
    */
   busB?: string[];
+  /**
+   * Stages that are on the board.
+   *
+   * Absent from an older engine, and absent means *everything* is placed --
+   * the board started full and only became a choice in v0.30, so treating a
+   * missing list as an empty board would blank out an existing rig.
+   */
+  placed?: string[];
 }
 
 export const getChainOrder = () => request<ChainOrderState>('/chain/order');
@@ -567,6 +582,13 @@ export const setChainBuses = (busB: string[]) =>
   request<ChainOrderState>('/chain/buses', {
     method: 'PUT',
     body: JSON.stringify({ busB }),
+  });
+
+/** The complete set of placed stages, not a delta. */
+export const setChainBoard = (placed: string[]) =>
+  request<ChainOrderState>('/chain/board', {
+    method: 'PUT',
+    body: JSON.stringify({ placed }),
   });
 
 export const togglePin = (effect: string, parameter: string) =>

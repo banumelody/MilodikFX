@@ -9,9 +9,10 @@
 /**
  * /api/chain
  *
- *   GET /api/chain/order   { order: [ids], fixed: [ids], busB: [ids] }
+ *   GET /api/chain/order   { order, fixed, busB, placed }
  *   PUT /api/chain/order   { order: [ids] }   -> the order actually applied
  *   PUT /api/chain/buses   { busB: [ids] }    -> which stages run on path B
+ *   PUT /api/chain/board   { placed: [ids] }  -> which stages are on the board
  *
  * The order is a list of effect ids rather than positions, because an id
  * survives a version change and a position does not. Unknown ids are ignored and
@@ -33,12 +34,12 @@ public:
         const auto segments = pathSegmentsAfter (path, "/api/chain");
 
         if (segments.size() != 1)
-            return jsonError (404, "Expected /api/chain/order or /api/chain/buses");
+            return jsonError (404, "Expected /api/chain/order, /buses or /board");
 
         const auto action = toLowerAscii (segments[0]);
 
-        if (action != "order" && action != "buses")
-            return jsonError (404, "Expected /api/chain/order or /api/chain/buses");
+        if (action != "order" && action != "buses" && action != "board")
+            return jsonError (404, "Expected /api/chain/order, /buses or /board");
 
         return jsonOk (stateVar());
     }
@@ -50,7 +51,7 @@ public:
         const auto segments = pathSegmentsAfter (path, "/api/chain");
 
         if (segments.size() != 1)
-            return jsonError (404, "Expected /api/chain/order or /api/chain/buses");
+            return jsonError (404, "Expected /api/chain/order, /buses or /board");
 
         const auto action = toLowerAscii (segments[0]);
 
@@ -75,8 +76,31 @@ public:
             return jsonOk (stateVar());
         }
 
+        if (action == "board")
+        {
+            const auto parsedBoard = parseBody (body);
+            const auto* onBoard = parsedBoard["placed"].getArray();
+
+            if (onBoard == nullptr)
+                return jsonError (400, "Body must contain a 'placed' array of effect ids");
+
+            std::vector<std::string> ids;
+
+            for (const auto& item : *onBoard)
+                ids.push_back (item.toString().toStdString());
+
+            // The complete set, not a delta: anything left out comes off the
+            // board. Fixed stages go back on regardless -- see ChainOrder.
+            order.setPlacedIds (ids);
+
+            if (onChanged)
+                onChanged();
+
+            return jsonOk (stateVar());
+        }
+
         if (action != "order")
-            return jsonError (404, "Expected /api/chain/order or /api/chain/buses");
+            return jsonError (404, "Expected /api/chain/order, /buses or /board");
 
         const auto parsed = parseBody (body);
         const auto* list = parsed["order"].getArray();
@@ -119,10 +143,16 @@ private:
         for (const auto& id : order.getBusBIds())
             busB.add (juce::String (id));
 
+        juce::Array<juce::var> placed;
+
+        for (const auto& id : order.getPlacedIds())
+            placed.add (juce::String (id));
+
         auto* root = new juce::DynamicObject();
         root->setProperty ("order", current);
         root->setProperty ("fixed", fixed);
         root->setProperty ("busB", busB);
+        root->setProperty ("placed", placed);
 
         return juce::var (root);
     }

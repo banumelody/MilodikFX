@@ -118,6 +118,37 @@ void ChainOrder::setBusBIds (const std::vector<std::string>& ids)
     }
 }
 
+std::vector<std::string> ChainOrder::getPlacedIds() const
+{
+    std::vector<std::string> ids;
+
+    for (size_t i = 0; i < stageIds.size(); ++i)
+        if (manager.isStagePlaced ((int) i))
+            ids.push_back (stageIds[i]);
+
+    return ids;
+}
+
+void ChainOrder::setPlacedIds (const std::vector<std::string>& ids)
+{
+    for (size_t i = 0; i < stageIds.size(); ++i)
+    {
+        // Fixed stages go back on whatever the list said. The manager refuses to
+        // remove them anyway; asking for it here would just make the two layers
+        // disagree about what the board contains.
+        const auto wanted = isFixed (stageIds[i])
+                            || std::find (ids.begin(), ids.end(), stageIds[i]) != ids.end();
+
+        manager.setStagePlaced ((int) i, wanted);
+    }
+}
+
+void ChainOrder::placeAll()
+{
+    for (size_t i = 0; i < stageIds.size(); ++i)
+        manager.setStagePlaced ((int) i, true);
+}
+
 void ChainOrder::reset()
 {
     std::vector<int> identity;

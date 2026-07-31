@@ -49,6 +49,15 @@ struct PresetDocument
 
     /** Which stages run on path B of the parallel section, as effect ids. */
     juce::var chainBusB;
+
+    /**
+     * Which stages are on the board (schema 8).
+     *
+     * Absent in an older file, and absent must mean **everything placed** --
+     * a preset written before the board existed described a full chain, so
+     * loading it has to sound exactly as it did.
+     */
+    juce::var chainBoard;
 };
 
 class PresetManager final
@@ -58,7 +67,7 @@ public:
         pinned Perform controls; 6 added the chain's processing order; 7 added
         the A/B path assignment. Older files still load; the new fields simply
         come back empty. */
-    static constexpr int kSchemaVersion = 7;
+    static constexpr int kSchemaVersion = 8;
 
     explicit PresetManager (juce::File presetsDirectoryIn);
 

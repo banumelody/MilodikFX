@@ -79,6 +79,7 @@ void DSPChainManager::processChain (juce::AudioBuffer<float>& buffer)
     // never a mix of the two, and no allocation on either side of the handover.
     const auto order = packedOrder.load (std::memory_order_acquire);
     const auto buses = busBMask.load (std::memory_order_acquire);
+    const auto placed = placedMask.load (std::memory_order_acquire);
     const auto count = (int) processors.size();
 
     // The parallel section, if there is one. `running` turns on at the split
@@ -98,6 +99,11 @@ void DSPChainManager::processChain (juce::AudioBuffer<float>& buffer)
         const auto index = (int) ((order >> (position * 4)) & 0xFULL);
 
         if (index >= count || processors[(size_t) index] == nullptr)
+            continue;
+
+        // Off the board is not in the chain at all -- not even to the extent a
+        // bypassed stage is, which still runs so its tail can decay.
+        if ((placed & (1u << (unsigned) index)) == 0)
             continue;
 
         auto* processor = processors[(size_t) index].get();
@@ -261,6 +267,42 @@ void DSPChainManager::combineAtMixer (juce::AudioBuffer<float>& pathA,
 {
     if (mixerStage != nullptr)
         mixerStage->combine (pathA, b);
+}
+
+bool DSPChainManager::isFixedStage (int processorIndex) const noexcept
+{
+    const auto count = (int) processors.size();
+
+    return processorIndex < leadingFixedStages
+           || processorIndex >= count - trailingFixedStages;
+}
+
+void DSPChainManager::setStagePlaced (int processorIndex, bool placed) noexcept
+{
+    if (processorIndex < 0 || processorIndex >= kMaxOrderedProcessors)
+        return;
+
+    // The input trim and the master limiter are not optional: the input meter's
+    // arithmetic depends on the trim being in the chain, and taking the limiter
+    // off the board would leave the output unprotected. Refused here rather than
+    // trusted to callers, the same way setOrder refuses to move them.
+    if (! placed && isFixedStage (processorIndex))
+        return;
+
+    const auto bit = 1u << (unsigned) processorIndex;
+
+    if (placed)
+        placedMask.fetch_or (bit, std::memory_order_release);
+    else
+        placedMask.fetch_and (~bit, std::memory_order_release);
+}
+
+bool DSPChainManager::isStagePlaced (int processorIndex) const noexcept
+{
+    if (processorIndex < 0 || processorIndex >= kMaxOrderedProcessors)
+        return false;
+
+    return (placedMask.load (std::memory_order_acquire) & (1u << (unsigned) processorIndex)) != 0;
 }
 
 void DSPChainManager::setStageOnBusB (int processorIndex, bool onBusB) noexcept

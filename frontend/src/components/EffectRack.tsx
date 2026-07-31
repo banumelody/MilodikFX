@@ -21,6 +21,10 @@ export const EFFECT_ACCENTS: Record<string, string> = {
   reverb: '#4dd0ff',
   master: '#ff5c7a',
   metronome: '#8b95a7',
+  // The two utilities share the bus colour rather than getting a hue of their
+  // own: they are brackets around a section, not effects in it.
+  split: '#a892d6',
+  mixer: '#a892d6',
 };
 
 /**
@@ -192,6 +196,14 @@ export interface EffectRackProps {
    */
   bus?: 'A' | 'B';
   onBusChange?: (effectId: string, bus: 'A' | 'B') => void;
+  /**
+   * Takes this stage off the board, returning it to the palette.
+   *
+   * Absent for the pinned stages and for an engine that has no board. Removing
+   * is not bypassing: a bypassed delay keeps its tail decaying, one that is off
+   * the board is not in the chain at all.
+   */
+  onRemove?: (effectId: string) => void;
   disabled?: boolean;
   /** Only affects where the tone curve puts Nyquist; harmless when unknown. */
   sampleRate?: number;
@@ -223,6 +235,7 @@ function EffectRackBase({
   isDropTarget = false,
   bus,
   onBusChange,
+  onRemove,
   disabled = false,
   sampleRate,
 }: EffectRackProps) {
@@ -377,6 +390,26 @@ function EffectRackBase({
           </h2>
           <p className="rack__subtitle">{effect.description}</p>
         </div>
+        {onRemove ? (
+          <button
+            type="button"
+            className="rack__remove"
+            disabled={disabled}
+            title={`Buang ${effect.label} dari board`}
+            aria-label={`Buang ${effect.label} dari board`}
+            onClick={() => onRemove(effect.id)}
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path
+                d="M4.5 4.5l7 7M11.5 4.5l-7 7"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                fill="none"
+              />
+            </svg>
+          </button>
+        ) : null}
         {/* The input router and the master output are always in the path. A
             header switch there would look like a bypass but silence the app. */}
         {effect.toggleable === false ? null : (

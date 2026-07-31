@@ -634,6 +634,29 @@ void MainComponent::loadSettingsIntoRegistry()
                 }
             }
         }
+
+        // Board placement. A settings file written before the board existed has
+        // no key, and no key means everything stays placed -- an update must
+        // never silently empty someone's rig.
+        const auto storedBoard = settingsFile.getValue (kKeyChainBoard, {});
+
+        if (storedBoard.isNotEmpty())
+        {
+            juce::var parsed;
+
+            if (juce::JSON::parse (storedBoard, parsed).wasOk())
+            {
+                if (const auto* array = parsed.getArray())
+                {
+                    std::vector<std::string> ids;
+
+                    for (const auto& item : *array)
+                        ids.push_back (item.toString().toStdString());
+
+                    chainOrder->setPlacedIds (ids);
+                }
+            }
+        }
     }
 
     // Pinned Perform knobs follow the same pattern again: they belong to a
@@ -785,6 +808,13 @@ void MainComponent::saveSettingsIfNeeded (bool force)
             busB.add (juce::String (id));
 
         settingsFile.setValue (kKeyChainBusB, juce::JSON::toString (juce::var (busB), true));
+
+        juce::Array<juce::var> board;
+
+        for (const auto& id : chainOrder->getPlacedIds())
+            board.add (juce::String (id));
+
+        settingsFile.setValue (kKeyChainBoard, juce::JSON::toString (juce::var (board), true));
     }
 
     if (looperProcessor != nullptr)
@@ -888,7 +918,22 @@ void MainComponent::startServer()
     // reorder appear in the rack and the chain strip at once: neither component
     // knows the order is a thing, they just draw the array they are given.
     if (chainOrder != nullptr)
+    {
         effectsHandler->setOrderProvider ([this] { return chainOrder->getIds(); });
+
+        effectsHandler->setPlacementProvider ([this]
+        {
+            EffectsHandler::Placement placement;
+            placement.stageIds = chainOrder->getStageIds();
+            placement.placed = chainOrder->getPlacedIds();
+
+            for (const auto& id : placement.stageIds)
+                if (chainOrder->isFixed (id))
+                    placement.fixed.push_back (id);
+
+            return placement;
+        });
+    }
 
     webServer->registerApiHandler ("/api/devices", std::make_shared<DevicesHandler> (deviceController));
     webServer->registerApiHandler ("/api/parameters",

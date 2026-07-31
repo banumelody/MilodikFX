@@ -145,6 +145,82 @@ h2 {
   flex: 0 0 auto;
 }
 
+/* ------------------------------------------------ the router's two bus lines */
+
+/* Between a Splitter and a Mixer the strip stops being a row and becomes a
+   wiring diagram. Following Logic Pro's Pedalboard, the upper line is bus B and
+   the lower one is bus A: A runs straight through, B is the detour over the
+   top. The vertical rules on either side are the brackets. */
+.chain__fork {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 12px;
+  flex: 0 0 auto;
+}
+
+.chain__fork::before,
+.chain__fork::after {
+  content: '';
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  width: 1px;
+  background: color-mix(in srgb, var(--busB, #a892d6) 45%, var(--line));
+}
+
+.chain__fork::before {
+  left: 0;
+}
+
+.chain__fork::after {
+  right: 0;
+}
+
+.chain__rail {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.chain__rail-tag {
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  margin-right: 6px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.chain__rail--a {
+  color: var(--accent-soft, #4da3ff);
+}
+
+.chain__rail--b {
+  color: var(--busB, #a892d6);
+}
+
+/* A bus with nothing on it is a wire, not a fault. */
+.chain__rail-bare {
+  padding-left: 4px;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--text-faint);
+}
+
+.chain__empty {
+  padding-left: 10px;
+  font-size: 12.5px;
+  font-style: italic;
+  color: var(--text-faint);
+}
+
 .chain__terminal {
   flex: 0 0 auto;
   font-size: 10px;
@@ -2017,6 +2093,122 @@ input[type='text']:disabled {
    Pointer-driven, so nothing moves until the engine answers: the dragged card
    dims, the target shows an insertion edge, and a refusal simply leaves both
    where they were. */
+/* ------------------------------------------------------------- board palette */
+
+.palette__hint {
+  margin: 0 0 12px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-faint);
+}
+
+.palette__list {
+  max-height: 34vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  /* Room for the scrollbar so a chip's border is never clipped by it. */
+  padding-right: 4px;
+}
+
+.palette__group + .palette__group {
+  margin-top: 12px;
+}
+
+.palette__group-title {
+  margin: 0 0 6px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.palette__chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  margin-bottom: 5px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--bg-sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: grab;
+  /* The drag is pointer-capture driven, so the browser must not claim the
+     gesture for scrolling first -- the same rule the rack's grip follows. */
+  touch-action: none;
+  user-select: none;
+  transition: border-color 120ms ease, opacity 120ms ease;
+}
+
+.palette__chip i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--hue);
+  flex: 0 0 auto;
+}
+
+.palette__chip:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--hue) 55%, var(--line));
+}
+
+.palette__chip:active {
+  cursor: grabbing;
+}
+
+.palette__chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.palette__chip--dragging {
+  opacity: 0.35;
+}
+
+/* --------------------------------------------------------- remove from board */
+
+.rack__remove {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.rack__remove svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* Hidden until the card is under the pointer, so a rack of a dozen stages is
+   not a wall of delete buttons -- but always present to the keyboard. */
+.rack:hover .rack__remove,
+.rack__remove:focus-visible {
+  opacity: 1;
+}
+
+.rack__remove:hover:not(:disabled) {
+  color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+}
+
+.rack__remove:disabled {
+  cursor: not-allowed;
+}
+
 .rack__grip {
   width: 22px;
   height: 20px;

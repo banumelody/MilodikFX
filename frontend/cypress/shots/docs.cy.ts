@@ -8,46 +8,30 @@
  *   npx cypress run --spec cypress/e2e/shot.cy.ts
  */
 describe('docs screenshots', () => {
-  it('captures the input panel and the L/R split', () => {
-    // Wide enough that the responsive layout keeps the sidebar beside the rack,
-    // which is how the app actually looks in its own window.
-    cy.viewport(1600, 1000);
+  it('captures the empty board and the two-line router', () => {
+    // An almost-empty board first: the palette on the right, a straight wire
+    // where the rack would be. This is the state a new install now starts in
+    // conceptually, even though an update keeps everyone's rig intact.
+    cy.request('PUT', '/api/chain/board', { placed: [] });
+    cy.visit('/');
+    // Not "kabel lurus": the master stage is pinned, so even an empty board
+    // still shows it in the strip. The rack is where emptiness is stated.
+    cy.contains('Board kosong').should('be.visible');
+    cy.wait(800);
+    cy.screenshot('empty-board', { capture: 'viewport', overwrite: true });
 
-    // Put the chain into the state the shot is meant to show, through the API
-    // rather than by clicking: fewer moving parts, and it cannot half-apply.
-    cy.request('POST', '/api/effects/split/enabled', { enabled: true });
-    cy.request('PUT', '/api/parameters/split/mode', { value: 2 });
-    cy.request('POST', '/api/devices', {
-      inputPortLeft: 'Input 1',
-      inputPortRight: 'Input 2',
+    // Then a parallel section, so the router's two bus lines are on screen.
+    cy.request('PUT', '/api/chain/board', {
+      placed: ['noiseGate', 'split', 'overdrive', 'cabinet', 'reverb', 'mixer'],
     });
+    cy.request('PUT', '/api/chain/buses', { busB: ['reverb'] });
+    cy.request('POST', '/api/effects/split/enabled', { enabled: true });
+    cy.request('PUT', '/api/parameters/split/mode', { value: 0 });
 
     cy.visit('/');
-    cy.contains('.panel__title', 'Audio Device').should('be.visible');
-
-    // The port selectors live behind the panel's own toggle, so the shot has to
-    // open it the way a person would.
-    cy.contains('.panel', 'Audio Device').within(() => {
-      cy.contains('button', 'Ubah').click();
-    });
-
-    cy.contains('span', 'Kanal L dari').should('be.visible');
-    cy.contains('span', 'Kanal R dari').should('be.visible');
-
-    // Let the meter stream settle so the capture is not mid-repaint.
-    cy.wait(1200);
-
-    // Two figures rather than one. Headless Electron pins its window to
-    // 1280x720 whatever cy.viewport says, and at that width the sidebar sits
-    // off the right edge -- so a single shot would either clip the ports or
-    // shrink the rack past legibility.
-    cy.contains('.rack', 'Split').screenshot('split-lr', { overwrite: true });
-
-    // The sidebar starts past the right edge at this width, so scroll the page
-    // sideways until it is inside the capture area.
-    cy.window().then((win) => win.scrollTo(win.document.body.scrollWidth, 0));
-    cy.wait(600);
-    cy.screenshot('input-ports', { capture: 'viewport', overwrite: true });
+    cy.get('.chain__fork').should('be.visible');
+    cy.wait(800);
+    cy.screenshot('router', { capture: 'viewport', overwrite: true });
   });
 });
 

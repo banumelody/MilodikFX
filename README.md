@@ -117,6 +117,16 @@ duplikasi blok, jadi preset lama tetap utuh. Mode **crossover** (Linkwitz-Riley)
 jalur dan high ke jalur lain: low bersih, high di-drive, gerakan klasik rig bass. Mati secara default,
 dan saat mati rantainya bit-identik dengan sebelumnya.
 
+**Board bisa dikosongkan.** Tiap blok bisa dibuang dari board lewat tombol x di kartunya, dan diambil
+lagi dari daftar **Blok** di kanan - seret ke rack, atau tekan Enter untuk menaruhnya di ujung rantai.
+Board kosong bukan keadaan khusus: sinyalnya lewat lurus, seperti *shunt* di grid Fractal. Membuang
+blok tidak sama dengan mem-bypass-nya - delay yang di-bypass tetap berjalan supaya ekornya meluruh,
+delay yang dibuang tidak ada sama sekali. **Splitter** membuka jalur kedua dan **Mixer** menyusul
+sendiri, lalu ikut hilang saat Splitter dibuang. Input dan Master tidak bisa dibuang.
+
+Setelah update, board-mu tetap utuh: preset dan settings yang ditulis sebelum v0.30 tidak menyebut
+board sama sekali, dan itu dibaca sebagai **semua blok terpasang**.
+
 **Gitar dua jack** (mis. pickup magnetik + piezo): pilih port fisik untuk kanal L dan R di panel
 Audio Device, lalu pakai mode split **L/R** — kanal L ke jalur A, kanal R ke jalur B. Hasilnya dua
 chain penuh dengan kenop masing-masing, digabung di Mixer. Stereo saja tidak cukup untuk ini: satu

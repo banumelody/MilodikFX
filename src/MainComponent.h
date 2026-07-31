@@ -83,6 +83,7 @@ private:
     static constexpr const char* kKeyPins = "ui.pins";
     static constexpr const char* kKeyChainOrder = "dsp.chainOrder";
     static constexpr const char* kKeyChainBusB = "dsp.chainBusB";
+    static constexpr const char* kKeyChainBoard = "dsp.chainBoard";
     static constexpr const char* kKeyLooperLevel = "looper.level";
 
     void buildChain();

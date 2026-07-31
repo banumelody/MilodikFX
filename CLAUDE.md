@@ -189,6 +189,47 @@ no local state to unwind. Card rects are measured once at drag start (nothing re
 hit-tested via `data-chain-stage`. A keyboard path runs alongside rather than behind it — Enter lifts,
 arrows move, Enter drops, Escape cancels — and the ↑▼ buttons stay as the plain fallback.
 
+#### Board placement
+
+Every stage is either **on the board** or not, and off the board means the run loop skips it
+entirely -- bit-identical to a chain built without it, asserted in `tests/BoardTests.cpp`.
+
+That is deliberately **not** the same as bypassing. A bypassed delay still runs, which is what keeps
+its spillover tail decaying after the footswitch; a delay that is off the board has no tail to keep,
+because it is not there. Two gestures, and neither may stand in for the other.
+
+One bit per processor index in `std::atomic<uint32> placedMask`, published exactly like the order and
+the bus assignment. **Everything starts placed**, and that default is the migration rule: a preset
+or settings file written before v0.30 says nothing about a board, and *absent must mean full* --
+reading it as an empty board would silently blank out every rig anyone had saved. `PresetsHandler`
+calls `placeAll()` when the key is missing rather than leaving the previous preset's board in place.
+
+`input` and `master` can never come off; `DSPChainManager::setStagePlaced` refuses, the same way
+`setOrder` refuses to move them, so the rule lives in the engine rather than in whoever calls it.
+
+`/api/chain/board` (PUT) takes the **complete** set, not a delta. `/api/effects` carries `placed` and
+`removable` per stage -- but only for stages the chain actually contains, so the global card and the
+metronome are not offered a remove button they have no meaning for.
+
+Placement and order are separate values: taking a block off and putting it back does not move
+anything else, which is what stops a rig rearranging itself while it is being edited.
+
+On the UI side `BoardPalette` lists what is off the board, grouped by what each block does to the
+signal. It shares `useChainReorder`'s pointer discipline through `paletteProps` rather than growing a
+second drag mechanism -- a palette that dragged differently from the rack would feel like a different
+app. **The Mixer is never offered on its own**: it arrives with the Splitter and leaves with it,
+which is Apple's rule (*"a Mixer automatically appears at the far right"*) and stops anyone building
+a board with a mix point and nothing to mix.
+
+The palette scrolls inside its own bounded height. Letting it grow pushed the device panel out of the
+sidebar's scroll area, and how far depended on how many blocks happened to be unplaced -- so panels
+below it moved for reasons nobody chose. That showed up as an E2E failure in two runs out of four,
+which read like a flake and was not one.
+
+Two things the app is never literally short of: the rack always holds Input and Master, so "empty
+board" means *no removable stage is placed* rather than a zero count -- a length check would never
+fire. The chain strip shows Master for the same reason.
+
 #### Parallel paths (split A/B)
 
 Two extra stages: `SplitProcessor` and `MixerProcessor` (`src/dsp/SplitProcessor.*`,
@@ -535,7 +576,10 @@ and `HttpHandler` were never tied to a socket** — they take `(method, path, qu
   built lazily on first editor open, so a render farm of unopened instances pays nothing for it.
   Deliberately *not* registered: `devices` and `midi` (the host owns both), `looper`/`metronome`
   (not in the plugin's chain), `update` (a plugin has no business calling GitHub), `history` (the
-  DAW's own undo stack is the one that matters, and a second one fighting it is worse than none).
+  DAW's own undo stack is the one that matters, and a second one fighting it is worse than none) and
+  `chain` -- so reordering and board placement are app-only. `getChainOrder()` simply fails there,
+  `chainOrder` stays null, and the palette and drag handles never render; the rack shows every stage
+  because an absent `placed` flag reads as placed.
 - **`PluginEditor`** hosts a JUCE 8 `WebBrowserComponent` with `withResourceProvider` serving the
   *same* embedded bundle the exe uses, and `withNativeFunction("milodikfxApi", …)` for the calls.
   **A plugin must never open a port** — several instances in one project would fight over it. A

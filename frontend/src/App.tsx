@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { useChainReorder } from './hooks/useChainReorder';
+import { reorderBy, useChainReorder } from './hooks/useChainReorder';
 
 import { AppFooter } from './components/AppFooter';
+import { BoardPalette } from './components/BoardPalette';
 import { ChainStrip } from './components/ChainStrip';
 import { DeviceSettings } from './components/DeviceSettings';
 import { EffectRack, EFFECT_ACCENTS } from './components/EffectRack';
@@ -42,6 +43,7 @@ import {
   setEffectEnabled,
   setParameter,
   setPresetMetadata,
+  setChainBoard,
   setChainBuses,
   setChainOrder,
   subscribeLevels,
@@ -285,10 +287,74 @@ export function App() {
     [chainOrder],
   );
 
-  const { state: dragState, handleProps: dragHandleProps } = useChainReorder({
+  // Which stages are on the board. An engine that does not report the list at
+  // all is one from before v0.30, and there everything was placed -- so an
+  // absent list must read as "all", never as "none".
+  const placed = useMemo(() => {
+    if (chainOrder?.placed == null) return null;
+    return new Set(chainOrder.placed);
+  }, [chainOrder]);
+
+  /**
+   * Applies a new board.
+   *
+   * The Splitter and the Mixer travel together: Apple adds the Mixer the moment
+   * a Splitter is dropped, and removing the Splitter has to take it away again
+   * or the board keeps a mix point with nothing to mix.
+   */
+  const applyBoard = useCallback(
+    (next: Set<string>) => {
+      if (next.has('split')) next.add('mixer');
+      else next.delete('mixer');
+
+      void (async () => {
+        try {
+          setChain(await setChainBoard([...next]));
+          await refreshEffects();
+        } catch {
+          /* the engine keeps whatever it had */
+        }
+      })();
+    },
+    [refreshEffects],
+  );
+
+  const handleRemoveStage = useCallback(
+    (effectId: string) => {
+      const next = new Set(placed ?? []);
+      next.delete(effectId);
+      applyBoard(next);
+    },
+    [placed, applyBoard],
+  );
+
+  const handlePlaceStage = useCallback(
+    (effectId: string, beforeId: string | null) => {
+      const next = new Set(placed ?? []);
+      next.add(effectId);
+      applyBoard(next);
+
+      // Position is a separate value from placement, so a drop onto a card is
+      // two changes: put the block on the board, then move it to where it
+      // landed. A drop on empty space leaves it at its build position.
+      if (beforeId != null && beforeId !== effectId) {
+        const order = chainOrder?.order ?? [];
+        const moved = reorderBy(order, effectId, beforeId);
+        if (moved !== order) applyChainOrder(moved);
+      }
+    },
+    [placed, applyBoard, chainOrder, applyChainOrder],
+  );
+
+  const {
+    state: dragState,
+    handleProps: dragHandleProps,
+    paletteProps,
+  } = useChainReorder({
     order: chainOrder?.order ?? [],
     fixed: chainOrder?.fixed ?? [],
     onReorder: applyChainOrder,
+    onPlace: handlePlaceStage,
   });
 
   const handleTogglePin = useCallback((effectId: string, parameterId: string) => {
@@ -785,7 +851,17 @@ export function App() {
   // Global has its own controls in the top bar and the tempo panel; the
   // metronome gets the tempo panel too. Neither belongs in the rack of stages.
   const rackEffects = useMemo(
-    () => effects.filter((effect) => effect.id !== 'global' && effect.id !== 'metronome'),
+    () =>
+      effects.filter(
+        (effect) =>
+          effect.id !== 'global' && effect.id !== 'metronome' && effect.placed !== false,
+      ),
+    [effects],
+  );
+
+  /** Every placeable stage, whether on the board or not, for the palette. */
+  const boardStages = useMemo(
+    () => effects.filter((effect) => effect.placed != null),
     [effects],
   );
 
@@ -969,12 +1045,24 @@ export function App() {
         dragHandleProps={chainOrder ? dragHandleProps : undefined}
         draggingId={dragState.activeId}
         dropTargetId={dragState.overId}
+        busB={busB}
       />
 
       <main className="layout">
         <div className="layout__chain">
           {effects.length === 0 && !offline ? (
             <p className="layout__empty">Memuat rantai efek...</p>
+          ) : null}
+
+          {/* "Empty" means nothing of your own is on the board. The input trim
+              and the master limiter are pinned, so the rack is never literally
+              empty and a length check would never fire. */}
+          {chainOrder != null &&
+          !offline &&
+          rackEffects.every((effect) => effect.removable === false) ? (
+            <p className="layout__empty">
+              Board kosong &mdash; sinyalnya lewat lurus. Ambil blok dari daftar di kanan.
+            </p>
           ) : null}
 
           {rackEffects.map((effect, index) => (
@@ -1002,6 +1090,7 @@ export function App() {
               bus={parallelSection.has(effect.id) ? (busB.has(effect.id) ? 'B' : 'A') : undefined}
               onBusChange={handleBusChange}
               movable={!(chainOrder?.fixed ?? []).includes(effect.id)}
+              onRemove={chainOrder && effect.removable !== false ? handleRemoveStage : undefined}
               canMoveUp={index > 0 && !(chainOrder?.fixed ?? []).includes(rackEffects[index - 1].id)}
               canMoveDown={
                 index < rackEffects.length - 1 &&
@@ -1012,6 +1101,15 @@ export function App() {
         </div>
 
         <aside className="layout__side">
+          {chainOrder != null ? (
+            <BoardPalette
+              stages={boardStages}
+              disabled={offline}
+              paletteProps={paletteProps}
+              activeId={dragState.activeId}
+            />
+          ) : null}
+
           {/* The host owns the audio device and the MIDI ports inside a plugin.
               Offering a device picker there would, at best, be a lie. */}
           {inPlugin ? null : (

@@ -712,3 +712,48 @@ describe('EffectRack split modes', () => {
     expect(onParameterChange).toHaveBeenCalledWith('split', 'mode', 2);
   });
 });
+
+describe('EffectRack board removal', () => {
+  it('offers no remove button when the engine has no board', () => {
+    renderRack(overdrive);
+
+    expect(screen.queryByRole('button', { name: /Buang/ })).not.toBeInTheDocument();
+  });
+
+  it('takes the stage off the board when asked', () => {
+    const onRemove = vi.fn();
+
+    render(
+      <EffectRack
+        effect={overdrive}
+        onParameterChange={vi.fn()}
+        onEnabledChange={vi.fn()}
+        onRemove={onRemove}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Buang Overdrive dari board' }));
+    expect(onRemove).toHaveBeenCalledWith('overdrive');
+  });
+
+  it('keeps removal separate from the on/off switch', () => {
+    const onRemove = vi.fn();
+    const onEnabledChange = vi.fn();
+
+    render(
+      <EffectRack
+        effect={overdrive}
+        onParameterChange={vi.fn()}
+        onEnabledChange={onEnabledChange}
+        onRemove={onRemove}
+      />,
+    );
+
+    // Bypassing keeps the stage in the chain so its tail can decay; removing it
+    // takes it out entirely. Two gestures, and neither may stand in for the other.
+    fireEvent.click(screen.getByRole('button', { name: 'Buang Overdrive dari board' }));
+
+    expect(onRemove).toHaveBeenCalled();
+    expect(onEnabledChange).not.toHaveBeenCalled();
+  });
+});

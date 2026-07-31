@@ -48,6 +48,19 @@ public:
         orderProvider_ = std::move (provider);
     }
 
+    /** What the board looks like, so each effect can say where it stands. */
+    struct Placement
+    {
+        std::vector<std::string> stageIds;   // every stage the chain contains
+        std::vector<std::string> placed;     // ...of which these are on the board
+        std::vector<std::string> fixed;      // ...and these can never come off
+    };
+
+    void setPlacementProvider (std::function<Placement()> provider)
+    {
+        placementProvider_ = std::move (provider);
+    }
+
     Response handleGet (const std::string& path, const std::string& query) const override;
     Response handlePost (const std::string& path, const std::string& body) override;
     Response handlePut (const std::string& path, const std::string& body) override;
@@ -63,4 +76,5 @@ private:
     const milodikfx::api::ParameterRegistry& registry_;
     milodikfx::preset::ChannelStore* channelStore_ = nullptr;
     std::function<std::vector<std::string>()> orderProvider_;
+    std::function<Placement()> placementProvider_;
 };
