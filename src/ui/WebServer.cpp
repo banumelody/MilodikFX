@@ -65,7 +65,18 @@ std::string toLower (std::string s)
     return s;
 }
 
-const char* statusText (int code)
+/**
+ * The status line for a response.
+ *
+ * The unknown-code case used to answer "200 OK", which meant a handler could
+ * refuse something and have the refusal delivered as a success: the body said
+ * `{"error": ...}` while every client that checks the status saw it work. A
+ * 409 from the pin limit had been arriving that way for a while before the
+ * chain-order endpoint made it visible. Anything unrecognised now keeps its own
+ * number and takes a generic reason phrase for its class, so a code nobody
+ * thought to list here degrades into a slightly vague error rather than a lie.
+ */
+std::string statusText (int code)
 {
     switch (code)
     {
@@ -75,11 +86,18 @@ const char* statusText (int code)
         case 403: return "403 Forbidden";
         case 404: return "404 Not Found";
         case 405: return "405 Method Not Allowed";
+        case 409: return "409 Conflict";
         case 413: return "413 Payload Too Large";
         case 500: return "500 Internal Server Error";
         case 503: return "503 Service Unavailable";
-        default: return "200 OK";
+        default: break;
     }
+
+    if (code >= 200 && code < 300) return std::to_string (code) + " OK";
+    if (code >= 400 && code < 500) return std::to_string (code) + " Client Error";
+    if (code >= 500 && code < 600) return std::to_string (code) + " Server Error";
+
+    return std::to_string (code) + " Unknown";
 }
 } // namespace
 

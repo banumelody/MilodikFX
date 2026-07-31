@@ -976,6 +976,70 @@ describe('MilodikFX UI against a live engine', () => {
     cy.request('PUT', '/api/effects/nam/inputDb', { value: 0 });
   });
 
+
+  it('reorders the signal chain from the rack and keeps it after a reload', () => {
+    // The rack and the chain strip are both drawn from /api/effects, which the
+    // engine emits in chain order -- so moving a card is expected to move it in
+    // both places and to survive a restart of the page.
+    cy.request('/api/chain/order').then(({ body }) => {
+      const original: string[] = body.order;
+      const overdriveAt = original.indexOf('overdrive');
+
+      expect(overdriveAt).to.be.greaterThan(0);
+
+      cy.contains('h2', 'Overdrive')
+        .closest('.rack')
+        .within(() => {
+          cy.get('button[aria-label*="lebih awal di rantai"]').click();
+        });
+
+      // The engine is the authority: check it moved there, not just on screen.
+      cy.request('/api/chain/order').should(({ body: after }) => {
+        expect(after.order.indexOf('overdrive')).to.equal(overdriveAt - 1);
+      });
+
+      cy.reload();
+
+      cy.request('/api/chain/order').should(({ body: reloaded }) => {
+        expect(reloaded.order.indexOf('overdrive')).to.equal(overdriveAt - 1);
+      });
+
+      // Put it back so the rest of the suite sees the chain it expects.
+      cy.request('PUT', '/api/chain/order', { order: original });
+    });
+  });
+
+  it('refuses to move a stage the engine pins in place', () => {
+    cy.request('/api/chain/order').then(({ body }) => {
+      expect(body.fixed).to.include('input');
+      expect(body.fixed).to.include('master');
+    });
+
+    // The master carries the safety limiter, so its card offers a locked marker
+    // rather than arrows -- explained, not merely missing.
+    cy.contains('h2', 'Master')
+      .closest('.rack')
+      .within(() => {
+        cy.get('button[aria-label*="di rantai"]').should('not.exist');
+        cy.get('[aria-label="Posisi terkunci"]').should('exist');
+      });
+
+    // And the API says no as well, with a real error status.
+    cy.request('/api/chain/order').then(({ body }) => {
+      const moved = [...body.order];
+      [moved[0], moved[1]] = [moved[1], moved[0]];
+
+      cy.request({
+        method: 'PUT',
+        url: '/api/chain/order',
+        body: { order: moved },
+        failOnStatusCode: false,
+      }).should((response) => {
+        expect(response.status).to.equal(409);
+      });
+    });
+  });
+
   it('reports MIDI state even with no controller attached', () => {
     // A build machine has no MIDI hardware, so the contract that has to hold is
     // that the endpoint answers with an empty device list rather than failing.

@@ -43,15 +43,18 @@ struct PresetDocument
 
     /** Which knobs this sound wants on the stage screen -- PinnedControls owns the shape. */
     juce::var pins;
+
+    /** The chain's processing order, as an array of effect ids. */
+    juce::var chainOrder;
 };
 
 class PresetManager final
 {
 public:
     /** 3 added metadata and scenes; 4 added per-effect channels; 5 added the
-        pinned Perform controls. Older files still load; the new fields simply
-        come back empty. */
-    static constexpr int kSchemaVersion = 5;
+        pinned Perform controls; 6 added the chain's processing order. Older
+        files still load; the new fields simply come back empty. */
+    static constexpr int kSchemaVersion = 6;
 
     explicit PresetManager (juce::File presetsDirectoryIn);
 

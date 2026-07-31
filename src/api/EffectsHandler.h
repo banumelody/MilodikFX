@@ -2,6 +2,10 @@
 
 #include <JuceHeader.h>
 
+#include <functional>
+#include <string>
+#include <vector>
+
 #include "api/HttpHandler.h"
 #include "api/ParameterRegistry.h"
 #include "preset/ChannelStore.h"
@@ -30,6 +34,20 @@ public:
     /** Optional: a plugin build has no channel store. */
     void setChannelStore (milodikfx::preset::ChannelStore* store) { channelStore_ = store; }
 
+    /**
+     * Supplies the chain's processing order, as effect ids.
+     *
+     * The UI draws the rack and the chain strip straight from this listing, so
+     * emitting the effects in the order they actually run is what makes a
+     * reorder show up everywhere at once -- no component knows the order exists.
+     * Stages the chain does not contain (the global card, the metronome) keep
+     * their registration order at the end.
+     */
+    void setOrderProvider (std::function<std::vector<std::string>()> provider)
+    {
+        orderProvider_ = std::move (provider);
+    }
+
     Response handleGet (const std::string& path, const std::string& query) const override;
     Response handlePost (const std::string& path, const std::string& body) override;
     Response handlePut (const std::string& path, const std::string& body) override;
@@ -39,6 +57,10 @@ private:
     void augment (juce::var& effectVar) const;
     juce::var effectWithChannels (const milodikfx::api::EffectDescriptor& effect) const;
 
+    /** Effects in chain order, with anything not in the chain left at the end. */
+    std::vector<const milodikfx::api::EffectDescriptor*> orderedEffects() const;
+
     const milodikfx::api::ParameterRegistry& registry_;
     milodikfx::preset::ChannelStore* channelStore_ = nullptr;
+    std::function<std::vector<std::string>()> orderProvider_;
 };

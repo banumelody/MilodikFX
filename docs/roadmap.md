@@ -90,7 +90,7 @@ Diperbarui saat implementasi berjalan. Item yang sudah selesai tetap ditulis len
 - **P4-5 Looper** — mandiri dan tidak menyentuh arsitektur lain, tapi bukan kebutuhan inti; paling akhir sejak awal.
 - **P2-5 Multi-view** — sidebar masih terbaca dalam satu layar, jadi tab Perform/Edit/Library/Settings belum menyelesaikan masalah nyata. Akan terasa perlu begitu panelnya bertambah lagi.
 
-**Rilis terbaru:** v0.25.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.25.0
+**Rilis terbaru:** v0.26.0 — https://github.com/banumelody/MilodikFX/releases/tag/v0.26.0
 
 **Catatan P4-1 yang lahir dari implementasi:** tiga hal yang hanya ketahuan lewat pengukuran, bukan pembacaan kode. (1) Split butuh dua filter sungguhan; mengurangi salinan low-pass *tampak* setara tapi menyisakan selisih fasa yang lalu kena gain penuh clipper — Tube Screamer terukur mendistorsi bass lebih keras daripada drive full-range, persis terbalik. (2) Tahap kaskade harus membagi gain; dua tahap gain penuh mengotakkan sinyal, DC blocker menengahkannya, dan harmonik genap — alasan utama memilih voicing asimetris — hilang sama sekali. (3) Test harmoniknya sempat mengukur kebocoran spektralnya sendiri; di luar bin analisis, fundamental menyebar di sekitar −43 dB, satu orde dengan harmonik yang diukur, sehingga kurva simetris tampak punya harmonik genap sebanyak yang asimetris. Tepat di bin, kurva simetris terbaca 0,000000.
 
@@ -1120,7 +1120,21 @@ plus test stereo-integrity di suite native: sinyal L≠R dilewatkan seluruh chai
 verifikasi dekorelasi bertahan. Menjaga stage baru tidak diam-diam me-mono-kan chain.
 **Effort:** ~2 jam. **Rilis v0.25.0 total: ~1 hari kerja.**
 
-## v0.26.0 — "Urutan chain milikmu" (P9-1..P9-3)
+## v0.26.0 — "Urutan chain milikmu" (P9-1..P9-3) — **SELESAI (31 Jul 2026)**
+
+> **Terkirim.** Permutasi dikemas ke satu `atomic<uint64_t>`; diuji dengan 176.863 reorder bersamaan
+> selama 20.000 blok, dan **setiap blok menjalankan tepat 6 stage masing-masing sekali** — tidak
+> pernah robek. Dua bug lama ikut ketahuan saat mengerjakannya:
+>
+> 1. **WebServer mengubah status yang tidak dikenalnya jadi `200 OK`.** `jsonError(409, ...)` dikirim
+>    sebagai sukses dengan body error — klien mana pun yang memeriksa status akan salah. `PinsHandler`
+>    sudah mengembalikan 409 sejak lama dan selama itu pula dilaporkan sebagai berhasil. Kode tak
+>    dikenal kini mempertahankan nomornya sendiri.
+> 2. **E2E menguji binary basi selama delapan hari.** Skrip default-nya `-Config Debug`, dan exe Debug
+>    terakhir dibangun 23 Juli — jadi "52/52 lulus" yang dilaporkan berkali-kali sebenarnya menguji
+>    kode seminggu sebelumnya. Default kini Release, umur exe dicetak, dan skrip memperingatkan kalau
+>    ada sumber yang lebih baru. Suite hijau terhadap binary yang salah lebih buruk daripada suite
+>    merah, karena ia terbaca sebagai bukti.
 
 ### P9-1. Engine: urutan sebagai data atomik
 

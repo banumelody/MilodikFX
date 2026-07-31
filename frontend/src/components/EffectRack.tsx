@@ -159,6 +159,15 @@ export interface EffectRackProps {
   pinnedParams?: Set<string>;
   /** Pins or unpins a control. Absent when the engine does not track pins. */
   onTogglePin?: (effectId: string, parameterId: string) => void;
+  /**
+   * Moves this stage earlier (-1) or later (+1) in the signal chain. Absent when
+   * the engine does not support reordering.
+   */
+  onMove?: (effectId: string, delta: number) => void;
+  /** False for a stage the engine pins in place; the reason is shown as a hint. */
+  movable?: boolean;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
   disabled?: boolean;
   /** Only affects where the tone curve puts Nyquist; harmless when unknown. */
   sampleRate?: number;
@@ -181,6 +190,10 @@ function EffectRackBase({
   modulatedParams,
   pinnedParams,
   onTogglePin,
+  onMove,
+  movable = true,
+  canMoveUp = false,
+  canMoveDown = false,
   disabled = false,
   sampleRate,
 }: EffectRackProps) {
@@ -230,6 +243,57 @@ function EffectRackBase({
       style={{ '--accent': accent } as React.CSSProperties}
     >
       <header className="rack__head">
+        {onMove ? (
+          <div className="rack__move" role="group" aria-label={`Posisi ${effect.label}`}>
+            {movable ? (
+              <>
+                <button
+                  type="button"
+                  className="rack__move-btn"
+                  disabled={disabled || !canMoveUp}
+                  aria-label={`Pindahkan ${effect.label} lebih awal di rantai`}
+                  title="Lebih awal di rantai"
+                  onClick={() => onMove(effect.id, -1)}
+                >
+                  ▲
+                </button>
+                <button
+                  type="button"
+                  className="rack__move-btn"
+                  disabled={disabled || !canMoveDown}
+                  aria-label={`Pindahkan ${effect.label} lebih akhir di rantai`}
+                  title="Lebih akhir di rantai"
+                  onClick={() => onMove(effect.id, 1)}
+                >
+                  ▼
+                </button>
+              </>
+            ) : (
+              // Not merely disabled: explained. The input trim has to stay first
+              // for the input meter's arithmetic to be true, and the master has
+              // to stay last because it carries the safety limiter.
+              <span
+                className="rack__move-locked"
+                title={
+                  effect.id === 'master'
+                    ? 'Selalu terakhir — membawa limiter pengaman'
+                    : 'Selalu pertama — meter input mengandalkan posisinya'
+                }
+                aria-label="Posisi terkunci"
+              >
+                <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                  <rect x="3.5" y="7" width="9" height="6.5" rx="1.2" fill="currentColor" />
+                  <path
+                    d="M5.5 7V5a2.5 2.5 0 015 0v2"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    fill="none"
+                  />
+                </svg>
+              </span>
+            )}
+          </div>
+        ) : null}
         <div className="rack__titles">
           <h2 className="rack__title">
             {index !== undefined && total !== undefined ? (

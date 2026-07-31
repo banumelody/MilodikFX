@@ -157,6 +157,13 @@ GuitarChain buildGuitarChain (DSPChainManager& chain, ChainOptions options)
     result.reverb = add<ReverbProcessor> (chain);
     result.masterOut = add<MasterOutProcessor> (chain);
 
+    // The trim and the master stage are the two that may never be moved once the
+    // order becomes editable. The trim, because the input meter reports what the
+    // chain receives as `inputDb + trimDb` rather than measuring a second time,
+    // and that arithmetic is only true while the trim is first. The master,
+    // because it carries the safety limiter and the final clamp.
+    chain.setFixedStages (1, 1);
+
     // Not a stage of the chain: mixed in afterwards so bypass cannot silence it.
     if (options.withMetronome)
         result.metronome = dynamic_cast<MetronomeProcessor*> (

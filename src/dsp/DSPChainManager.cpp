@@ -1,5 +1,7 @@
 #include "dsp/DSPChainManager.h"
 
+#include <array>
+
 namespace milodikfx::dsp
 {
 DSPChainManager::DSPChainManager()
@@ -65,9 +67,18 @@ void DSPChainManager::processChain (juce::AudioBuffer<float>& buffer)
         for (int ch = 0; ch < numChannels; ++ch)
             dryCopy.copyFrom (ch, 0, buffer, ch, 0, numSamples);
 
-    for (const auto& processor : processors)
-        if (processor != nullptr)
-            processor->processBlock (buffer);
+    // One acquire load for the whole block: either the old order or the new one,
+    // never a mix of the two, and no allocation on either side of the handover.
+    const auto order = packedOrder.load (std::memory_order_acquire);
+    const auto count = (int) processors.size();
+
+    for (int position = 0; position < count; ++position)
+    {
+        const auto index = (int) ((order >> (position * 4)) & 0xFULL);
+
+        if (index < count && processors[(size_t) index] != nullptr)
+            processors[(size_t) index]->processBlock (buffer);
+    }
 
     if (! needsFade)
         return;
@@ -116,6 +127,11 @@ AudioProcessorBase* DSPChainManager::addProcessor (std::unique_ptr<AudioProcesso
 
     auto* raw = processor.get();
     processors.push_back (std::move (processor));
+
+    // A new stage invalidates whatever permutation was in force, so the order
+    // returns to the one the chain was built in. Only ever called at build time.
+    packedOrder.store (identityOrder(), std::memory_order_release);
+
     return raw;
 }
 
@@ -136,6 +152,7 @@ void DSPChainManager::clear()
 {
     processors.clear();
     postProcessors.clear();
+    packedOrder.store (0, std::memory_order_release);
 }
 
 void DSPChainManager::setBypassed (bool shouldBypass) noexcept
@@ -151,5 +168,76 @@ bool DSPChainManager::isBypassed() const noexcept
 int DSPChainManager::getNumProcessors() const noexcept
 {
     return static_cast<int> (processors.size());
+}
+
+juce::uint64 DSPChainManager::identityOrder() const noexcept
+{
+    juce::uint64 packed = 0;
+    const auto count = juce::jmin ((int) processors.size(), kMaxOrderedProcessors);
+
+    for (int i = 0; i < count; ++i)
+        packed |= ((juce::uint64) (unsigned) i) << (i * 4);
+
+    return packed;
+}
+
+void DSPChainManager::setFixedStages (int leadingFixed, int trailingFixed) noexcept
+{
+    leadingFixedStages = juce::jmax (0, leadingFixed);
+    trailingFixedStages = juce::jmax (0, trailingFixed);
+}
+
+bool DSPChainManager::setOrder (const std::vector<int>& order) noexcept
+{
+    const auto count = (int) processors.size();
+
+    // Beyond sixteen stages a nibble per stage no longer fits in the atomic, so
+    // reordering is refused rather than silently corrupting the run order.
+    if (count > kMaxOrderedProcessors || (int) order.size() != count)
+        return false;
+
+    std::array<bool, kMaxOrderedProcessors> seen {};
+
+    for (int position = 0; position < count; ++position)
+    {
+        const auto index = order[(size_t) position];
+
+        // A complete permutation, or nothing: a duplicate would run one stage
+        // twice and drop another entirely.
+        if (index < 0 || index >= count || seen[(size_t) index])
+            return false;
+
+        seen[(size_t) index] = true;
+
+        // The pinned head and tail have to stay exactly where they are. The
+        // master stage carries the safety limiter, so nothing may follow it.
+        const auto isFixedPosition = position < leadingFixedStages
+                                     || position >= count - trailingFixedStages;
+
+        if (isFixedPosition && index != position)
+            return false;
+    }
+
+    juce::uint64 packed = 0;
+
+    for (int position = 0; position < count; ++position)
+        packed |= ((juce::uint64) (unsigned) order[(size_t) position]) << (position * 4);
+
+    packedOrder.store (packed, std::memory_order_release);
+    return true;
+}
+
+std::vector<int> DSPChainManager::getOrder() const
+{
+    const auto packed = packedOrder.load (std::memory_order_acquire);
+    const auto count = juce::jmin ((int) processors.size(), kMaxOrderedProcessors);
+
+    std::vector<int> order;
+    order.reserve ((size_t) count);
+
+    for (int position = 0; position < count; ++position)
+        order.push_back ((int) ((packed >> (position * 4)) & 0xFULL));
+
+    return order;
 }
 } // namespace milodikfx::dsp

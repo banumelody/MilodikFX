@@ -7,6 +7,7 @@
 #include "api/HttpHandler.h"
 #include "api/ParameterRegistry.h"
 #include "preset/ChannelStore.h"
+#include "dsp/ChainOrder.h"
 #include "preset/PinnedControls.h"
 #include "preset/PresetManager.h"
 #include "preset/SceneManager.h"
@@ -53,6 +54,9 @@ public:
      */
     void setPinnedControls (milodikfx::preset::PinnedControls* controls) { pinnedControls = controls; }
 
+    /** The chain's processing order also belongs to the sound, so it travels with it. */
+    void setChainOrder (milodikfx::dsp::ChainOrder* order) { chainOrder = order; }
+
     Response handleGet (const std::string& path, const std::string& query) const override;
     Response handlePost (const std::string& path, const std::string& body) override;
     Response handleDelete (const std::string& path) override;
@@ -71,5 +75,6 @@ private:
     milodikfx::preset::SceneManager* sceneManager = nullptr;
     milodikfx::preset::ChannelStore* channelStore = nullptr;
     milodikfx::preset::PinnedControls* pinnedControls = nullptr;
+    milodikfx::dsp::ChainOrder* chainOrder = nullptr;
     juce::String selectedName;
 };

@@ -9,7 +9,11 @@
 #>
 param(
     [switch]$Build,
-    [string]$Config = "Debug",
+    # Release, not Debug: this is what gets built, shipped and installed, and a
+    # Debug default quietly tested a different binary. Worse, when no Debug build
+    # had been made in a week the suite happily ran against the stale one and
+    # reported a clean pass for code that was not in it.
+    [string]$Config = "Release",
     [int]$StartupTimeoutSeconds = 60
 )
 
@@ -56,6 +60,22 @@ if ($existing.Count -gt 0) {
     Log "Stopping $($existing.Count) already running MilodikFX process(es)..."
     $existing | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     Start-Sleep -Seconds 3
+}
+
+# A passing suite against a stale binary is worse than a failing one, because it
+# reads as evidence. Say how old the executable is, and complain if anything in
+# src/ or the UI bundle is newer than it.
+$exeInfo = Get-Item $exePath
+Log "Executable built $($exeInfo.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss'))"
+
+$newerSources = @(Get-ChildItem -Path (Join-Path $repoRoot 'src'), (Join-Path $frontendDir 'dist') `
+    -Recurse -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.LastWriteTime -gt $exeInfo.LastWriteTime })
+
+if ($newerSources.Count -gt 0) {
+    Log "WARNING: $($newerSources.Count) source file(s) are newer than the executable."
+    Log "         e.g. $($newerSources[0].FullName)"
+    Log "         Re-run with -Build, or this suite is testing something you did not write."
 }
 
 Log "Starting $exePath"

@@ -1,5 +1,7 @@
 #include "api/EffectsHandler.h"
 
+#include <algorithm>
+
 #include "api/ApiJson.h"
 
 using namespace milodikfx::api;
@@ -44,13 +46,11 @@ HttpHandler::Response EffectsHandler::handleGet (const std::string& path, const 
     {
         if (path == kPrefix || path == "/api/effects/")
         {
-            if (channelStore_ == nullptr)
-                return jsonOk (registry_.toVar());
-
             juce::Array<juce::var> effects;
 
-            for (const auto& effect : registry_.getEffects())
-                effects.add (effectWithChannels (effect));
+            for (const auto* effect : orderedEffects())
+                effects.add (channelStore_ != nullptr ? effectWithChannels (*effect)
+                                                      : registry_.effectToVar (*effect));
 
             auto* root = new juce::DynamicObject();
             root->setProperty ("effects", effects);
@@ -262,4 +262,27 @@ HttpHandler::Response EffectsHandler::handlePut (const std::string& path, const 
     {
         return jsonError (500, juce::String ("Exception: ") + e.what());
     }
+}
+
+std::vector<const milodikfx::api::EffectDescriptor*> EffectsHandler::orderedEffects() const
+{
+    std::vector<const milodikfx::api::EffectDescriptor*> ordered;
+    ordered.reserve (registry_.getEffects().size());
+
+    if (orderProvider_)
+    {
+        // Chain stages first, in the order they actually run.
+        for (const auto& id : orderProvider_())
+            if (const auto* effect = registry_.findEffect (id))
+                ordered.push_back (effect);
+    }
+
+    // Then everything the chain does not contain -- the global card, the
+    // metronome -- in registration order, so nothing disappears from the listing
+    // just because it is not a stage.
+    for (const auto& effect : registry_.getEffects())
+        if (std::find (ordered.begin(), ordered.end(), &effect) == ordered.end())
+            ordered.push_back (&effect);
+
+    return ordered;
 }

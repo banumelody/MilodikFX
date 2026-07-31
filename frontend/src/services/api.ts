@@ -510,6 +510,28 @@ export interface PinsState {
 
 export const getPins = () => request<PinsState>('/pins');
 
+/**
+ * The chain's processing order, as effect ids.
+ *
+ * Ids rather than positions, because an id survives a version change. `fixed`
+ * lists the stages that may never move: the input trim (the input meter reports
+ * what the chain receives as input + trim rather than measuring twice, which is
+ * only true while the trim is first) and the master stage (it carries the safety
+ * limiter, so nothing may follow it).
+ */
+export interface ChainOrderState {
+  order: string[];
+  fixed: string[];
+}
+
+export const getChainOrder = () => request<ChainOrderState>('/chain/order');
+
+export const setChainOrder = (order: string[]) =>
+  request<ChainOrderState>('/chain/order', {
+    method: 'PUT',
+    body: JSON.stringify({ order }),
+  });
+
 export const togglePin = (effect: string, parameter: string) =>
   request<PinsState>('/pins/toggle', {
     method: 'POST',

@@ -136,6 +136,51 @@ try {
         if ($status -ne 404) { throw "expected 404, got $status" }
     }
 
+    Check 'Chain order round-trips and pinned stages are refused' {
+        $before = Invoke-RestMethod -Uri "$baseUrl/api/chain/order" -TimeoutSec 10
+
+        if ($before.order.Count -lt 3) { throw 'chain order looks empty' }
+        if ($before.fixed -notcontains 'input') { throw 'input should be pinned' }
+        if ($before.fixed -notcontains 'master') { throw 'master should be pinned' }
+
+        # Swap two free stages and check it took.
+        $swapped = @($before.order)
+        $a = [Array]::IndexOf($swapped, 'overdrive')
+        $b = [Array]::IndexOf($swapped, 'eq')
+        if ($a -lt 0 -or $b -lt 0) { throw 'overdrive/eq missing from the chain' }
+        $tmp = $swapped[$a]; $swapped[$a] = $swapped[$b]; $swapped[$b] = $tmp
+
+        $body = @{ order = $swapped } | ConvertTo-Json -Compress
+        $after = Invoke-RestMethod -Uri "$baseUrl/api/chain/order" -Method Put `
+            -Body $body -ContentType 'application/json' -TimeoutSec 10
+
+        if ($after.order[$a] -ne 'eq') { throw "swap did not take: $($after.order -join ',')" }
+
+        # Moving a pinned stage must be refused with a real error status, not a
+        # 200 carrying an error body -- which is exactly what used to happen for
+        # any code the server did not have a name for.
+        $moved = @($after.order)
+        $tmp = $moved[0]; $moved[0] = $moved[1]; $moved[1] = $tmp
+
+        $status = 0
+        try {
+            Invoke-RestMethod -Uri "$baseUrl/api/chain/order" -Method Put `
+                -Body (@{ order = $moved } | ConvertTo-Json -Compress) `
+                -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        } catch {
+            if ($_.Exception.PSObject.Properties['Response'] -and $_.Exception.Response) {
+                $status = $_.Exception.Response.StatusCode.value__
+            }
+        }
+
+        if ($status -ne 409) { throw "expected 409 for a pinned move, got $status" }
+
+        # And put it back, so the settings file is left as it was found.
+        Invoke-RestMethod -Uri "$baseUrl/api/chain/order" -Method Put `
+            -Body (@{ order = $before.order } | ConvertTo-Json -Compress) `
+            -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+    }
+
     Check 'The web root cannot be escaped' {
         try {
             Invoke-WebRequest -Uri "$baseUrl/C:/Windows/win.ini" -UseBasicParsing -TimeoutSec 10 | Out-Null

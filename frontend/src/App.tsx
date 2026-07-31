@@ -24,6 +24,7 @@ import {
   getEffects,
   getHistory,
   getModifiers,
+  getChainOrder,
   getPins,
   getPresets,
   getUpdate,
@@ -39,6 +40,7 @@ import {
   setEffectEnabled,
   setParameter,
   setPresetMetadata,
+  setChainOrder,
   subscribeLevels,
   togglePin,
   undoChange,
@@ -49,6 +51,7 @@ import type {
   DevicesResponse,
   EffectDescriptor,
   HistoryState,
+  ChainOrderState,
   Levels,
   PinnedControl,
   PresetMetadata,
@@ -159,6 +162,7 @@ export function App() {
 
   const [modulatedParams, setModulatedParams] = useState<Set<string>>(() => new Set());
   const [pins, setPins] = useState<PinnedControl[]>([]);
+  const [chainOrder, setChain] = useState<ChainOrderState | null>(null);
 
   const refreshEffects = useCallback(async () => {
     const response = await getEffects();
@@ -194,6 +198,40 @@ export function App() {
       /* an engine without /api/pins simply shows no pinned controls */
     }
   }, []);
+
+  // The chain's processing order. The effects listing already arrives in this
+  // order, so the rack and the chain strip need no help drawing it -- this is
+  // only for knowing which stages may move and which are pinned.
+  const refreshChainOrder = useCallback(async () => {
+    try {
+      setChain(await getChainOrder());
+    } catch {
+      /* an engine without /api/chain simply offers no reordering */
+    }
+  }, []);
+
+  const handleMoveStage = useCallback((effectId: string, delta: number) => {
+    void (async () => {
+      try {
+        const current = await getChainOrder();
+        const from = current.order.indexOf(effectId);
+        const to = from + delta;
+
+        if (from < 0 || to < 0 || to >= current.order.length) return;
+
+        const next = [...current.order];
+        next.splice(to, 0, ...next.splice(from, 1));
+
+        setChain(await setChainOrder(next));
+
+        // The rack draws itself from the effects listing, which the engine emits
+        // in chain order -- so refetching it is what makes the cards move.
+        await refreshEffects();
+      } catch {
+        /* the engine refused it -- a pinned stage -- so nothing changes */
+      }
+    })();
+  }, [refreshEffects]);
 
   const handleTogglePin = useCallback((effectId: string, parameterId: string) => {
     void (async () => {
@@ -235,6 +273,7 @@ export function App() {
           refreshPresets(),
           refreshModifiers(),
           refreshPins(),
+          refreshChainOrder(),
         ]);
         if (!cancelled) setConnection('online');
       } catch (error) {
@@ -249,7 +288,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [refreshEffects, refreshDevices, refreshPresets, refreshModifiers, refreshPins]);
+  }, [refreshEffects, refreshDevices, refreshPresets, refreshModifiers, refreshPins, refreshChainOrder]);
 
   const handleModifiersChanged = useCallback(() => {
     void refreshModifiers();
@@ -490,9 +529,12 @@ export function App() {
         // The pins live inside the preset, so this preset's stage screen is a
         // different set of knobs from the last one's.
         await refreshPins();
+        // The order travels inside the preset, so a different preset can be a
+        // different chain.
+        await refreshChainOrder();
         setSelectedPreset(name);
       }, `Preset "${name}" dimuat`),
-    [refreshEffects, refreshPins, withMessage],
+    [refreshEffects, refreshPins, refreshChainOrder, withMessage],
   );
 
   const handlePresetSave = useCallback(
@@ -888,6 +930,13 @@ export function App() {
               modulatedParams={modulatedParams}
               pinnedParams={pinnedParams}
               onTogglePin={handleTogglePin}
+              onMove={chainOrder ? handleMoveStage : undefined}
+              movable={!(chainOrder?.fixed ?? []).includes(effect.id)}
+              canMoveUp={index > 0 && !(chainOrder?.fixed ?? []).includes(rackEffects[index - 1].id)}
+              canMoveDown={
+                index < rackEffects.length - 1 &&
+                !(chainOrder?.fixed ?? []).includes(rackEffects[index + 1].id)
+              }
             />
           ))}
         </div>

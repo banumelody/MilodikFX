@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(MilodikFX VERSION 0.25.0 LANGUAGES CXX)
+project(MilodikFX VERSION 0.26.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -243,6 +243,8 @@ set(MILODIKFX_ENGINE_SOURCES
   src/dsp/DSPChainManager.cpp
   src/dsp/ChainFactory.h
   src/dsp/ChainFactory.cpp
+  src/dsp/ChainOrder.h
+  src/dsp/ChainOrder.cpp
   src/preset/UserPaths.h
   src/preset/PresetManager.h
   src/preset/PresetManager.cpp
@@ -353,6 +355,7 @@ target_sources(MilodikFX
     src/api/ModulationHandler.h
     src/api/LooperHandler.h
     src/api/PinsHandler.h
+    src/api/ChainOrderHandler.h
     src/api/DevicesHandler.h
     src/api/DevicesHandler.cpp
     src/api/ParametersHandler.h
@@ -501,6 +504,7 @@ if(MILODIKFX_BUILD_PLUGIN)
       src/api/RestApiDispatcher.h
       src/api/HealthHandler.h
       src/api/PinsHandler.h
+      src/api/ChainOrderHandler.h
       src/api/ParametersHandler.h
       src/api/ParametersHandler.cpp
       src/api/EffectsHandler.h
@@ -592,6 +596,7 @@ target_sources(MilodikFX_tests
     tests/SceneTests.cpp
     tests/ChannelTests.cpp
     tests/PinTests.cpp
+    tests/ChainOrderTests.cpp
     tests/UndoTests.cpp
     tests/InputTrimTests.cpp
     tests/DriveVoicingTests.cpp

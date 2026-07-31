@@ -96,9 +96,15 @@ Two things that bit when that job was added, both of them PowerShell rather than
   whatever the previous command set, and the step "failed" 150 ms in while pluginval was still
   printing its first test.
 
-The E2E suite is not in CI; it needs a running engine and is run locally. Two concurrent runs against
-one engine will contaminate each other's state — a run that reports 1-3 failures is worth repeating
-alone before believing it.
+The E2E suite is not in CI; it needs a running engine and is run locally. Two things about it:
+
+- **Two concurrent runs against one engine contaminate each other's state.** A run reporting 1-3
+  failures is worth repeating alone before believing it.
+- **It defaults to the Release build, and says how old that build is.** It used to default to Debug,
+  and when no Debug build had been made in over a week it happily ran against the stale one and
+  reported a clean pass for code that was not in it. The script now prints the executable's build
+  time and warns when anything in `src/` or `frontend/dist` is newer than it — a green suite against
+  the wrong binary is worse than a red one, because it reads as evidence.
 
 ## Architecture
 
@@ -128,7 +134,8 @@ Ids are camelCase so they double as settings keys; lookups are case-insensitive 
 ### Signal chain
 
 Built by `milodikfx::dsp::buildGuitarChain` (`src/dsp/ChainFactory.*`), shared by the app and the
-plugin, in this fixed order:
+plugin. This is the order it is *built* in, and the default a preset falls back to — since v0.26 the
+ten middle stages can be reordered (see "Chain order" below):
 
 ```
 InputTrim -> NoiseGate -> CleanBoost -> Compressor -> Overdrive -> EQ -> Contour -> NAM -> Cabinet -> Delay -> Reverb -> MasterOut
@@ -142,6 +149,36 @@ The trim registers as `input.gainDb`, on the same card as the app-only `input.mo
 Each processor derives from `AudioProcessorBase` (`prepareToPlay`/`processBlock`/`reset`) and holds its
 parameters as `std::atomic`. `MasterOut` is the only stage that can attenuate, and it carries the
 safety limiter plus a final clamp — **no stage may be added after it**.
+
+#### Chain order
+
+The order the chain runs in is a **value**, not a rearrangement of the processors: the objects are
+built once and never move. A permutation of up to sixteen stages packs into four bits each, so the
+whole order lives in one `std::atomic<uint64_t>` on `DSPChainManager`. The control thread stores a
+new packing; the audio thread loads it **once** at the top of a block and uses it for that whole
+block. A single 64-bit load either sees the old order or the new one, never half of each, and
+nothing allocates on either side.
+
+Two stages are pinned, and neither is a matter of taste:
+
+- **`input` stays first.** The input meter reports what the chain receives as `inputDb + trimDb`
+  rather than measuring a second time — arithmetic that is only true while the trim is first.
+- **`master` stays last.** It carries the safety limiter and the final clamp.
+
+`DSPChainManager::setOrder` enforces both, so the rule lives in the engine rather than being trusted
+to callers. A reorder is audible as a small discontinuity and that is accepted rather than hidden:
+the processors are stateful, so running the old and new orders together to crossfade would advance
+delay lines and filter memory twice. This is an editing gesture, not a performance one.
+
+Everything above the engine speaks **effect ids**, never indices — `milodikfx::dsp::ChainOrder`
+(`src/dsp/ChainOrder.*`) translates. An id survives a version change; an index does not. `applyIds`
+is forgiving in both directions because a preset outlives the build that wrote it: unknown ids are
+ignored, and stages the list never mentions are put back at their build position rather than dropped.
+
+`/api/chain/order` (GET/PUT). The order persists in the preset (schema 6), in the settings file, and
+in the plugin's state blob. **`EffectsHandler` emits the effects in chain order**, which is what makes
+a reorder appear in the rack and the chain strip at once — neither component knows the order exists,
+they just draw the array they are given.
 
 #### What each stage does with two channels
 

@@ -146,6 +146,16 @@ HttpHandler::Response PresetsHandler::handlePost (const std::string& path, const
             if (pinnedControls != nullptr)
                 document.pins = pinnedControls->toVar();
 
+            if (chainOrder != nullptr)
+            {
+                juce::Array<juce::var> ids;
+
+                for (const auto& id : chainOrder->getIds())
+                    ids.add (juce::String (id));
+
+                document.chainOrder = juce::var (ids);
+            }
+
             if (! presetManager.saveDocument (name, document))
                 return jsonError (500, "Failed to write the preset file");
 
@@ -191,6 +201,26 @@ HttpHandler::Response PresetsHandler::handlePost (const std::string& path, const
                     channelStore->fromVar (document.channels);
                 else
                     channelStore->resetToCurrent();
+            }
+
+            if (chainOrder != nullptr)
+            {
+                // A file written before the order was storable says nothing about
+                // it, and the chain returns to how it was built rather than
+                // keeping the previous preset's arrangement.
+                if (const auto* ids = document.chainOrder.getArray())
+                {
+                    std::vector<std::string> order;
+
+                    for (const auto& item : *ids)
+                        order.push_back (item.toString().toStdString());
+
+                    chainOrder->applyIds (order);
+                }
+                else
+                {
+                    chainOrder->reset();
+                }
             }
 
             if (pinnedControls != nullptr)

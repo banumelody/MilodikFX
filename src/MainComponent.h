@@ -24,6 +24,7 @@
 #include "dsp/ModulationEngine.h"
 #include "midi/MidiController.h"
 #include "preset/IrLibrary.h"
+#include "dsp/ChainOrder.h"
 #include "preset/PinnedControls.h"
 #include "preset/PresetManager.h"
 #include "preset/UserPaths.h"
@@ -78,6 +79,7 @@ private:
     static constexpr const char* kKeyScenes = "ui.scenes";
     static constexpr const char* kKeyChannels = "ui.channels";
     static constexpr const char* kKeyPins = "ui.pins";
+    static constexpr const char* kKeyChainOrder = "dsp.chainOrder";
     static constexpr const char* kKeyLooperLevel = "looper.level";
 
     void buildChain();
@@ -131,6 +133,9 @@ private:
     milodikfx::preset::SceneManager sceneManager { registry };
     milodikfx::preset::ChannelStore channelStore { registry };
     milodikfx::preset::PinnedControls pinnedControls;
+
+    // Built after the chain: it needs the processor list to map ids to indices.
+    std::unique_ptr<milodikfx::dsp::ChainOrder> chainOrder;
     milodikfx::api::UndoHistory undoHistory { registry };
 
     juce::AudioDeviceManager deviceManager;

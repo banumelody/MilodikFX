@@ -532,3 +532,67 @@ describe('EffectRack pins', () => {
     expect(pin).toHaveAttribute('aria-pressed', 'true');
   });
 });
+
+describe('EffectRack chain order', () => {
+  it('shows no move controls when the engine does not support reordering', () => {
+    renderRack(overdrive);
+
+    expect(screen.queryByRole('button', { name: /Pindahkan/ })).not.toBeInTheDocument();
+  });
+
+  it('moves a stage earlier and later in the chain', () => {
+    const onMove = vi.fn();
+
+    render(
+      <EffectRack
+        effect={overdrive}
+        onParameterChange={vi.fn()}
+        onEnabledChange={vi.fn()}
+        onMove={onMove}
+        canMoveUp
+        canMoveDown
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /lebih awal di rantai/ }));
+    expect(onMove).toHaveBeenCalledWith('overdrive', -1);
+
+    fireEvent.click(screen.getByRole('button', { name: /lebih akhir di rantai/ }));
+    expect(onMove).toHaveBeenCalledWith('overdrive', 1);
+  });
+
+  it('disables the arrow that would move it past the end', () => {
+    render(
+      <EffectRack
+        effect={overdrive}
+        onParameterChange={vi.fn()}
+        onEnabledChange={vi.fn()}
+        onMove={vi.fn()}
+        canMoveUp={false}
+        canMoveDown
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: /lebih awal di rantai/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /lebih akhir di rantai/ })).toBeEnabled();
+  });
+
+  it('locks a pinned stage and says why rather than just greying it out', () => {
+    // The master stage carries the safety limiter, so nothing may follow it.
+    // A control that is merely disabled invites the question; this answers it.
+    render(
+      <EffectRack
+        effect={{ ...overdrive, id: 'master', label: 'Master' }}
+        onParameterChange={vi.fn()}
+        onEnabledChange={vi.fn()}
+        onMove={vi.fn()}
+        movable={false}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: /Pindahkan/ })).not.toBeInTheDocument();
+
+    const locked = screen.getByLabelText('Posisi terkunci');
+    expect(locked).toHaveAttribute('title', expect.stringContaining('limiter pengaman'));
+  });
+});

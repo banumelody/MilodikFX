@@ -5,6 +5,7 @@
 #include "api/ModulationHandler.h"
 #include "api/LooperHandler.h"
 #include "api/PinsHandler.h"
+#include "api/ChainOrderHandler.h"
 
 #if MILODIKFX_EMBED_PRESETS
  #include "MilodikFXPresetData.h"
@@ -98,6 +99,10 @@ MainComponent::MainComponent (juce::PropertiesFile& settingsFileToUse)
     inputMode.store (juce::jlimit (0, 3, settingsFile.getIntValue (kKeyInputMode, (int) InputMode::monoLeft)));
 
     buildChain();
+
+    // Needs the built chain to map effect ids onto processor indices.
+    chainOrder = std::make_unique<milodikfx::dsp::ChainOrder> (chainProcessors, audioEngine.getChain());
+
     buildRegistry();
     installDefaultPresets();
 
@@ -571,6 +576,32 @@ void MainComponent::loadSettingsIntoRegistry()
         channelStore.resetToCurrent();
     }
 
+    // The chain's processing order comes back the same way: it belongs to a
+    // preset, with a settings copy so the chain returns as it was left even when
+    // nothing was loaded.
+    if (chainOrder != nullptr)
+    {
+        const auto storedOrder = settingsFile.getValue (kKeyChainOrder, {});
+
+        if (storedOrder.isNotEmpty())
+        {
+            juce::var parsed;
+
+            if (juce::JSON::parse (storedOrder, parsed).wasOk())
+            {
+                if (const auto* array = parsed.getArray())
+                {
+                    std::vector<std::string> ids;
+
+                    for (const auto& item : *array)
+                        ids.push_back (item.toString().toStdString());
+
+                    chainOrder->applyIds (ids);
+                }
+            }
+        }
+    }
+
     // Pinned Perform knobs follow the same pattern again: they belong to a
     // preset, with a settings copy so the stage screen returns as left.
     const auto storedPins = settingsFile.getValue (kKeyPins, {});
@@ -703,6 +734,16 @@ void MainComponent::saveSettingsIfNeeded (bool force)
     settingsFile.setValue (kKeyChannels, juce::JSON::toString (channelStore.toVar(), true));
     settingsFile.setValue (kKeyPins, juce::JSON::toString (pinnedControls.toVar(), true));
 
+    if (chainOrder != nullptr)
+    {
+        juce::Array<juce::var> ids;
+
+        for (const auto& id : chainOrder->getIds())
+            ids.add (juce::String (id));
+
+        settingsFile.setValue (kKeyChainOrder, juce::JSON::toString (juce::var (ids), true));
+    }
+
     if (looperProcessor != nullptr)
         settingsFile.setValue (kKeyLooperLevel, (double) looperProcessor->getLevelPercent());
 
@@ -786,6 +827,7 @@ void MainComponent::startServer()
     presetsHandler->setSceneManager (&sceneManager);
     presetsHandler->setChannelStore (&channelStore);
     presetsHandler->setPinnedControls (&pinnedControls);
+    presetsHandler->setChainOrder (chainOrder.get());
     presetsHandler->setSelectedName (settingsFile.getValue (kKeyPresetSelectedName, {}));
     presetsHandler->onSelectionChanged = [this] (const juce::String&) { markSettingsDirty(); };
 
@@ -798,6 +840,12 @@ void MainComponent::startServer()
 
     auto effectsHandler = std::make_shared<EffectsHandler> (registry);
     effectsHandler->setChannelStore (&channelStore);
+
+    // Emitting the effects in the order they actually run is what makes a
+    // reorder appear in the rack and the chain strip at once: neither component
+    // knows the order is a thing, they just draw the array they are given.
+    if (chainOrder != nullptr)
+        effectsHandler->setOrderProvider ([this] { return chainOrder->getIds(); });
 
     webServer->registerApiHandler ("/api/devices", std::make_shared<DevicesHandler> (deviceController));
     webServer->registerApiHandler ("/api/parameters",
@@ -823,6 +871,20 @@ void MainComponent::startServer()
     auto pinsHandler = std::make_shared<PinsHandler> (pinnedControls, registry);
     pinsHandler->onChanged = [this] { markSettingsDirty(); };
     webServer->registerApiHandler ("/api/pins", pinsHandler);
+
+    if (chainOrder != nullptr)
+    {
+        auto chainHandler = std::make_shared<ChainOrderHandler> (*chainOrder);
+        chainHandler->onChanged = [this]
+        {
+            markSettingsDirty();
+
+            // The rack and the chain strip are drawn from the effects listing,
+            // so a reorder is a change every open client has to hear about.
+            bumpChainVersion();
+        };
+        webServer->registerApiHandler ("/api/chain", chainHandler);
+    }
 
     auto historyHandler = std::make_shared<HistoryHandler> (undoHistory, registry);
     historyHandler->onChanged = [this] { markSettingsDirty(); };

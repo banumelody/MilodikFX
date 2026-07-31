@@ -1920,6 +1920,62 @@ input[type='text']:disabled {
   color: var(--accent);
 }
 
+/* ------------------------------------------------------ Chain reorder
+   The arrows sit at the far left of the card header so the rack reads as one
+   column of positions rather than a control buried inside each card. */
+.rack__move {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-right: 12px;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  padding-top: 2px;
+}
+
+.rack__move-btn {
+  width: 22px;
+  height: 18px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  line-height: 1;
+  border: 1px solid var(--line, #232833);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-dim, #9aa3b2);
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.rack__move-btn:hover:not(:disabled) {
+  color: var(--text, #e6e9ef);
+  border-color: var(--accent);
+}
+
+.rack__move-btn:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+/* Explained rather than merely absent: a pinned stage is pinned for a reason,
+   and the tooltip says which. */
+.rack__move-locked {
+  width: 22px;
+  height: 39px;
+  display: grid;
+  place-items: center;
+  color: var(--text-faint, #6d7685);
+}
+
+.rack__move-locked svg {
+  width: 12px;
+  height: 12px;
+}
+
 /* ------------------------------------------------- Pinned controls
    The pin button stays out of the way until the knob is hovered or the pin is
    already set -- a rack of forty knobs each wearing a permanent badge would be
