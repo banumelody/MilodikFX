@@ -151,3 +151,44 @@ describe('Knob', () => {
     expect(dial).toHaveAttribute('tabindex', '-1');
   });
 });
+
+describe('Knob material', () => {
+  it('carries a cap layer for the material treatment', () => {
+    const { container } = render(<Knob value={50} onChange={vi.fn()} label="Drive" />);
+
+    // A CSS layer rather than SVG <defs>: there are twenty-six effects' worth
+    // of knobs on screen and a gradient id per instance would be waste.
+    expect(container.querySelector('.knob__cap')).toBeInTheDocument();
+  });
+
+  it('drops the treatment when asked to be plain', () => {
+    const { container } = render(
+      <Knob value={50} onChange={vi.fn()} label="Drive" plain />,
+    );
+
+    // Perform view has to be read from two metres in bad light. It uses this
+    // same component, so the opt-out has to be explicit -- and asserted, or it
+    // is one refactor away from silently inheriting the texture.
+    expect(container.querySelector('.knob--plain')).toBeInTheDocument();
+  });
+
+  it('is not plain unless asked', () => {
+    const { container } = render(<Knob value={50} onChange={vi.fn()} label="Drive" />);
+
+    expect(container.querySelector('.knob--plain')).not.toBeInTheDocument();
+  });
+
+  it('keeps every accessible attribute through the restyle', () => {
+    // This is paint, not a change of control. If any of these moved, the
+    // keyboard and screen-reader paths would have been traded for a highlight.
+    render(<Knob value={25} min={0} max={100} onChange={vi.fn()} label="Drive" unit="%" />);
+
+    const dial = screen.getByRole('slider', { name: 'Drive' });
+    expect(dial).toHaveAttribute('aria-valuemin', '0');
+    expect(dial).toHaveAttribute('aria-valuemax', '100');
+    expect(dial).toHaveAttribute('aria-valuenow', '25');
+    expect(dial).toHaveAttribute('aria-valuetext', '25 %');
+    expect(dial).toHaveAttribute('aria-disabled', 'false');
+    expect(dial).toHaveAttribute('tabindex', '0');
+  });
+});

@@ -156,6 +156,13 @@ ten middle stages can be reordered (see "Chain order" below):
 InputTrim -> NoiseGate -> CleanBoost -> Compressor -> Overdrive -> EQ -> Contour -> NAM -> Cabinet -> Delay -> Reverb -> MasterOut
 ```
 
+**The input trim is per channel, linked by default.** With two sources on two jacks, a single
+figure can only ever match one of them to the chain -- which is exactly the job the trim exists to
+do. `input.trimLink` defaults to on, so a mono rig and every preset written before v0.32 behave
+identically; `input.gainDbR` is remembered while linked, so unlinking restores what was dialled
+rather than snapping the right channel to the left. The meter arithmetic follows: it asks
+`getEffectiveGainDb(channel)` rather than reading one figure and adding it twice.
+
 `InputTrim` is ahead of the gate on purpose: with it in front, the gate threshold stays correct
 relative to the signal, so swapping guitars means re-dialling one knob rather than two. That ordering
 is also why `CleanBoost` cannot double as a trim — it can only add gain, and it sits behind the gate.
@@ -209,6 +216,26 @@ release and the rack redraws from what it answers, so a refusal leaves everythin
 no local state to unwind. Card rects are measured once at drag start (nothing reflows mid-drag) and
 hit-tested via `data-chain-stage`. A keyboard path runs alongside rather than behind it — Enter lifts,
 arrows move, Enter drops, Escape cancels — and the ↑▼ buttons stay as the plain fallback.
+
+#### Metering
+
+Per channel since v0.32. `LevelsHandler` keeps the combined fields -- they hold the **maximum** of
+the two sides -- and adds `inputLevelL/R`, `chainInputLevelL/R`, `outputLevelL/R`, so a client that
+never asked for channels (including `tests/smoke.ps1`) is unaffected.
+
+The finding that prompted it: `view.getMagnitude (0, samples)` is the **all-channels** overload, so
+the single figure was always the louder side and the quieter one was invisible rather than merely
+un-itemised. Since pan per path, the stereo cabinet mode and the L/R split, the two genuinely
+differ.
+
+Two things deliberately unchanged. `modulationEngine.process` still takes the combined magnitude --
+an envelope follower that suddenly tracked one channel would change every auto-wah. And **Perform
+view stays one bar**: it has its own `BigMeter`, and on stage the question is "is there signal and
+is it clipping", not channel balance, which is a setting-up question answered in Edit.
+
+`LevelMeter` draws two thin lanes in the same total height as one thick bar, so nothing below moves.
+Both lanes run `usePeakHold` -- one hook, called twice -- because two copies of the ballistics would
+drift apart and two sides of one signal drifting on screen reads as a bug in the audio.
 
 #### Duplicate blocks (the inventory)
 
@@ -791,6 +818,18 @@ and a large tuner that replaces the scene grid when on. Its keys (1–4 scenes, 
 scoped to when it is mounted; Esc (mute) and B (bypass) stay global in `App`. The heavy children are
 `memo`ised and `App`'s callbacks are `useCallback`-stable, so the ~22 Hz meter stream does not re-render
 the rack — the components take the same props across a meter frame.
+
+**Material, not illustration.** Cards read as enclosures (a hairline bevel, a faint brushed
+texture, a corner screw, a shadow they sit in) and knobs have a turned cap with a specular
+highlight -- all shared CSS, so twenty-six effects gain at once and the twenty-seventh costs
+nothing. Only **Cabinet** and **Amp (NAM)** get real surfaces, because both are single and neither
+changes shape with any parameter; an overdrive with twelve voicings could only be drawn as a lie
+about which one is selected. Drawn with gradients rather than bitmaps so they scale with the plugin
+window, and carrying no brand, logo or enclosure shape belonging to anyone.
+
+**Perform view opts out** via `Knob`'s `plain` prop. It shares the component, so the opt-out is a
+prop and an assertion rather than a hope -- that screen has to be read from two metres in bad light
+and a highlight costs contrast there for nothing.
 
 The UI is generated from the registry, so it cannot drift from the engine. Knob interaction is a
 **relative vertical drag** from the press point (shift = fine, wheel, double-click to default, full

@@ -18,6 +18,15 @@ export interface LevelMeterProps {
    * so the warning has to come from the untrimmed figure.
    */
   sourceDb?: number;
+  /**
+   * Per-channel levels, when the two sides can differ.
+   *
+   * `db` stays the combined figure and keeps driving the readout state and the
+   * accessible value; these only split the bar in two. Omitted for a meter that
+   * has no channels to speak of -- the compressor's gain reduction, say.
+   */
+  dbL?: number;
+  dbR?: number;
 }
 
 /** How long a peak marker stays before it starts falling, in ms. */
@@ -33,23 +42,14 @@ const PEAK_FALL_DB_PER_SEC = 20;
  * idle noise floor around -77 dB already drew a fifth of the bar, so the meter
  * looked busy in silence and squeezed the range that matters into the far right.
  */
-export function LevelMeter({
-  label,
-  db,
-  silenceDb = -65,
-  floorDb = -60,
-  ceilingDb = 6,
-  sourceDb,
-}: LevelMeterProps) {
-  const span = ceilingDb - floorDb;
-  const clamped = Math.min(ceilingDb, Math.max(floorDb, db));
-  const ratio = (clamped - floorDb) / span;
-
-  const zeroRatio = (0 - floorDb) / span;
-  const sourceClipping = sourceDb !== undefined && sourceDb > -0.5;
-  const isHot = db > -1 || sourceClipping;
-  const isLoud = db > -12;
-
+/**
+ * Peak hold and fall for one channel.
+ *
+ * Extracted so both bars of a stereo meter run the identical ballistics. Two
+ * copies of this logic would drift apart the moment either was touched, and two
+ * sides of the same signal drifting on screen reads as a bug in the audio.
+ */
+function usePeakHold(db: number, floorDb: number) {
   const [peakDb, setPeakDb] = useState(floorDb);
   const peakRef = useRef({ value: floorDb, heldSince: 0 });
 
@@ -74,9 +74,49 @@ export function LevelMeter({
     setPeakDb(fallen);
   }, [db]);
 
+  return peakDb;
+}
+
+export function LevelMeter({
+  label,
+  db,
+  silenceDb = -65,
+  floorDb = -60,
+  ceilingDb = 6,
+  sourceDb,
+  dbL,
+  dbR,
+}: LevelMeterProps) {
+  const span = ceilingDb - floorDb;
+  const clamped = Math.min(ceilingDb, Math.max(floorDb, db));
+  const ratio = (clamped - floorDb) / span;
+
+  const zeroRatio = (0 - floorDb) / span;
+  const sourceClipping = sourceDb !== undefined && sourceDb > -0.5;
+  const isHot = db > -1 || sourceClipping;
+  const isLoud = db > -12;
+
+  // Always called, hooks being hooks; the per-channel pair is simply unused
+  // when the caller has no channels to report.
+  const peakDb = usePeakHold(db, floorDb);
+  const peakL = usePeakHold(dbL ?? db, floorDb);
+  const peakR = usePeakHold(dbR ?? db, floorDb);
+
+  const stereo = dbL !== undefined && dbR !== undefined;
+
   // "CLIP" wins over the number: a trimmed-down reading looks perfectly healthy
   // and would hide the one problem the trim cannot solve.
-  const readout = sourceClipping ? 'CLIP' : db <= silenceDb ? '--' : `${db.toFixed(1)} dB`;
+  const oneReading = (value: number) => (value <= silenceDb ? '--' : value.toFixed(1));
+
+  const readout = sourceClipping
+    ? 'CLIP'
+    : stereo
+      ? db <= silenceDb
+        ? '--'
+        : `${oneReading(dbL)} / ${oneReading(dbR)} dB`
+      : db <= silenceDb
+        ? '--'
+        : `${db.toFixed(1)} dB`;
   const peakRatio = (Math.min(ceilingDb, Math.max(floorDb, peakDb)) - floorDb) / span;
   const showPeak = peakDb > silenceDb;
 
@@ -87,7 +127,7 @@ export function LevelMeter({
         <span className={`meter__value${isHot ? ' meter__value--hot' : ''}`}>{readout}</span>
       </div>
       <div
-        className="meter__track"
+        className={`meter__track${stereo ? ' meter__track--split' : ''}`}
         role="meter"
         aria-label={label}
         aria-valuemin={floorDb}
@@ -95,17 +135,54 @@ export function LevelMeter({
         aria-valuenow={Number(clamped.toFixed(1))}
         aria-valuetext={readout}
       >
-        <div
-          className={`meter__fill${isHot ? ' meter__fill--hot' : isLoud ? ' meter__fill--loud' : ''}`}
-          style={{ width: `${ratio * 100}%` }}
-        />
-        <div className="meter__zero" style={{ left: `${zeroRatio * 100}%` }} />
-        {showPeak ? (
-          <div
-            className={`meter__peak${peakDb > -1 ? ' meter__peak--hot' : ''}`}
-            style={{ left: `${peakRatio * 100}%` }}
-          />
-        ) : null}
+        {stereo ? (
+          // Two thin bars in the same total height as one thick one, so nothing
+          // below has to move. The channel tags sit inside the bar rather than
+          // beside it, for the same reason.
+          ([
+            ['L', dbL, peakL],
+            ['R', dbR, peakR],
+          ] as const).map(([side, value, peak]) => {
+            const held = Math.min(ceilingDb, Math.max(floorDb, value));
+
+            return (
+              <div className="meter__lane" key={side}>
+                <span className="meter__side" aria-hidden="true">
+                  {side}
+                </span>
+                <div
+                  className={`meter__fill${
+                    value > -1 ? ' meter__fill--hot' : value > -12 ? ' meter__fill--loud' : ''
+                  }`}
+                  style={{ width: `${((held - floorDb) / span) * 100}%` }}
+                />
+                <div className="meter__zero" style={{ left: `${zeroRatio * 100}%` }} />
+                {peak > silenceDb ? (
+                  <div
+                    className={`meter__peak${peak > -1 ? ' meter__peak--hot' : ''}`}
+                    style={{
+                      left: `${((Math.min(ceilingDb, Math.max(floorDb, peak)) - floorDb) / span) * 100}%`,
+                    }}
+                  />
+                ) : null}
+              </div>
+            );
+          })
+        ) : (
+          <>
+            <div
+              className={`meter__fill${isHot ? ' meter__fill--hot' : isLoud ? ' meter__fill--loud' : ''}`}
+              style={{ width: `${ratio * 100}%` }}
+            />
+            <div className="meter__zero" style={{ left: `${zeroRatio * 100}%` }} />
+            {showPeak ? (
+              <div
+                className={`meter__peak${peakDb > -1 ? ' meter__peak--hot' : ''}`}
+                style={{ left: `${peakRatio * 100}%` }}
+              />
+            ) : null}
+          </>
+        )}
       </div>
     </div>
   );

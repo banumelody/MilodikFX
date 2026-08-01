@@ -425,11 +425,22 @@ void MilodikFXAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     // Plain relaxed stores; nothing here blocks or allocates.
     if (auto* levels = meters.load (std::memory_order_relaxed))
     {
-        const auto outputPeak = buffer.getMagnitude (0, numSamples);
+        // Per channel: the two sides can differ once anything pans, and the
+        // combined figure is the louder one, so a single bar hides the quieter.
+        const auto channels = buffer.getNumChannels();
+        const auto peakOf = [&buffer, numSamples, channels] (int channel)
+        {
+            return buffer.getMagnitude (juce::jmin (channel, channels - 1), 0, numSamples);
+        };
 
-        levels->updateLevels (juce::Decibels::gainToDecibels (inputPeak, kMeterFloorDb),
-                              juce::Decibels::gainToDecibels (inputPeak, kMeterFloorDb),
-                              juce::Decibels::gainToDecibels (outputPeak, kMeterFloorDb));
+        const auto inputDb = juce::Decibels::gainToDecibels (inputPeak, kMeterFloorDb);
+
+        levels->updateLevels (inputDb,
+                              inputDb,
+                              inputDb,
+                              inputDb,
+                              juce::Decibels::gainToDecibels (peakOf (0), kMeterFloorDb),
+                              juce::Decibels::gainToDecibels (peakOf (1), kMeterFloorDb));
 
         levels->updateGainReduction (chain.noiseGate != nullptr ? chain.noiseGate->getCurrentGain() : 1.0f,
                                      chain.compressor != nullptr ? chain.compressor->getGainReductionDb() : 0.0f,

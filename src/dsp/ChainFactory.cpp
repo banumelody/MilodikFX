@@ -344,12 +344,29 @@ void registerLayer (milodikfx::api::ParameterRegistry& registry,
         e.setEnabled = nullptr; // always in the path; nothing to bypass
 
         if (auto* p = chain.inputTrim)
+        {
             e.parameters.push_back (makeParam ("gainDb", "Gain", "dB",
                                                InputTrimProcessor::kMinDb,
                                                InputTrimProcessor::kMaxDb,
                                                0.1f, 0.0f,
                                                [p] { return p->getGainDb(); },
                                                [p] (float v) { p->setGainDb (v); }));
+
+            // Two jacks means two sources, and matching one of them to the chain
+            // is what this stage is for -- so a single figure can only ever get
+            // one of them right. Linked by default, which is what a mono rig and
+            // every preset written before this already assume.
+            e.parameters.push_back (makeToggle ("trimLink", "Kaitkan L/R", true,
+                                                [p] { return p->isLinked(); },
+                                                [p] (bool v) { p->setLinked (v); }));
+
+            e.parameters.push_back (makeParam ("gainDbR", "Gain R", "dB",
+                                               InputTrimProcessor::kMinDb,
+                                               InputTrimProcessor::kMaxDb,
+                                               0.1f, 0.0f,
+                                               [p] { return p->getGainDbR(); },
+                                               [p] (float v) { p->setGainDbR (v); }));
+        }
 
         if (getInputMode && setInputMode)
             e.parameters.push_back (makeParam ("mode", "Mode", "", 0.0f, 3.0f, 1.0f, 0.0f,

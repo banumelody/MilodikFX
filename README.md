@@ -136,6 +136,12 @@ sendiri, lalu ikut hilang saat Splitter dibuang. Input dan Master tidak bisa dib
 Setelah update, board-mu tetap utuh: preset dan settings yang ditulis sebelum v0.30 tidak menyebut
 board sama sekali, dan itu dibaca sebagai **semua blok terpasang**.
 
+**Meter menampilkan L dan R terpisah**, di input maupun output — berguna begitu kedua sisi
+benar-benar bisa berbeda (pan per jalur, Cabinet stereo, mode split L/R). Di input itu langsung
+memperlihatkan sumber mana yang jauh lebih panas sebelum kamu menyetel apa pun. **Gain input juga
+bisa dilepas kaitannya** supaya tiap kanal punya trim sendiri; secara default terkait, jadi rig mono
+dan preset lama berperilaku sama persis.
+
 **Gitar dua jack** (mis. pickup magnetik + piezo): pilih port fisik untuk kanal L dan R di panel
 Audio Device, lalu pakai mode split **L/R** — kanal L ke jalur A, kanal R ke jalur B. Hasilnya dua
 chain penuh dengan kenop masing-masing, digabung di Mixer. Stereo saja tidak cukup untuk ini: satu
@@ -145,6 +151,11 @@ untuk dua pickup yang saling meniadakan sebagian saat diblend.
 
 Pemilihan port melekat pada **perangkat**, bukan preset — ia menggambarkan kabel di rig, jadi preset
 tetap bermakna di interface lain.
+
+Tampilannya **material, bukan ilustrasi**: kartu terbaca sebagai enclosure dan kenopnya terasa
+seperti benda yang diputar — semuanya CSS bersama, jadi blok baru tidak menagih gambar apa pun.
+Hanya **Cabinet** dan **Amp** yang punya permukaan sungguhan, karena keduanya tunggal dan wujudnya
+tidak berubah menurut parameter. Perform view sengaja tetap polos supaya terbaca dari jauh.
 
 Fitur kontrol ala rig panggung: **channel A/B/C/D** per efek (empat sound bernama tiap blok), **scene**
 4 slot yang membawa channel tiap efek, **Perform view** (layar besar untuk manggung — tombol scene

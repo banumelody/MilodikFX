@@ -31,9 +31,35 @@ public:
      */
     void updateLevels (float inputDb, float chainInputDb, float outputDb) noexcept
     {
-        inputLevel.store (inputDb, std::memory_order_relaxed);
-        chainInputLevel.store (chainInputDb, std::memory_order_relaxed);
-        outputLevel.store (outputDb, std::memory_order_relaxed);
+        updateLevels (inputDb, inputDb, chainInputDb, chainInputDb, outputDb, outputDb);
+    }
+
+    /**
+     * Per channel, since the two sides can genuinely differ.
+     *
+     * They could not before v0.28: everything was mono and duplicated, so two
+     * bars would have moved together forever. Pan per path, the stereo cabinet
+     * mode and the L/R split changed that -- and the single figure is the
+     * *louder* of the two, so the quieter side is currently invisible rather
+     * than merely un-itemised.
+     *
+     * The combined fields stay, holding the maximum, so a client that never
+     * asked for channels keeps working unchanged.
+     */
+    void updateLevels (float inputL, float inputR,
+                       float chainInputL, float chainInputR,
+                       float outputL, float outputR) noexcept
+    {
+        inputLevelL.store (inputL, std::memory_order_relaxed);
+        inputLevelR.store (inputR, std::memory_order_relaxed);
+        chainInputLevelL.store (chainInputL, std::memory_order_relaxed);
+        chainInputLevelR.store (chainInputR, std::memory_order_relaxed);
+        outputLevelL.store (outputL, std::memory_order_relaxed);
+        outputLevelR.store (outputR, std::memory_order_relaxed);
+
+        inputLevel.store (juce::jmax (inputL, inputR), std::memory_order_relaxed);
+        chainInputLevel.store (juce::jmax (chainInputL, chainInputR), std::memory_order_relaxed);
+        outputLevel.store (juce::jmax (outputL, outputR), std::memory_order_relaxed);
     }
 
     void updateGainReduction (float gateGainValue, float compressorDb, float limiterDb) noexcept
@@ -101,6 +127,13 @@ private:
     std::atomic<float> inputLevel { kFloorDb };
     std::atomic<float> chainInputLevel { kFloorDb };
     std::atomic<float> outputLevel { kFloorDb };
+
+    std::atomic<float> inputLevelL { kFloorDb };
+    std::atomic<float> inputLevelR { kFloorDb };
+    std::atomic<float> chainInputLevelL { kFloorDb };
+    std::atomic<float> chainInputLevelR { kFloorDb };
+    std::atomic<float> outputLevelL { kFloorDb };
+    std::atomic<float> outputLevelR { kFloorDb };
     std::atomic<float> gateGain { 1.0f };
     std::atomic<float> compressorReductionDb { 0.0f };
     std::atomic<float> limiterReductionDb { 0.0f };

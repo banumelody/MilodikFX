@@ -905,9 +905,16 @@ export function App() {
           <LevelMeter
             label="Input"
             db={levels.chainInputLevel}
+            dbL={levels.chainInputLevelL}
+            dbR={levels.chainInputLevelR}
             sourceDb={levels.inputLevel}
           />
-          <LevelMeter label="Output" db={levels.outputLevel} />
+          <LevelMeter
+            label="Output"
+            db={levels.outputLevel}
+            dbL={levels.outputLevelL}
+            dbR={levels.outputLevelR}
+          />
           <ReductionMeter label="Comp" db={levels.compressorReductionDb} />
           <ReductionMeter label="Limiter" db={levels.limiterReductionDb} />
         </div>

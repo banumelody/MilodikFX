@@ -12,6 +12,14 @@ HttpHandler::Response LevelsHandler::handleGet (const std::string&, const std::s
     object->setProperty ("inputLevel", inputLevel.load (std::memory_order_relaxed));
     object->setProperty ("chainInputLevel", chainInputLevel.load (std::memory_order_relaxed));
     object->setProperty ("outputLevel", outputLevel.load (std::memory_order_relaxed));
+
+    // Per channel alongside the combined figures, never instead of them.
+    object->setProperty ("inputLevelL", inputLevelL.load (std::memory_order_relaxed));
+    object->setProperty ("inputLevelR", inputLevelR.load (std::memory_order_relaxed));
+    object->setProperty ("chainInputLevelL", chainInputLevelL.load (std::memory_order_relaxed));
+    object->setProperty ("chainInputLevelR", chainInputLevelR.load (std::memory_order_relaxed));
+    object->setProperty ("outputLevelL", outputLevelL.load (std::memory_order_relaxed));
+    object->setProperty ("outputLevelR", outputLevelR.load (std::memory_order_relaxed));
     object->setProperty ("gateGain", gateGain.load (std::memory_order_relaxed));
     object->setProperty ("compressorReductionDb", compressorReductionDb.load (std::memory_order_relaxed));
     object->setProperty ("limiterReductionDb", limiterReductionDb.load (std::memory_order_relaxed));

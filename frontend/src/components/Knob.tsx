@@ -9,6 +9,14 @@ export interface KnobProps {
   step?: number;
   defaultValue?: number;
   size?: number;
+  /**
+   * Drops the material treatment.
+   *
+   * Perform view has to be read from two metres in bad light, and a specular
+   * highlight costs contrast there for nothing. It uses this same component, so
+   * the opt-out is a prop rather than a hope.
+   */
+  plain?: boolean;
   label?: string;
   unit?: string;
   accent?: string;
@@ -53,6 +61,7 @@ function KnobBase({
   step = 1,
   defaultValue,
   size = 76,
+  plain = false,
   label,
   unit = '',
   accent = '#4da3ff',
@@ -183,7 +192,9 @@ function KnobBase({
   const indicatorInner = polar(centre, centre, radius - 21, angle);
 
   return (
-    <div className={`knob${disabled ? ' knob--disabled' : ''}`}>
+    <div
+      className={`knob${disabled ? ' knob--disabled' : ''}${plain ? ' knob--plain' : ''}`}
+    >
       <div
         className={`knob__dial${dragging ? ' knob__dial--active' : ''}`}
         role="slider"
@@ -200,6 +211,10 @@ function KnobBase({
         onKeyDown={onKeyDown}
         style={{ width: size, height: size, touchAction: 'none' }}
       >
+        {/* The cap, as a CSS layer behind the SVG. Doing it in CSS rather than
+            with SVG <defs> avoids a gradient id per instance -- and there are
+            twenty-six effects' worth of knobs on screen. */}
+        <span className="knob__cap" aria-hidden="true" />
         <svg width={size} height={size} aria-hidden="true">
           <circle className="knob__body" cx={centre} cy={centre} r={radius - 5} />
           <path

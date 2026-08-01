@@ -26,7 +26,7 @@ tidak. Sejak v0.30/v0.31, MilodikFX jelas di kubu kedua.
 
 ```mermaid
 flowchart LR
-    A["v0.32<br/>Meter per kanal<br/>informasi, bukan hiasan"] --> B["v0.33<br/>Material<br/>kenop, kartu, kabel"]
+    A["v0.32<br/>Meter per kanal<br/>informasi, bukan hiasan"] --> B["v0.33<br/>Material<br/>kenop dan kartu"]
     B --> C["v0.34<br/>Cabinet & Amp<br/>dua gambar sungguhan"]
     A -.->|"butuh kerja engine"| A
     C -.->|"butuh keputusan: siapa yang menggambar"| C
@@ -37,7 +37,30 @@ gambar paling akhir — karena itu satu-satunya yang tidak bisa saya selesaikan 
 
 ---
 
-## v0.32.0 — "Meter per kanal" (P14)
+## Terkirim sebagai satu rilis — v0.32.0 (1 Agu 2026)
+
+> Ketiganya dikerjakan sekaligus atas permintaan, dan itu ternyata memang cocok: ketiganya nyaris
+> tidak bersentuhan — P14 di engine dan `LevelMeter`, P15 di `Knob` dan CSS, P16 di dua kartu.
+> Satu putaran dokumentasi dan screenshot, bukan tiga.
+>
+> **Empat koreksi terhadap rencana ini, semuanya dari mengerjakannya:**
+>
+> **Kabel melengkung dibatalkan** setelah dipikir ulang — lihat P15-3. Strip harus tetap terbaca
+> pada 24 stage, dan kurva menambah tinggi serta derau tanpa menambah informasi.
+>
+> **Perform view ternyata tidak memakai `LevelMeter`.** Ia punya `BigMeter` sendiri. Setelah
+> diperiksa itu justru benar: di panggung pertanyaannya "ada sinyal dan apakah clipping", bukan
+> keseimbangan kanal.
+>
+> **Gain input ikut dipecah per kanal**, yang tidak ada di rencana semula. Ditunjukkan saat
+> pengerjaan: mengirim meter per-kanal sambil trim-nya tetap dual-mono itu setengah pemikiran —
+> menyamakan sumber ke rantai justru *tujuan* trim, dan satu angka cuma bisa menyamakan satu
+> sumber. `input.trimLink` default menyala, jadi rig mono dan preset lama tidak berubah sama sekali.
+>
+> **Varian polos kenop wajib, bukan opsional.** Perform memakai `Knob` yang sama; tanpa prop
+> `plain` dan test yang menegakkannya, ia satu refactor dari mewarisi tekstur diam-diam.
+
+## v0.32.0 — rencana awal: "Meter per kanal" (P14)
 
 **Tujuan:** meter input dan output menunjukkan L dan R terpisah.
 
@@ -80,8 +103,10 @@ tidak ada ruang yang hilang. Penanda `L`/`R` di dalam bar, pembacaan `−8.4 / �
 
 - **Ballistics-nya harus satu**: peak-hold dan laju jatuh dihitung dari komponen yang sama untuk
   kedua bar, atau dua sisi sinyal yang sama akan terlihat tidak sinkron.
-- Perform view memakai meter yang sama dan **ikut mendapat manfaatnya** — di panggung, melihat
-  satu sisi hilang itu justru paling berguna.
+- **Perform view tetap satu bar.** Rencana ini semula mengasumsikan ia memakai `LevelMeter` yang
+  sama; ternyata ia punya `BigMeter` sendiri. Dan setelah diperiksa, itu justru benar: di panggung
+  pertanyaannya "ada sinyal, dan apakah clipping", bukan keseimbangan antar-kanal. Keseimbangan
+  adalah pertanyaan saat menyetel, dan menyetel dilakukan di Edit.
 
 **Definition of done:** suite backend + frontend, E2E, smoke, pluginval, dokumentasi.
 **Effort: ~1 weekend.**
@@ -113,10 +138,18 @@ materialnya:
 Bevel setipis rambut di tepi atas, sekrup di sudut, tekstur halus, bayangan jatuh. Memakai
 `EFFECT_ACCENTS` yang sudah ada; tidak ada aset baru.
 
-### P15-3. Kabel, bukan garis
+### P15-3. Strip rantai: sengaja tidak disentuh
 
-`ChainStrip` sudah menggambar router dua garis sejak v0.30. Mengganti garis lurus dengan kurva
-SVG yang sedikit melengkung ke bawah membuatnya terbaca sebagai pedalboard, bukan diagram alir.
+Kurva SVG untuk kabelnya sempat direncanakan dan **dibatalkan**, dan alasannya bukan biaya.
+
+Strip rantai adalah satu-satunya tempat di aplikasi yang harus tetap terbaca pada **24 stage**,
+dan sejak router dua garis di v0.30 ia memang sudah diagram kabel. Kurva menambah tinggi baris
+dan derau visual tanpa menambah informasi; kurung fork-nya adalah garis vertikal lurus, jadi
+mencampur kurva dengan kurung justru tidak konsisten. Strip juga target drop untuk drag — konektor
+dekoratif tidak membantu menebak di mana blok akan mendarat.
+
+Garis lurus berarti "sinyal lewat sini". Kurva berarti kabel kendur, yang memikat di foto
+pedalboard tapi tidak berarti apa-apa di sini.
 
 ### Tiga hal yang harus dijaga, dan masing-masing punya alasan
 
@@ -171,6 +204,7 @@ di muka daripada ditemukan di tengah jalan.
 | **View "Board" ketiga yang bergambar** | Sempat dipertimbangkan sebagai jalan tengah ala Logic. Ditunda: tiga view sudah cukup untuk satu orang, dan Edit yang bermaterial menutup sebagian besar keinginannya. |
 | **Skeuomorfisme di Perform** | Ia ada justru karena tampilan padat tidak terbaca di panggung. Tekstur merusak alasan keberadaannya. |
 | **Animasi kenop/jarum** | Meter sudah berjalan ~22 Hz; gerakan tambahan menaikkan biaya render tanpa menambah informasi. |
+| **Kabel melengkung di strip** | Dibatalkan setelah dipikir ulang: strip harus tetap terbaca pada 24 stage, dan kurva menambah tinggi serta derau tanpa menambah informasi. Lihat P15-3. |
 
 ## Biaya, per bagian
 
@@ -179,7 +213,6 @@ di muka daripada ditemukan di tengah jalan.
 | Meter L/R | 1 komponen + 6 field | nol |
 | Kenop material | 1 komponen | nol |
 | Kartu enclosure | 1 stylesheet | nol |
-| Kabel melengkung | 1 SVG | nol |
 | Grille Cabinet & Amp | 2 gambar | nol |
 | ~~Pedal per voicing~~ | ~~12 gambar~~ | ~~1 gambar, selamanya~~ |
 

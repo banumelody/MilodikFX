@@ -389,6 +389,9 @@ function PerformViewBase({
               accent={EFFECT_ACCENTS[effectType(pin.effect)] ?? '#4da3ff'}
               disabled={offline}
               size={92}
+              // Flat on purpose: this screen is read from two metres in bad
+              // light, and the material treatment costs contrast for nothing.
+              plain
               onChange={(value) => onParameterChange(pin.effect, pin.parameter, value)}
             />
           ))}

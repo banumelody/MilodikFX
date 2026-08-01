@@ -209,8 +209,9 @@ function DeviceSettingsBase({
           {routing && routing.ports.length > 1 ? (
             <p className="device-form__hint">
               Pilihan port melekat pada perangkat, bukan pada preset - ia menggambarkan kabel di
-              rig-mu. Untuk gitar dua jack (magnetik + piezo), colok ke dua port lalu pakai mode
-              split <strong>L/R</strong> supaya tiap pickup dapat chain sendiri.
+              rig-mu. Port mana pun boleh dipetakan ke kanal mana pun. Dengan dua sumber di dua
+              port, mode split <strong>L/R</strong> memberi masing-masing chain sendiri, dan
+              Gain di kartu Input bisa dilepas kaitannya supaya tiap sumber punya trim sendiri.
             </p>
           ) : null}
         </div>

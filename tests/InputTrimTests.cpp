@@ -174,6 +174,92 @@ public:
 
             expectWithinAbsoluteError (peakOf (buffer), before, 1.0e-6f);
         }
+        beginTest ("Linked is the default, so nothing changes without asking");
+        {
+            // Every preset and settings file written before this assumes one
+            // trim for both sides. Defaulting to unlinked would silently
+            // untrim the right channel of every rig anyone had saved.
+            milodikfx::dsp::InputTrimProcessor trim;
+
+            expect (trim.isLinked(), "the trim must arrive linked");
+
+            trim.setGainDb (6.0f);
+
+            expectWithinAbsoluteError (trim.getEffectiveGainDb (0), 6.0f, 0.001f);
+            expectWithinAbsoluteError (trim.getEffectiveGainDb (1), 6.0f, 0.001f,
+                                       "the right channel did not follow while linked");
+        }
+
+        beginTest ("Unlinked, each channel gets its own trim");
+        {
+            // The point of this stage is matching a source to the chain, and
+            // with two sources on two jacks one figure can only ever match one.
+            milodikfx::dsp::InputTrimProcessor trim;
+            trim.prepareToPlay (48000.0, 256, 2);
+
+            trim.setLinked (false);
+            trim.setGainDb (-6.0f);
+            trim.setGainDbR (12.0f);
+            trim.reset();
+
+            juce::AudioBuffer<float> buffer (2, 128);
+
+            for (int i = 0; i < 128; ++i)
+            {
+                buffer.setSample (0, i, 0.25f);
+                buffer.setSample (1, i, 0.25f);
+            }
+
+            trim.processBlock (buffer);
+
+            expectWithinAbsoluteError (buffer.getSample (0, 64),
+                                       0.25f * juce::Decibels::decibelsToGain (-6.0f), 1.0e-4f);
+            expectWithinAbsoluteError (buffer.getSample (1, 64),
+                                       0.25f * juce::Decibels::decibelsToGain (12.0f), 1.0e-4f);
+        }
+
+        beginTest ("The right trim is remembered while linked");
+        {
+            // Unlinking must restore what was dialled rather than snapping the
+            // right channel to whatever the left happens to be sitting at.
+            milodikfx::dsp::InputTrimProcessor trim;
+
+            trim.setGainDbR (9.0f);
+            trim.setGainDb (-3.0f);
+
+            expectWithinAbsoluteError (trim.getEffectiveGainDb (1), -3.0f, 0.001f);
+
+            trim.setLinked (false);
+            expectWithinAbsoluteError (trim.getEffectiveGainDb (1), 9.0f, 0.001f);
+        }
+
+        beginTest ("Unlinked at 0 dB is still a true passthrough");
+        {
+            // The bit-identical default has to survive the channel split: a
+            // multiply by 1.0f on one side would show up in a null test.
+            milodikfx::dsp::InputTrimProcessor trim;
+            trim.prepareToPlay (48000.0, 256, 2);
+            trim.setLinked (false);
+            trim.reset();
+
+            juce::AudioBuffer<float> buffer (2, 64);
+            juce::Random random (1234);
+
+            for (int ch = 0; ch < 2; ++ch)
+                for (int i = 0; i < 64; ++i)
+                    buffer.setSample (ch, i, random.nextFloat() - 0.5f);
+
+            juce::AudioBuffer<float> original (2, 64);
+            original.makeCopyOf (buffer);
+
+            trim.processBlock (buffer);
+
+            for (int ch = 0; ch < 2; ++ch)
+                for (int i = 0; i < 64; ++i)
+                    expect (buffer.getSample (ch, i) == original.getSample (ch, i),
+                            "an unlinked trim at 0 dB is not bit-identical");
+        }
+
     }
 };
 

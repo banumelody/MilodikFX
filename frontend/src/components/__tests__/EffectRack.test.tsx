@@ -757,3 +757,37 @@ describe('EffectRack board removal', () => {
     expect(onEnabledChange).not.toHaveBeenCalled();
   });
 });
+
+describe('EffectRack surfaces', () => {
+  it('marks the card with its block type, not its instance id', () => {
+    const { container } = render(
+      <EffectRack
+        effect={{ ...overdrive, id: 'overdrive2', label: 'Overdrive 2' }}
+        onParameterChange={vi.fn()}
+        onEnabledChange={vi.fn()}
+      />,
+    );
+
+    // Keyed by type so a second instance gets the same surface as the first.
+    expect(container.querySelector('.rack--overdrive')).toBeInTheDocument();
+    expect(container.querySelector('.rack--overdrive2')).not.toBeInTheDocument();
+  });
+
+  it('gives the cabinet and the amp their own surface', () => {
+    // The only two blocks that get real artwork, because both are single and
+    // neither changes shape with any parameter.
+    const { container: cab } = render(
+      <EffectRack effect={cabinet} onParameterChange={vi.fn()} onEnabledChange={vi.fn()} />,
+    );
+    expect(cab.querySelector('.rack--cabinet')).toBeInTheDocument();
+
+    const { container: amp } = render(
+      <EffectRack
+        effect={{ ...cabinet, id: 'nam', label: 'Amp (NAM)' }}
+        onParameterChange={vi.fn()}
+        onEnabledChange={vi.fn()}
+      />,
+    );
+    expect(amp.querySelector('.rack--nam')).toBeInTheDocument();
+  });
+});

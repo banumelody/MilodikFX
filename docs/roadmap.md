@@ -1335,7 +1335,10 @@ sekadar mahal tapi mustahil: satu gambar pedal untuk blok itu berbohong tentang 
 sedang dipilih. Polanya konsisten di luar sana juga — set terkurasi (Logic Pedalboard, Neural DSP)
 menggambar pedal; rantai bebas susun (Axe-Edit, Helix) tidak.
 
-## v0.32.0 — "Meter per kanal" (P14) — ~1 weekend
+## v0.32.0 — Meter per kanal + Material + Cabinet/Amp — **SELESAI (1 Agu 2026)**
+
+> Ketiganya (P14–P16) dikirim sebagai **satu rilis**. Ditambah satu hal di luar rencana: **gain
+> input dipecah per kanal**, karena meter per-kanal tanpa trim per-kanal itu setengah pemikiran.
 
 Meter input dan output menampilkan L dan R terpisah. Ini **informasi, bukan hiasan**: sampai v0.27
 kedua bar akan selalu bergerak identik, tapi pan per jalur (v0.28), Cabinet stereo (v0.25) dan
@@ -1346,7 +1349,7 @@ output** — dengan magnetik dan piezo di dua port, bar terpisah langsung memper
 jauh lebih panas. Field lama tetap ada berisi maksimum keduanya, jadi klien lama tidak pecah;
 `modulationEngine` tetap memakai nilai gabungan supaya perilaku auto-wah tidak berubah diam-diam.
 
-## v0.33.0 — "Material" (P15) — ~1.5 weekend
+## v0.33 — Material (P15) — ikut v0.32.0
 
 Kenop yang menangkap cahaya, kartu ber-enclosure (bevel, sekrup, tekstur, bayangan), kabel
 melengkung di router. Semuanya komponen bersama: 26 efek ikut sekaligus dan blok ke-27 tidak
@@ -1355,7 +1358,7 @@ supaya terbaca dari dua meter, dan ia memakai `Knob` yang sama — jadi butuh va
 harapan); kontras diukur bukan dikira; semuanya gradient/SVG supaya ikut menskala di jendela
 plugin. Aksesibilitas kenop tidak disentuh — ini perubahan cat, bukan perubahan kontrol.
 
-## v0.34.0 — "Cabinet & Amp" (P16) — ~1 weekend
+## v0.34 — Cabinet & Amp (P16) — ikut v0.32.0
 
 Dua blok yang layak digambar sungguhan, karena keduanya **tunggal dan wujudnya tidak berubah
 menurut parameter apa pun** — kebalikan persis dari Overdrive. Tanpa nama merek, logo, atau bentuk

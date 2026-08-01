@@ -83,3 +83,58 @@ describe('ReductionMeter', () => {
     expect(fill?.style.width).toBe('100%');
   });
 });
+
+describe('LevelMeter per channel', () => {
+  it('stays a single bar when no channels are given', () => {
+    const { container } = render(<LevelMeter label="Output" db={-12} />);
+
+    expect(container.querySelector('.meter__track--split')).not.toBeInTheDocument();
+    expect(container.querySelectorAll('.meter__lane')).toHaveLength(0);
+  });
+
+  it('splits into two lanes when the sides differ', () => {
+    const { container } = render(
+      <LevelMeter label="Output" db={-8.4} dbL={-8.4} dbR={-14.1} />,
+    );
+
+    const lanes = container.querySelectorAll('.meter__lane');
+    expect(lanes).toHaveLength(2);
+    expect(lanes[0].textContent).toBe('L');
+    expect(lanes[1].textContent).toBe('R');
+  });
+
+  it('reads out both figures', () => {
+    render(<LevelMeter label="Output" db={-8.4} dbL={-8.4} dbR={-14.1} />);
+
+    expect(screen.getByText('-8.4 / -14.1 dB')).toBeInTheDocument();
+  });
+
+  it('keeps the accessible value on the combined figure', () => {
+    // The meter role reports one number, and the louder side is the one that
+    // answers "am I about to clip".
+    render(<LevelMeter label="Output" db={-3} dbL={-3} dbR={-40} />);
+
+    const meter = screen.getByRole('meter', { name: 'Output' });
+    expect(meter).toHaveAttribute('aria-valuenow', '-3');
+  });
+
+  it('still says CLIP over the numbers', () => {
+    // A trimmed-down reading looks healthy while the converter clips, and no
+    // digital trim can undo that -- so the warning outranks the per-channel
+    // detail rather than being crowded out by it.
+    render(<LevelMeter label="Input" db={-20} dbL={-20} dbR={-26} sourceDb={0.2} />);
+
+    expect(screen.getByText('CLIP')).toBeInTheDocument();
+  });
+
+  it('draws each lane to its own width', () => {
+    const { container } = render(
+      // -60 is the floor and 6 the ceiling, so -60 is empty and 6 is full.
+      <LevelMeter label="Output" db={6} dbL={6} dbR={-60} />,
+    );
+
+    const fills = container.querySelectorAll<HTMLElement>('.meter__lane .meter__fill');
+    expect(fills[0].style.width).toBe('100%');
+    expect(fills[1].style.width).toBe('0%');
+  });
+});

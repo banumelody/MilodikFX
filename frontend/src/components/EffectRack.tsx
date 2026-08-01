@@ -78,6 +78,9 @@ const OVERRIDDEN_BY: Record<string, { parameter: string; whenNot: number }> = {
   // The crossover frequency only means anything in crossover mode. Showing it
   // live in the other two would be a knob that does nothing.
   'split.freqHz': { parameter: 'mode', whenNot: 1 },
+  // While the two trims are linked the right one is not being used, and a live
+  // knob that changes nothing is worse than a disabled one.
+  'input.gainDbR': { parameter: 'trimLink', whenNot: 0 },
 };
 
 /**
@@ -281,7 +284,8 @@ function EffectRackBase({
   return (
     <section
       className={
-        `rack${effect.enabled ? '' : ' rack--off'}` +
+        `rack rack--${effectType(effect.id)}` +
+        `${effect.enabled ? '' : ' rack--off'}` +
         `${isDragging ? ' rack--dragging' : ''}` +
         `${isDropTarget ? ' rack--drop' : ''}`
       }

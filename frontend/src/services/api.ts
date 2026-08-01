@@ -54,6 +54,20 @@ export interface EffectsResponse {
 export interface Levels {
   /** What the interface delivered, before the input trim. */
   inputLevel: number;
+  /**
+   * The same figures per channel.
+   *
+   * Optional because an older engine does not send them; the combined fields
+   * above always do and hold the louder of the two. Meaningful since pan per
+   * path, the stereo cabinet mode and the L/R split -- before those, both sides
+   * carried the same signal and two bars would have moved together forever.
+   */
+  inputLevelL?: number;
+  inputLevelR?: number;
+  chainInputLevelL?: number;
+  chainInputLevelR?: number;
+  outputLevelL?: number;
+  outputLevelR?: number;
   /** What the chain actually receives, after the input trim. */
   chainInputLevel: number;
   outputLevel: number;

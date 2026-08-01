@@ -1222,7 +1222,12 @@ void MainComponent::audioDeviceIOCallbackWithContext (const float* const* inputC
 
     juce::AudioBuffer<float> view (engineBuffer.getArrayOfWritePointers(), kMaxEngineChannels, samples);
 
+    // The two-argument overload is the *all-channels* one, so this is the louder
+    // of L and R. Kept for the envelope follower and the combined meter figure;
+    // the per-channel pair below is what makes the quieter side visible at all.
     const auto inputPeak = view.getMagnitude (0, samples);
+    const auto inputPeakL = view.getMagnitude (0, 0, samples);
+    const auto inputPeakR = kMaxEngineChannels > 1 ? view.getMagnitude (1, 0, samples) : inputPeakL;
 
     // Tap the signal before the chain: the tuner has to see the raw pickup, not
     // a clipped and cabinet-filtered version of it whose harmonics would fool
@@ -1240,6 +1245,8 @@ void MainComponent::audioDeviceIOCallbackWithContext (const float* const* inputC
     audioEngine.processBlock (view);
 
     const auto outputPeak = view.getMagnitude (0, samples);
+    const auto outputPeakL = view.getMagnitude (0, 0, samples);
+    const auto outputPeakR = kMaxEngineChannels > 1 ? view.getMagnitude (1, 0, samples) : outputPeakL;
 
     for (int ch = 0; ch < numOutputChannels; ++ch)
     {
@@ -1266,12 +1273,21 @@ void MainComponent::audioDeviceIOCallbackWithContext (const float* const* inputC
         // receives is exactly the measured input plus the trim in dB. No second
         // measurement needed -- and without this the Input knob would be dialled
         // blind, since inputPeak is taken before the chain runs.
-        const auto inputDb = juce::Decibels::gainToDecibels (inputPeak, kMeterFloorDb);
-        const auto trimDb = inputTrimProcessor != nullptr ? inputTrimProcessor->getGainDb() : 0.0f;
+        // Each side gets its own trim, so the arithmetic has to ask per channel.
+        // Reading one figure and adding it twice was true only while the two
+        // were forced to match.
+        const auto trimL = inputTrimProcessor != nullptr ? inputTrimProcessor->getEffectiveGainDb (0) : 0.0f;
+        const auto trimR = inputTrimProcessor != nullptr ? inputTrimProcessor->getEffectiveGainDb (1) : 0.0f;
 
-        levels->updateLevels (inputDb,
-                              juce::jmax (kMeterFloorDb, inputDb + trimDb),
-                              juce::Decibels::gainToDecibels (outputPeak, kMeterFloorDb));
+        const auto inputDbL = juce::Decibels::gainToDecibels (inputPeakL, kMeterFloorDb);
+        const auto inputDbR = juce::Decibels::gainToDecibels (inputPeakR, kMeterFloorDb);
+
+        levels->updateLevels (inputDbL,
+                              inputDbR,
+                              juce::jmax (kMeterFloorDb, inputDbL + trimL),
+                              juce::jmax (kMeterFloorDb, inputDbR + trimR),
+                              juce::Decibels::gainToDecibels (outputPeakL, kMeterFloorDb),
+                              juce::Decibels::gainToDecibels (outputPeakR, kMeterFloorDb));
 
         levels->updateGainReduction (noiseGateProcessor != nullptr ? noiseGateProcessor->getCurrentGain() : 1.0f,
                                      compressorProcessor != nullptr ? compressorProcessor->getGainReductionDb() : 0.0f,

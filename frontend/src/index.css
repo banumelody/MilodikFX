@@ -327,17 +327,85 @@ h2 {
 
 /* ------------------------------------------------------------------- racks */
 
+/* The card as an enclosure.
+   Material, not illustration: a bevel along the top edge, a faint brushed
+   texture, screws at the corners and a shadow it sits in. One rule for all
+   twenty-six effects, and the twenty-seventh costs nothing -- which is the
+   whole reason this is styling rather than per-block artwork. */
 .rack {
-  background: linear-gradient(180deg, var(--bg-raised) 0%, #11151d 100%);
-  border: 1px solid var(--line);
+  position: relative;
+  background-image:
+    repeating-linear-gradient(112deg, rgba(255, 255, 255, 0.014) 0 1px, transparent 1px 3px),
+    linear-gradient(178deg, #1b212c 0%, #12161e 42%, #0e1219 100%);
+  border: 1px solid #2b3444;
   border-radius: var(--radius);
   padding: 14px 16px 16px;
-  box-shadow: var(--shadow);
+  box-shadow:
+    0 10px 24px -12px rgba(0, 0, 0, 0.9),
+    0 1px 0 rgba(255, 255, 255, 0.05) inset;
   transition: opacity 160ms ease, border-color 160ms ease;
+}
+
+/* One hairline of light along the top edge. This is the single detail that
+   makes a rectangle read as a lid. */
+.rack::before {
+  content: '';
+  position: absolute;
+  inset: 2px 2px auto;
+  height: 1px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.09);
+  pointer-events: none;
+}
+
+/* Corner screws, drawn rather than dropped in as an image so they scale with
+   the plugin window. Two per card, not four: enough to say "enclosure" without
+   turning the corners into a busy area the drag grip already lives in. */
+.rack::after {
+  content: '';
+  position: absolute;
+  right: 9px;
+  bottom: 9px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background:
+    linear-gradient(0deg, transparent 42%, rgba(0, 0, 0, 0.6) 42% 58%, transparent 58%),
+    radial-gradient(circle at 34% 30%, #6b7688, #2a313c 70%);
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
 }
 
 .rack--off {
   opacity: 0.55;
+}
+
+/* ------------------------------------------------ the two blocks that earn art
+   A speaker cloth is one image everyone recognises, it does not change with any
+   parameter, and there is exactly one cabinet. An overdrive has twelve voicings
+   and could only ever be drawn as a lie about which one is selected -- so these
+   two are the whole list, on purpose.
+
+   Drawn with gradients rather than a bitmap so they scale with the plugin
+   window, and carrying no brand, logo or enclosure shape belonging to anyone. */
+.rack--cabinet,
+.rack--nam {
+  background-image:
+    radial-gradient(ellipse at 50% 22%, rgba(0, 0, 0, 0) 26%, rgba(0, 0, 0, 0.42) 100%),
+    repeating-linear-gradient(48deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(-48deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 4px),
+    linear-gradient(168deg, #241d2c 0%, #14111a 100%);
+  border-color: #362b41;
+}
+
+/* The amp head is brushed horizontally instead of woven: a different surface,
+   because it is a different object. */
+.rack--nam {
+  background-image:
+    radial-gradient(ellipse at 50% 22%, rgba(0, 0, 0, 0) 26%, rgba(0, 0, 0, 0.42) 100%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 3px),
+    linear-gradient(168deg, #2c211c 0%, #17110f 100%);
+  border-color: #3f2b23;
 }
 
 /* Solid accent header, in place of the small dot the cards used to carry --
@@ -487,10 +555,39 @@ h2 {
   inset: 0;
 }
 
+/* The cap. A radial highlight from the upper left plus a rim shadow is all it
+   takes to read as a turned knob rather than a filled circle -- and it is one
+   rule for every knob in the app, so a new block costs nothing. */
+.knob__cap {
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 28%, #414a5b 0%, #262c37 46%, #141821 100%);
+  box-shadow:
+    0 3px 8px -2px rgba(0, 0, 0, 0.8),
+    inset 0 1px 0 rgba(255, 255, 255, 0.13),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+/* A soft specular streak across the top. Kept faint: a mirror finish would
+   fight the value arc, which is the part that has to be read at a glance. */
+.knob__cap::after {
+  content: '';
+  position: absolute;
+  inset: 12% 16% auto;
+  height: 34%;
+  border-radius: 50% 50% 42% 42%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent);
+}
+
+/* The dial sits above the cap; the SVG body circle is no longer drawn. */
+.knob__dial { position: relative; }
+
 .knob__body {
-  fill: url(#none);
-  fill: #10141c;
-  stroke: #262d3b;
+  fill: none;
+  stroke: #39424f;
   stroke-width: 1;
 }
 
@@ -512,7 +609,24 @@ h2 {
 .knob__pointer {
   stroke-width: 2.5;
   stroke-linecap: round;
+  /* Lifted off the cap so it reads as a moulded line rather than a drawn one. */
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.75));
 }
+
+/* ------------------------------------------------------------ plain variant
+   Perform view is deliberately flat: it has to be read from two metres in bad
+   light, and a specular highlight costs contrast for nothing there. It uses the
+   same Knob component, so the opt-out has to be explicit rather than hoped for. */
+.knob--plain .knob__cap {
+  background: #10141c;
+  box-shadow: none;
+}
+
+.knob--plain .knob__cap::after { content: none; }
+
+.knob--plain .knob__body { stroke: #262d3b; }
+
+.knob--plain .knob__pointer { filter: none; }
 
 .knob__readout {
   position: relative;
@@ -622,6 +736,44 @@ h2 {
   background: var(--bg-sunken);
   border: 1px solid var(--line-soft);
   overflow: hidden;
+}
+
+/* Two thin lanes in the same total height as one thick bar, so nothing below
+   the meter has to move when a stereo signal splits it. */
+.meter__track--split {
+  height: 8px;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.meter__lane {
+  position: relative;
+  flex: 1;
+  min-height: 3px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line-soft);
+  overflow: hidden;
+}
+
+/* Inside the bar, not beside it: a label in the margin would cost width the
+   meter needs, and there is only ever L or R to tell apart. */
+.meter__side {
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  z-index: 1;
+  transform: translateY(-50%);
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  color: var(--text-faint);
+  pointer-events: none;
 }
 
 .meter__fill {
