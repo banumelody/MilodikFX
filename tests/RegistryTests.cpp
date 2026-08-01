@@ -161,6 +161,78 @@ public:
         registry.setParameter ("overdrive", "drivePct", 1.0f, applied);
         expect (registry.applyState (reparsed) >= 3);
         expect (std::abs (fake.drive - 63.5f) < 0.001f);
+        beginTest ("Time and frequency travel logarithmically; dB and percent do not");
+        {
+            milodikfx::dsp::DSPChainManager manager;
+            const auto chain = milodikfx::dsp::buildGuitarChain (manager);
+
+            milodikfx::api::ParameterRegistry registry;
+            milodikfx::dsp::registerChainParameters (registry, chain, manager);
+
+            const auto isLog = [&registry] (const char* effect, const char* parameter)
+            {
+                const auto* p = registry.findParameter (effect, parameter);
+                return p != nullptr && p->logScale;
+            };
+
+            // The rule is a principle, not a list: time and frequency are
+            // perceived logarithmically, decibels are already logarithmic in
+            // what they describe, and percentages are a direct range.
+            expect (isLog ("compressor", "attackMs"), "compressor attack is the worst case of all");
+            expect (isLog ("compressor", "releaseMs"));
+            expect (isLog ("compressor", "ratio"));
+            expect (isLog ("noiseGate", "attackMs"));
+            expect (isLog ("delay", "timeMs"));
+            expect (isLog ("delay", "dampingHz"));
+            expect (isLog ("reverb", "decayTime"));
+            expect (isLog ("split", "freqHz"));
+
+            expect (! isLog ("overdrive", "drivePct"), "a percentage must stay linear");
+            expect (! isLog ("eq", "bassDb"), "decibels are already logarithmic");
+            expect (! isLog ("input", "gainDb"));
+            expect (! isLog ("mixer", "panA"));
+        }
+
+        beginTest ("Every logarithmic parameter has a positive minimum");
+        {
+            // A logarithmic scale has no zero. A hint that could not be honoured
+            // would be silently ignored by the UI, which is worse than none.
+            milodikfx::dsp::DSPChainManager manager;
+            const auto chain = milodikfx::dsp::buildGuitarChain (manager);
+
+            milodikfx::api::ParameterRegistry registry;
+            milodikfx::dsp::registerChainParameters (registry, chain, manager);
+
+            for (const auto& effect : registry.getEffects())
+                for (const auto& parameter : effect.parameters)
+                    if (parameter.logScale)
+                        expect (parameter.minValue > 0.0f,
+                                juce::String (effect.id) + "." + juce::String (parameter.id)
+                                    + " is logarithmic but reaches zero");
+        }
+
+        beginTest ("The plugin's automation range is deliberately untouched");
+        {
+            // Applying the skew to NormalisableRange would move every value an
+            // existing DAW automation lane refers to -- far too high a price for
+            // a mouse-drag problem. The hint is for the UI only.
+            milodikfx::dsp::DSPChainManager manager;
+            const auto chain = milodikfx::dsp::buildGuitarChain (manager);
+
+            milodikfx::api::ParameterRegistry registry;
+            milodikfx::dsp::registerChainParameters (registry, chain, manager);
+
+            const auto* attack = registry.findParameter ("compressor", "attackMs");
+            expect (attack != nullptr);
+
+            // The stored value and the range are exactly what they always were.
+            expectWithinAbsoluteError (attack->minValue, 0.1f, 1.0e-6f);
+            expectWithinAbsoluteError (attack->maxValue, 200.0f, 1.0e-6f);
+
+            attack->set (50.0f);
+            expectWithinAbsoluteError (attack->get(), 50.0f, 0.05f);
+        }
+
     }
 };
 

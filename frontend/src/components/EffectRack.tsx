@@ -1,5 +1,6 @@
 import { Fragment, memo } from 'react';
 
+import { Fader } from './Fader';
 import { Knob } from './Knob';
 import { Toggle } from './Toggle';
 import { ToneCurve } from './ToneCurve';
@@ -258,7 +259,10 @@ function EffectRackBase({
   // The overdrive registers every voicing's controls; only the selected
   // voicing's are worth showing, under the names its original used.
   const visibleParameters = (() => {
-    if (effect.id !== 'overdrive') return effect.parameters;
+    // By type, not id: `overdrive2` has the same twelve voicings and the same
+    // per-voicing layouts. Checking the raw id showed every instance past the
+    // first the union of all of them.
+    if (effectType(effect.id) !== 'overdrive') return effect.parameters;
 
     const type = Math.round(
       Number(effect.parameters.find((p) => p.id === 'type')?.value ?? 0),
@@ -280,6 +284,23 @@ function EffectRackBase({
 
     return ordered;
   })();
+
+  /**
+   * The control drawn larger than the rest.
+   *
+   * A pedal has one big knob and several small ones, and the hierarchy reads
+   * before the labels do. It is the first parameter *drawn as a knob*, not
+   * simply the first parameter: several blocks lead with a dropdown, and
+   * emphasising nothing at all is worse than emphasising the wrong thing.
+   *
+   * Derived rather than listed, or it would be the next thing owing an edit for
+   * every new block.
+   */
+  const primaryKnobId = visibleParameters.find(
+    (parameter) =>
+      parameter.type === 'float' &&
+      ENUM_OPTIONS[`${effectType(effect.id)}.${parameter.id}`] === undefined,
+  )?.id;
 
   return (
     <section
@@ -551,7 +572,27 @@ function EffectRackBase({
           // not chase the sweep; a MOD tag marks that it is being modulated.
           const modulated = modulatedParams?.has(`${effect.id}.${parameter.id}`) ?? false;
 
-          const knob = (
+          // The Mixer's two bus levels are the one console function in the app,
+          // and the one place where the task is comparing two values against
+          // each other. Two heights read at a glance; two rotations do not.
+          const asFader =
+            effectType(effect.id) === 'mixer' &&
+            (parameter.id === 'levelA' || parameter.id === 'levelB');
+
+          const knob = asFader ? (
+            <Fader
+              value={Number(parameter.value)}
+              min={parameter.min}
+              max={parameter.max}
+              step={parameter.step}
+              defaultValue={parameter.default}
+              label={parameter.label}
+              accent={accent}
+              disabled={inactive || overridden}
+              format={(value) => formatValue(parameter, value)}
+              onChange={(value) => onParameterChange(effect.id, parameter.id, value)}
+            />
+          ) : (
             <Knob
               value={Number(parameter.value)}
               min={parameter.min}
@@ -562,6 +603,12 @@ function EffectRackBase({
               unit={parameter.unit}
               accent={accent}
               disabled={inactive || overridden}
+              logScale={parameter.logScale}
+              // A hardware pedal has one big knob and several small ones, and
+              // the hierarchy reads before the labels do. Derived from position
+              // rather than a per-effect list, which would be the next thing
+              // owing an edit for every new block.
+              size={parameter.id === primaryKnobId ? 92 : 72}
               format={(value) => formatValue(parameter, value)}
               onChange={(value) => onParameterChange(effect.id, parameter.id, value)}
             />

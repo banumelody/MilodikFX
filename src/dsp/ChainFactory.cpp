@@ -35,6 +35,33 @@ ParameterDescriptor makeParam (std::string id,
     return p;
 }
 
+/**
+ * `makeParam` for a parameter whose knob travel is logarithmic.
+ *
+ * Same signature, different name, so the decision sits at the call site next to
+ * the range it applies to -- never in a list somewhere that would have to be
+ * kept in step with this file.
+ *
+ * Time and frequency are perceived logarithmically, and mapping them linearly to
+ * drag distance buries the useful region: a compressor attack of 0.1-200 ms puts
+ * everything from 0.1 to 5 ms in the first 2.5 % of the travel. Decibels are
+ * already logarithmic in what they describe, so they stay linear; so do
+ * percentages.
+ *
+ * Asserts on a range that reaches zero: a logarithmic scale has no zero, and a
+ * hint that is silently ignored is worse than no hint.
+ */
+template <typename... Args>
+ParameterDescriptor makeLogParam (Args&&... args)
+{
+    auto p = makeParam (std::forward<Args> (args)...);
+
+    jassert (p.minValue > 0.0f);
+    p.logScale = p.minValue > 0.0f;
+
+    return p;
+}
+
 ParameterDescriptor makeToggle (std::string id,
                                 std::string label,
                                 bool defaultValue,
@@ -386,13 +413,13 @@ void registerLayer (milodikfx::api::ParameterRegistry& registry,
         e.parameters.push_back (makeParam ("thresholdDb", "Threshold", "dB", -90.0f, 0.0f, 0.5f, -55.0f,
                                            [p] { return p->getThresholdDb(); },
                                            [p] (float v) { p->setThresholdDb (v); }));
-        e.parameters.push_back (makeParam ("attackMs", "Attack", "ms", 0.1f, 50.0f, 0.1f, 2.0f,
+        e.parameters.push_back (makeLogParam ("attackMs", "Attack", "ms", 0.1f, 50.0f, 0.1f, 2.0f,
                                            [p] { return p->getAttackMs(); },
                                            [p] (float v) { p->setAttackMs (v); }));
         e.parameters.push_back (makeParam ("holdMs", "Hold", "ms", 0.0f, 500.0f, 1.0f, 60.0f,
                                            [p] { return p->getHoldMs(); },
                                            [p] (float v) { p->setHoldMs (v); }));
-        e.parameters.push_back (makeParam ("releaseMs", "Release", "ms", 5.0f, 1000.0f, 1.0f, 150.0f,
+        e.parameters.push_back (makeLogParam ("releaseMs", "Release", "ms", 5.0f, 1000.0f, 1.0f, 150.0f,
                                            [p] { return p->getReleaseMs(); },
                                            [p] (float v) { p->setReleaseMs (v); }));
         registry.addEffect (std::move (e));
@@ -431,13 +458,13 @@ void registerLayer (milodikfx::api::ParameterRegistry& registry,
         e.parameters.push_back (makeParam ("thresholdDb", "Threshold", "dB", -60.0f, 0.0f, 0.5f, -24.0f,
                                            [p] { return p->getThresholdDb(); },
                                            [p] (float v) { p->setThresholdDb (v); }));
-        e.parameters.push_back (makeParam ("ratio", "Ratio", ":1", 1.0f, 20.0f, 0.1f, 4.0f,
+        e.parameters.push_back (makeLogParam ("ratio", "Ratio", ":1", 1.0f, 20.0f, 0.1f, 4.0f,
                                            [p] { return p->getRatio(); },
                                            [p] (float v) { p->setRatio (v); }));
-        e.parameters.push_back (makeParam ("attackMs", "Attack", "ms", 0.1f, 200.0f, 0.1f, 10.0f,
+        e.parameters.push_back (makeLogParam ("attackMs", "Attack", "ms", 0.1f, 200.0f, 0.1f, 10.0f,
                                            [p] { return p->getAttackMs(); },
                                            [p] (float v) { p->setAttackMs (v); }));
-        e.parameters.push_back (makeParam ("releaseMs", "Release", "ms", 5.0f, 2000.0f, 1.0f, 100.0f,
+        e.parameters.push_back (makeLogParam ("releaseMs", "Release", "ms", 5.0f, 2000.0f, 1.0f, 100.0f,
                                            [p] { return p->getReleaseMs(); },
                                            [p] (float v) { p->setReleaseMs (v); }));
         e.parameters.push_back (makeParam ("mixPct", "Mix", "%", 0.0f, 100.0f, 1.0f, 100.0f,
@@ -470,7 +497,7 @@ void registerLayer (milodikfx::api::ParameterRegistry& registry,
                                                p->setMode ((SplitProcessor::Mode) index);
                                            }));
 
-        e.parameters.push_back (makeParam ("freqHz", "Frekuensi", "Hz",
+        e.parameters.push_back (makeLogParam ("freqHz", "Frekuensi", "Hz",
                                            SplitProcessor::kMinFrequencyHz,
                                            SplitProcessor::kMaxFrequencyHz,
                                            1.0f, 250.0f,
@@ -639,7 +666,7 @@ void registerLayer (milodikfx::api::ParameterRegistry& registry,
         e.parameters.push_back (makeParam ("presenceDb", "Presence", "dB", -12.0f, 12.0f, 0.1f, 0.0f,
                                            [p] { return p->getPresenceDb(); },
                                            [p] (float v) { p->setPresenceDb (v); }));
-        e.parameters.push_back (makeParam ("toneHz", "Tone", "Hz", 2000.0f, 8000.0f, 50.0f, 5500.0f,
+        e.parameters.push_back (makeLogParam ("toneHz", "Tone", "Hz", 2000.0f, 8000.0f, 50.0f, 5500.0f,
                                            [p] { return p->getToneHz(); },
                                            [p] (float v) { p->setToneHz (v); }));
 
@@ -706,7 +733,7 @@ void registerLayer (milodikfx::api::ParameterRegistry& registry,
         e.description = "Delay berumpan balik dengan waktu yang meluncur";
         e.isEnabled = [p] { return p->isEnabled(); };
         e.setEnabled = [p] (bool v) { p->setEnabled (v); };
-        e.parameters.push_back (makeParam ("timeMs", "Time", "ms", 10.0f, 1000.0f, 1.0f, 350.0f,
+        e.parameters.push_back (makeLogParam ("timeMs", "Time", "ms", 10.0f, 1000.0f, 1.0f, 350.0f,
                                            [p] { return p->getTimeMs(); },
                                            [p] (float v) { p->setTimeMs (v); }));
         e.parameters.push_back (makeParam ("feedbackPct", "Feedback", "%", 0.0f, 95.0f, 1.0f, 30.0f,
@@ -715,7 +742,7 @@ void registerLayer (milodikfx::api::ParameterRegistry& registry,
         e.parameters.push_back (makeParam ("mixPct", "Mix", "%", 0.0f, 100.0f, 1.0f, 25.0f,
                                            [p] { return p->getMixPercent(); },
                                            [p] (float v) { p->setMixPercent (v); }));
-        e.parameters.push_back (makeParam ("dampingHz", "Damping", "Hz", 500.0f, 20000.0f, 100.0f, 20000.0f,
+        e.parameters.push_back (makeLogParam ("dampingHz", "Damping", "Hz", 500.0f, 20000.0f, 100.0f, 20000.0f,
                                            [p] { return p->getDampingHz(); },
                                            [p] (float v) { p->setDampingHz (v); }));
         e.parameters.push_back (makeToggle ("pingPong", "Ping-Pong", false,
@@ -745,7 +772,7 @@ void registerLayer (milodikfx::api::ParameterRegistry& registry,
         e.parameters.push_back (makeParam ("roomSize", "Size", "", 0.0f, 1.0f, 0.01f, 0.5f,
                                            [p] { return p->getRoomSize(); },
                                            [p] (float v) { p->setRoomSize (v); }));
-        e.parameters.push_back (makeParam ("decayTime", "Decay", "s", 0.2f, 10.0f, 0.1f, 2.0f,
+        e.parameters.push_back (makeLogParam ("decayTime", "Decay", "s", 0.2f, 10.0f, 0.1f, 2.0f,
                                            [p] { return p->getDecayTime(); },
                                            [p] (float v) { p->setDecayTime (v); }));
         e.parameters.push_back (makeParam ("width", "Width", "", 0.0f, 1.0f, 0.01f, 1.0f,

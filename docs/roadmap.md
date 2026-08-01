@@ -1380,7 +1380,10 @@ shelving, yang berarti ia tone stack amp. Dua alasan pendukung: gestur `Knob` su
 relatif, jadi keunggulan ergonomis fader sudah ada; dan `ToneCurve` sudah menggambar respons
 sungguhan, yang merupakan satu-satunya alasan kuat memakai fader untuk EQ.
 
-## v0.33.0 — "Panel" (P17) — ~1–1.5 weekend
+## v0.33.0 — Panel + Rentang logaritmik — **SELESAI (1 Agu 2026)**
+
+> P17 dan P18 dikirim sebagai **satu rilis**. Ikut tertangkap: bug v0.31 di mana instance overdrive
+> kedua dan ketiga menampilkan gabungan seluruh 12 voicing, bukan kontrol voicing yang dipilih.
 
 Empat hal yang dimiliki kenop hardware dan belum ada di sini: **tanda skala** (paling universal di
 hardware, dan penting khusus di sini karena kenop drag-relatif membuat tampilan jadi satu-satunya
@@ -1391,7 +1394,7 @@ per blok baru), dan **label tersablon**. Plus **Mixer A/B jadi sepasang fader ve
 blok yang hardware-nya memang console, dan satu-satunya tempat di mana tugasnya membandingkan dua
 nilai. Pan tetap kenop; gestur fader harus identik dengan kenop.
 
-## v0.34.0 — "Rentang yang terasa benar" (P18) — ~0.5–1 weekend
+## v0.34 — Rentang yang terasa benar (P18) — ikut v0.33.0
 
 Yang saya duga sebenarnya terasa kurang, dan angkanya sudah diperiksa: rentang dipetakan **linear**
 ke jarak drag, jadi `compressor.attackMs` (0.1–200 ms, rasio **2000×**) menaruh seluruh wilayah

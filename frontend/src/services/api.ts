@@ -24,6 +24,14 @@ export interface ParameterDescriptor {
   value: number | string;
   /** Choices offered for a text parameter, e.g. the impulse responses on disk. */
   options?: string[];
+  /**
+   * The knob's travel is logarithmic rather than linear.
+   *
+   * A gesture hint only: the value, the API and the stored preset are all
+   * unchanged, and so is the plugin's automation range. Only how far you have
+   * to drag changes. Absent means linear.
+   */
+  logScale?: boolean;
 }
 
 export interface EffectDescriptor {

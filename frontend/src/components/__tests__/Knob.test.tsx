@@ -192,3 +192,102 @@ describe('Knob material', () => {
     expect(dial).toHaveAttribute('tabindex', '0');
   });
 });
+
+/** Mirrors Knob's own constant; the assertions below are fractions of it. */
+const DRAG_RANGE_PX = 220;
+
+describe('Knob scale', () => {
+  it('prints scale marks around the dial', () => {
+    const { container } = render(<Knob value={50} onChange={vi.fn()} label="Drive" />);
+
+    // A hardware knob is absolute -- its pointer position is the value. This
+    // one is a relative drag, so the drawing is the only absolute reference
+    // there is, and a printed panel gives that away for free.
+    expect(container.querySelectorAll('.knob__tick')).toHaveLength(9);
+  });
+
+  it('marks the centre only when the range crosses zero', () => {
+    const { container: bipolar } = render(
+      <Knob value={0} min={-12} max={12} onChange={vi.fn()} label="Bass" />,
+    );
+    expect(bipolar.querySelector('.knob__centre')).toBeInTheDocument();
+
+    const { container: unipolar } = render(
+      <Knob value={50} min={0} max={100} onChange={vi.fn()} label="Drive" />,
+    );
+    // Derived from the range, not a list of parameter ids -- so a new bipolar
+    // parameter is covered without anyone remembering to add it.
+    expect(unipolar.querySelector('.knob__centre')).not.toBeInTheDocument();
+  });
+});
+
+describe('Knob logarithmic travel', () => {
+  const attack = (onChange: () => void) =>
+    render(
+      <Knob
+        value={0.1}
+        min={0.1}
+        max={200}
+        step={0.1}
+        onChange={onChange}
+        label="Attack"
+        logScale
+      />,
+    );
+
+  it('puts the geometric midpoint at half the travel', () => {
+    const onChange = vi.fn();
+    const { container } = attack(onChange);
+
+    const dial = container.querySelector('[role="slider"]')!;
+    fireEvent.pointerDown(dial, { clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(window, { clientX: 0, clientY: -DRAG_RANGE_PX / 2 });
+
+    // sqrt(0.1 * 200) = 4.47 ms. Linearly the same gesture lands on 100 ms,
+    // which is the whole complaint: everything usable was crammed into the
+    // first 2.5% of the travel.
+    const landed = onChange.mock.calls.at(-1)![0];
+    expect(landed).toBeGreaterThan(4);
+    expect(landed).toBeLessThan(5);
+  });
+
+  it('still reaches both ends exactly', () => {
+    const onChange = vi.fn();
+    const { container } = attack(onChange);
+
+    const dial = container.querySelector('[role="slider"]')!;
+    fireEvent.pointerDown(dial, { clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(window, { clientX: 0, clientY: -5000 });
+    expect(onChange.mock.calls.at(-1)![0]).toBe(200);
+
+    fireEvent.pointerMove(window, { clientX: 0, clientY: 5000 });
+    expect(onChange.mock.calls.at(-1)![0]).toBeCloseTo(0.1, 5);
+  });
+
+  it('always moves on an arrow key, even where a step rounds away', () => {
+    // At the bottom of a 2000:1 range one normalised step is smaller than the
+    // parameter's own step, so quantising lands back where it started. A key
+    // press that does nothing reads as a broken control.
+    const onChange = vi.fn();
+    const { container } = attack(onChange);
+
+    fireEvent.keyDown(container.querySelector('[role="slider"]')!, { key: 'ArrowUp' });
+
+    expect(onChange).toHaveBeenCalled();
+    expect(onChange.mock.calls.at(-1)![0]).toBeGreaterThan(0.1);
+  });
+
+  it('leaves a linear parameter untouched', () => {
+    const onChange = vi.fn();
+    const { container } = render(
+      <Knob value={50} min={0} max={100} step={1} onChange={onChange} label="Drive" />,
+    );
+
+    const dial = container.querySelector('[role="slider"]')!;
+    fireEvent.pointerDown(dial, { clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(window, { clientX: 0, clientY: -DRAG_RANGE_PX / 4 });
+
+    // A quarter of the travel from the middle of a linear range is 75.
+    expect(onChange.mock.calls.at(-1)![0]).toBe(75);
+  });
+});

@@ -25,6 +25,28 @@ struct ParameterDescriptor
     /** Rendered as a switch rather than a knob; stored as 0 or 1. */
     bool isBoolean = false;
 
+    /**
+     * The knob's travel is logarithmic rather than linear.
+     *
+     * A gesture hint, not a change of value. Time and frequency are perceived
+     * logarithmically, and mapping them linearly to drag distance buries the
+     * useful region: a compressor attack of 0.1-200 ms puts everything from
+     * 0.1 to 5 ms in the first 2.5 % of the travel, which is unusable for the
+     * one parameter that most needs precision.
+     *
+     * Decibels are already logarithmic in the quantity they describe, so they
+     * stay linear; so do percentages and plain 0..1 ranges.
+     *
+     * Deliberately **not** applied to the plugin's `NormalisableRange`: changing
+     * a VST3 parameter's skew moves every value an existing automation lane
+     * refers to, which is far too high a price for a mouse-drag problem. The
+     * stored value, the API, presets and automation are all untouched -- only
+     * how far you have to drag changes.
+     *
+     * Requires `minValue > 0`, since a logarithmic scale has no zero.
+     */
+    bool logScale = false;
+
     std::function<float()> get;
     std::function<void (float)> set;
 

@@ -398,6 +398,22 @@
         <figcaption data-i18n="board_caption">Di antara Splitter dan Mixer, strip berubah jadi router dua garis &mdash; dan seperti di Pedalboard-nya Logic, garis atas adalah jalur B.</figcaption>
       </figure>
 
+      <h3 class="split-h" data-i18n="panel_h">Panel yang terbaca, dan travel yang terasa benar.</h3>
+      <p class="sub" data-i18n="panel_sub">Tanda skala, tanda tengah, kontrol utama yang lebih besar &mdash; dan level Mixer sebagai fader, satu-satunya di aplikasi ini.</p>
+
+      <figure class="shot">
+        <img
+          src="img/mixer-faders.png"
+          alt="Kartu Mixer MilodikFX: Level A dan Level B sebagai fader vertikal dengan tinggi berbeda, Pan A dan Pan B tetap kenop"
+          loading="lazy"
+          width="431"
+          height="345"
+        />
+        <figcaption data-i18n="panel_caption">Level A di 1.00 dan Level B di 0.60 &mdash; dua tinggi terbaca sekilas, dua sudut putar tidak. Pan tetap kenop karena ia bipolar mengelilingi titik tengah, seperti di console mana pun.</figcaption>
+      </figure>
+
+      <p class="sub" data-i18n="panel_note">Parameter waktu dan frekuensi kini punya travel <b>logaritmik</b>. Attack compressor 0.1&ndash;200&nbsp;ms dulu menaruh seluruh wilayah bergunanya di 2,5% pertama gerakan. dB tetap linear &mdash; ia sudah logaritmik terhadap besaran yang diwakilinya. Nilai tersimpan, preset, dan otomasi DAW tidak berubah sama sekali.</p>
+
       <h3 class="split-h" data-i18n="mat_h">Terasa seperti benda, bukan seperti spreadsheet.</h3>
       <p class="sub" data-i18n="mat_sub">Kartu terbaca sebagai enclosure, kenopnya terasa diputar &mdash; dan meter menampilkan L dan R terpisah.</p>
 
@@ -629,6 +645,10 @@
         board_sub: "Buang blok yang tidak dipakai, ambil lagi dari daftar di kanan. Board kosong bukan keadaan khusus — sinyalnya lewat lurus.",
         board_caption: "Di antara Splitter dan Mixer, strip berubah jadi router dua garis — dan seperti di Pedalboard-nya Logic, garis atas adalah jalur B.",
         board_note: "Membuang blok tidak sama dengan mem-bypass-nya: delay yang di-bypass tetap berjalan supaya ekornya meluruh, delay yang dibuang tidak ada sama sekali. Splitter membuka jalur kedua dan Mixer menyusul sendiri. Setelah update, board lamamu tetap utuh.",
+        panel_h: "Panel yang terbaca, dan travel yang terasa benar.",
+        panel_sub: "Tanda skala, tanda tengah, kontrol utama yang lebih besar — dan level Mixer sebagai fader, satu-satunya di aplikasi ini.",
+        panel_caption: "Level A di 1.00 dan Level B di 0.60 — dua tinggi terbaca sekilas, dua sudut putar tidak. Pan tetap kenop karena ia bipolar mengelilingi titik tengah, seperti di console mana pun.",
+        panel_note: "Parameter waktu dan frekuensi kini punya travel logaritmik. Attack compressor 0.1–200 ms dulu menaruh seluruh wilayah bergunanya di 2,5% pertama gerakan. dB tetap linear — ia sudah logaritmik terhadap besaran yang diwakilinya. Nilai tersimpan, preset, dan otomasi DAW tidak berubah sama sekali.",
         mat_h: "Terasa seperti benda, bukan seperti spreadsheet.",
         mat_sub: "Kartu terbaca sebagai enclosure, kenopnya terasa diputar — dan meter menampilkan L dan R terpisah.",
         mat_caption: "Semuanya CSS bersama, jadi blok baru tidak menagih gambar apa pun. Hanya Cabinet dan Amp yang punya permukaan sungguhan — keduanya tunggal dan wujudnya tidak berubah menurut parameter.",
@@ -752,6 +772,10 @@
         board_sub: "Throw out the blocks you do not use and fetch them back from the list on the right. An empty board is not a special state — the signal passes straight through.",
         board_caption: "Between the Splitter and the Mixer the strip becomes a two-line router — and as in Logic's Pedalboard, the upper line is bus B.",
         board_note: "Removing a block is not the same as bypassing it: a bypassed delay keeps running so its tail can decay, one that is off the board is not there at all. The Splitter opens a second path and the Mixer follows on its own. After an update your existing board is untouched.",
+        panel_h: "A panel you can read, and travel that feels right.",
+        panel_sub: "Scale marks, a centre mark, a larger primary control — and the Mixer's levels as faders, the only ones in the app.",
+        panel_caption: "Level A at 1.00 and Level B at 0.60 — two heights read at a glance, two rotations do not. Pan stays a knob because it is bipolar around a centre, as on any console.",
+        panel_note: "Time and frequency parameters now have logarithmic travel. A compressor attack of 0.1–200 ms used to put its entire useful region in the first 2.5% of the gesture. Decibels stay linear — they are already logarithmic in what they describe. The stored value, presets and DAW automation are all unchanged.",
         mat_h: "It should feel like a thing, not a spreadsheet.",
         mat_sub: "Cards read as enclosures, knobs feel turned — and the meters show L and R separately.",
         mat_caption: "All shared CSS, so a new block costs no artwork at all. Only the Cabinet and the Amp get real surfaces — both are single and neither changes shape with any parameter.",

@@ -791,3 +791,73 @@ describe('EffectRack surfaces', () => {
     expect(amp.querySelector('.rack--nam')).toBeInTheDocument();
   });
 });
+
+describe('EffectRack control shapes', () => {
+  const mixer: EffectDescriptor = {
+    id: 'mixer',
+    label: 'Mixer',
+    description: 'Gabungkan jalur A dan B',
+    enabled: true,
+    toggleable: false,
+    parameters: [
+      { id: 'levelA', label: 'Level A', unit: '', min: 0, max: 2, step: 0.01, default: 1, type: 'float', value: 1 },
+      { id: 'panA', label: 'Pan A', unit: '', min: -1, max: 1, step: 0.01, default: 0, type: 'float', value: 0 },
+      { id: 'levelB', label: 'Level B', unit: '', min: 0, max: 2, step: 0.01, default: 1, type: 'float', value: 1 },
+    ],
+  };
+
+  it('gives the Mixer levels faders and its pan a knob', () => {
+    const { container } = render(
+      <EffectRack effect={mixer} onParameterChange={vi.fn()} onEnabledChange={vi.fn()} />,
+    );
+
+    // Two heights are far easier to compare than two rotations, and comparing
+    // is the actual task on the mixer. Pan stays a knob because it is bipolar
+    // around a centre, which is what every console does too.
+    expect(container.querySelectorAll('.fader')).toHaveLength(2);
+    expect(screen.getByRole('slider', { name: 'Level A' })).toBeInTheDocument();
+    expect(container.querySelector('.knob')).toBeInTheDocument();
+  });
+
+  it('leaves every other block on knobs', () => {
+    const { container } = render(
+      <EffectRack effect={overdrive} onParameterChange={vi.fn()} onEnabledChange={vi.fn()} />,
+    );
+
+    // The hardware is a knob for every one of these, which is the whole reason.
+    expect(container.querySelector('.fader')).not.toBeInTheDocument();
+  });
+
+  it('draws the first control of a block larger than the rest', () => {
+    const { container } = render(
+      <EffectRack effect={overdrive} onParameterChange={vi.fn()} onEnabledChange={vi.fn()} />,
+    );
+
+    // A pedal has one big knob and several small ones, and the hierarchy reads
+    // before the labels do. Derived from position, not a per-effect list.
+    const dials = container.querySelectorAll<HTMLElement>('.knob__dial');
+    expect(dials[0].style.width).toBe('92px');
+    expect(dials[1].style.width).toBe('72px');
+  });
+});
+
+describe('EffectRack instance layouts', () => {
+  it('gives a second overdrive instance the same voicing layout as the first', () => {
+    // Regression: this check was against the raw id, so every instance past the
+    // first showed the union of all twelve voicings' controls instead of the
+    // selected voicing's. No error, just the wrong knobs.
+    const bigMuff = { ...overdriveAs(11), id: 'overdrive2', label: 'Overdrive 2' };
+
+    render(
+      <EffectRack effect={bigMuff} onParameterChange={vi.fn()} onEnabledChange={vi.fn()} />,
+    );
+
+    expect(screen.getByRole('slider', { name: 'Sustain' })).toBeInTheDocument();
+    expect(screen.getByRole('slider', { name: 'Tone' })).toBeInTheDocument();
+    expect(screen.getByRole('slider', { name: 'Volume' })).toBeInTheDocument();
+
+    // Controls belonging to other voicings must not be on the card.
+    expect(screen.queryByRole('slider', { name: 'Asymmetry' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('slider', { name: 'Bass' })).not.toBeInTheDocument();
+  });
+});

@@ -606,6 +606,127 @@ h2 {
   transition: d 60ms linear;
 }
 
+/* Scale marks. Faint enough to read as printing on a panel rather than as
+   another thing competing with the value arc. */
+.knob__tick {
+  stroke: #3d4757;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+}
+
+/* The centre detent on a bipolar control, brighter and longer -- which is
+   exactly how an amp prints the 12 o'clock mark on its tone stack. */
+.knob__centre {
+  stroke: #6f7b8e;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.knob--plain .knob__tick,
+.knob--plain .knob__centre {
+  stroke: #2b3341;
+}
+
+/* ---------------------------------------------------------------- the fader
+   One place only: the Mixer's two bus levels. Two heights are far easier to
+   compare than two rotations, and comparing is the actual task there. */
+.fader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.fader__track {
+  position: relative;
+  width: 26px;
+  height: 132px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #0b0e14 0%, #131820 100%);
+  border: 1px solid #2b3444;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.7);
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.fader__track:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.fader__track--active {
+  border-color: var(--accent);
+}
+
+/* Scale marks, for the same reason the knob has them: the drag is relative, so
+   the drawing is the only absolute reference there is. */
+.fader__scale {
+  position: absolute;
+  inset: 8px 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.fader__scale i {
+  height: 1px;
+  margin: 0 5px;
+  background: #333d4c;
+}
+
+.fader__fill {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  bottom: 3px;
+  border-radius: 3px;
+  opacity: 0.32;
+  pointer-events: none;
+}
+
+/* The cap, drawn like the knob's: a lit upper edge and a shadow under it. */
+.fader__cap {
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  height: 14px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #4a5464 0%, #2a313c 52%, #171c25 100%);
+  box-shadow:
+    0 2px 5px -1px rgba(0, 0, 0, 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  pointer-events: none;
+}
+
+/* The pointer line moulded across the cap, as on a real fader. */
+.fader__cap::after {
+  content: '';
+  position: absolute;
+  inset: 50% 3px auto;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.fader__readout {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.fader__label {
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+.fader--disabled {
+  opacity: 0.45;
+}
+
+.fader--disabled .fader__track {
+  cursor: not-allowed;
+}
+
 .knob__pointer {
   stroke-width: 2.5;
   stroke-linecap: round;

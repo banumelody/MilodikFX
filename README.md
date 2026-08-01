@@ -152,6 +152,16 @@ untuk dua pickup yang saling meniadakan sebagian saat diblend.
 Pemilihan port melekat pada **perangkat**, bukan preset — ia menggambarkan kabel di rig, jadi preset
 tetap bermakna di interface lain.
 
+Kenopnya punya **tanda skala** dan **tanda tengah** untuk parameter bipolar, dan **kontrol utama tiap
+blok digambar lebih besar** — hierarki yang terbaca sebelum labelnya dibaca. **Level A/B di Mixer
+adalah fader**, satu-satunya di aplikasi ini: itu fungsi console, dan membandingkan dua tinggi jauh
+lebih mudah daripada dua sudut putar.
+
+**Parameter waktu dan frekuensi punya travel logaritmik.** Attack compressor 0.1–200 ms dulu menaruh
+seluruh wilayah bergunanya di 2,5% pertama gerakan; sekarang tersebar merata. dB tetap linear karena
+sudah logaritmik terhadap besaran yang diwakilinya. Nilai tersimpan, preset, dan otomasi DAW tidak
+berubah sama sekali — yang berubah hanya seberapa jauh kamu menarik.
+
 Tampilannya **material, bukan ilustrasi**: kartu terbaca sebagai enclosure dan kenopnya terasa
 seperti benda yang diputar — semuanya CSS bersama, jadi blok baru tidak menagih gambar apa pun.
 Hanya **Cabinet** dan **Amp** yang punya permukaan sungguhan, karena keduanya tunggal dan wujudnya

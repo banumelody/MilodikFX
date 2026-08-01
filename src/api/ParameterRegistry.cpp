@@ -136,6 +136,11 @@ juce::var ParameterRegistry::effectToVar (const EffectDescriptor& effect) const
         p->setProperty ("min", parameter.minValue);
         p->setProperty ("max", parameter.maxValue);
         p->setProperty ("step", parameter.step);
+
+        // A gesture hint for the knob, not a change of value. Only sent when
+        // set, so the field's absence means "linear" without anyone deciding.
+        if (parameter.logScale)
+            p->setProperty ("logScale", true);
         p->setProperty ("default", parameter.defaultValue);
 
         if (parameter.isText)

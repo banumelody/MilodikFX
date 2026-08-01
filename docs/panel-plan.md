@@ -30,7 +30,25 @@ Dua alasan pendukung, dicatat supaya tidak dibahas ulang:
 
 ---
 
-## v0.33.0 — "Panel" (P17)
+## Terkirim sebagai satu rilis — v0.33.0 (1 Agu 2026)
+
+> P17 dan P18 dikerjakan sekaligus atas permintaan.
+>
+> **Tiga koreksi dari mengerjakannya:**
+>
+> **Ukuran berjenjang harus berdasar kenop pertama, bukan parameter pertama.** Beberapa blok diawali
+> dropdown (Overdrive diawali pemilih voicing), jadi aturan "parameter pertama" tidak menonjolkan
+> apa pun sama sekali di blok-blok itu.
+>
+> **Tiga besaran nudge harus tetap tiga.** Menyatukan panah, roda, dan PageUp ke satu fungsi membuat
+> PageUp berubah dari sepersepuluh rentang jadi lima langkah — ketahuan oleh test yang sudah ada.
+>
+> **Bug v0.31 yang tertangkap di sini:** `visibleParameters` masih memeriksa `effect.id !==
+> 'overdrive'`, jadi **Overdrive 2 dan 3 menampilkan gabungan seluruh 12 voicing**, bukan kontrol
+> voicing yang dipilih. Tanpa error — hanya kenop yang salah. Sekarang di-key oleh tipe, dan
+> dikunci dengan test regresi.
+
+## v0.33.0 — rencana awal: "Panel" (P17)
 
 **Tujuan:** empat hal yang dimiliki kenop hardware dan belum dimiliki kenop di sini.
 
@@ -84,7 +102,7 @@ Kartunya cocok: parameternya sedikit (levelA, panA, levelB, panB, invertB), jadi
 
 ---
 
-## v0.34.0 — "Rentang yang terasa benar" (P18)
+## v0.34 — rencana awal: "Rentang yang terasa benar" (P18) — ikut v0.33.0
 
 **Tujuan:** memperbaiki hal yang sebenarnya membuat sebagian kenop terasa salah.
 

@@ -217,6 +217,35 @@ no local state to unwind. Card rects are measured once at drag start (nothing re
 hit-tested via `data-chain-stage`. A keyboard path runs alongside rather than behind it — Enter lifts,
 arrows move, Enter drops, Escape cancels — and the ↑▼ buttons stay as the plain fallback.
 
+#### Knob travel
+
+`ParameterDescriptor::logScale` marks a parameter whose knob travel is logarithmic. Set with
+`makeLogParam` in `ChainFactory.cpp`, next to the range it applies to.
+
+The rule is a principle, not a list: **time and frequency get the curve; decibels are already
+logarithmic in what they describe so they stay linear; percentages and plain 0..1 ranges stay
+linear.** That covers every parameter without an exception anyone has to remember.
+
+It exists because the ranges were mapped linearly to drag distance, which buried the useful region:
+`compressor.attackMs` runs 0.1-200 ms, a ratio of **2000:1**, so everything from 0.1 to 5 ms sat in
+the first **2.5 %** of the travel -- unusable, on the parameter that most needs precision. A fader
+would not have fixed it; the pixels are the same.
+
+Two things it deliberately does not do:
+
+- **It is never applied to the plugin's `NormalisableRange`.** Changing a VST3 parameter's skew moves
+  every value an existing automation lane refers to, which is far too high a price for a mouse-drag
+  problem. The stored value, the API, presets and automation are all untouched -- only how far you
+  drag changes, which also makes it cheap to reverse.
+- **It requires `minValue > 0`** and asserts otherwise, because a logarithmic scale has no zero and a
+  hint the UI would silently ignore is worse than no hint. `noiseGate.holdMs` starts at zero and so
+  stays linear.
+
+`Knob` runs the drag, the wheel and the keyboard through the same curve, and draws through it too --
+otherwise the pointer would sit where the drag never puts it. The wheel and arrows keep **three
+distinct magnitudes** (arrow = one step, wheel = five, PageUp = a tenth of the range); collapsing
+them into one turned PageUp into a nudge.
+
 #### Metering
 
 Per channel since v0.32. `LevelsHandler` keeps the combined fields -- they hold the **maximum** of
@@ -826,6 +855,22 @@ nothing. Only **Cabinet** and **Amp (NAM)** get real surfaces, because both are 
 changes shape with any parameter; an overdrive with twelve voicings could only be drawn as a lie
 about which one is selected. Drawn with gradients rather than bitmaps so they scale with the plugin
 window, and carrying no brand, logo or enclosure shape belonging to anyone.
+
+**Knobs carry scale marks**, and a brighter centre mark whenever the range crosses zero (derived
+from `min < 0 < max`, never a list of ids). That matters more here than on a real panel: a hardware
+knob is *absolute* -- its pointer position is the value -- while this one is a relative drag, so the
+drawing is the only absolute reference there is.
+
+**The first knob-rendered control of a block is drawn larger.** A pedal has one big knob and several
+small ones, and the hierarchy reads before the labels do. Derived from position rather than a
+per-effect list, and it is the first *knob*, not the first parameter -- several blocks lead with a
+dropdown.
+
+**The Mixer's two bus levels are faders**, and they are the only ones in the app. It is the one
+console function here and the one place where the task is comparing two values against each other;
+two heights read at a glance, two rotations do not. Pan stays a knob because it is bipolar around a
+centre, which is what every console does. `Fader` deliberately mirrors `Knob`'s gesture exactly --
+relative vertical drag, shift to slow, wheel, double-click to default, same keyboard set.
 
 **Perform view opts out** via `Knob`'s `plain` prop. It shares the component, so the opt-out is a
 prop and an assertion rather than a hope -- that screen has to be read from two metres in bad light
