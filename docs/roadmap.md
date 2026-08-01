@@ -1320,4 +1320,47 @@ per-instance ternyata tidak perlu dibayar di seluruh persistensi, cukup di id ba
 
 **Total P11–P13: ±5.5–6 weekend**, tiga titik rilis, risiko terbesar (jantung audio thread)
 paling akhir. Tiap rilis berhenti bersih; v0.29 sendirian sudah menyelesaikan use case dua
-pickup.
+pickup. **Ketiganya selesai 31 Jul – 1 Agu 2026.**
+
+# P14–P16 — Meter per kanal dan tampilan material (direncanakan 1 Agu 2026)
+
+> Rencana penuh di **[`material-plan.md`](material-plan.md)**. Studi desainnya, dengan saklar
+> untuk membandingkan langsung:
+> <https://claude.ai/code/artifact/46899b68-e01a-46ef-bf68-8039d8ada223>
+
+Keputusan yang mendasarinya: **material, bukan ilustrasi.** Menggambar tiap blok sebagai pedal
+membatalkan aturan yang membuat proyek ini cepat — *menambah parameter berarti mengedit
+`ChainFactory.cpp` dan tidak ada yang lain*. Dan Overdrive dengan 12 voicing-nya membuatnya bukan
+sekadar mahal tapi mustahil: satu gambar pedal untuk blok itu berbohong tentang voicing mana yang
+sedang dipilih. Polanya konsisten di luar sana juga — set terkurasi (Logic Pedalboard, Neural DSP)
+menggambar pedal; rantai bebas susun (Axe-Edit, Helix) tidak.
+
+## v0.32.0 — "Meter per kanal" (P14) — ~1 weekend
+
+Meter input dan output menampilkan L dan R terpisah. Ini **informasi, bukan hiasan**: sampai v0.27
+kedua bar akan selalu bergerak identik, tapi pan per jalur (v0.28), Cabinet stereo (v0.25) dan
+mode split L/R (v0.29) membuat kedua sisi benar-benar berbeda. Temuan dari membaca kodenya:
+`view.getMagnitude (0, samples)` adalah overload **semua-kanal**, jadi meter sekarang menampilkan
+sisi yang lebih keras dan menyembunyikan yang lebih pelan. **Input lebih berharga daripada
+output** — dengan magnetik dan piezo di dua port, bar terpisah langsung memperlihatkan mana yang
+jauh lebih panas. Field lama tetap ada berisi maksimum keduanya, jadi klien lama tidak pecah;
+`modulationEngine` tetap memakai nilai gabungan supaya perilaku auto-wah tidak berubah diam-diam.
+
+## v0.33.0 — "Material" (P15) — ~1.5 weekend
+
+Kenop yang menangkap cahaya, kartu ber-enclosure (bevel, sekrup, tekstur, bayangan), kabel
+melengkung di router. Semuanya komponen bersama: 26 efek ikut sekaligus dan blok ke-27 tidak
+menagih apa pun. Tiga hal yang dijaga: **Perform view tidak boleh mewarisi teksturnya** (ia polos
+supaya terbaca dari dua meter, dan ia memakai `Knob` yang sama — jadi butuh varian, bukan
+harapan); kontras diukur bukan dikira; semuanya gradient/SVG supaya ikut menskala di jendela
+plugin. Aksesibilitas kenop tidak disentuh — ini perubahan cat, bukan perubahan kontrol.
+
+## v0.34.0 — "Cabinet & Amp" (P16) — ~1 weekend
+
+Dua blok yang layak digambar sungguhan, karena keduanya **tunggal dan wujudnya tidak berubah
+menurut parameter apa pun** — kebalikan persis dari Overdrive. Tanpa nama merek, logo, atau bentuk
+yang meniru produk tertentu. Satu-satunya rilis di rencana ini yang menunggu keputusan di luar
+kode: **siapa yang menggambar.** Aset setingkat studi desain bisa saya buat; ilustrasi yang
+terlihat mahal tidak.
+
+**Total P14–P16: ±3.5 weekend.** v0.32 berdiri sendiri dan berguna tanpa dua yang lain.
