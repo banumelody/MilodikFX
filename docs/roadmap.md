@@ -1366,4 +1366,38 @@ yang meniru produk tertentu. Satu-satunya rilis di rencana ini yang menunggu kep
 kode: **siapa yang menggambar.** Aset setingkat studi desain bisa saya buat; ilustrasi yang
 terlihat mahal tidak.
 
-**Total P14–P16: ±3.5 weekend.** v0.32 berdiri sendiri dan berguna tanpa dua yang lain.
+**Total P14–P16: ±3.5 weekend.** Ketiganya **terkirim sebagai satu rilis, v0.32.0 (1 Agu 2026)**,
+plus satu hal di luar rencana: gain input dipecah per kanal.
+
+# P17–P18 — Panel: kenop yang terbaca, dan rentang yang terasa benar (direncanakan 1 Agu 2026)
+
+> Rencana penuh di **[`panel-plan.md`](panel-plan.md)**.
+
+Dari pertanyaan apakah sebagian parameter idealnya slider. Jawabannya **tidak, dan justru karena
+alasan hardware**: fader di dunia audio praktis hanya ada di console dan graphic EQ. Overdrive, tone
+stack, compressor, gate, delay, reverb — semuanya kenop di perangkat aslinya. EQ di sini tiga band
+shelving, yang berarti ia tone stack amp. Dua alasan pendukung: gestur `Knob` sudah drag vertikal
+relatif, jadi keunggulan ergonomis fader sudah ada; dan `ToneCurve` sudah menggambar respons
+sungguhan, yang merupakan satu-satunya alasan kuat memakai fader untuk EQ.
+
+## v0.33.0 — "Panel" (P17) — ~1–1.5 weekend
+
+Empat hal yang dimiliki kenop hardware dan belum ada di sini: **tanda skala** (paling universal di
+hardware, dan penting khusus di sini karena kenop drag-relatif membuat tampilan jadi satu-satunya
+acuan absolut — panel sungguhan memberi itu gratis), **tanda tengah** untuk parameter bipolar
+(diterapkan otomatis saat `min < 0 < max`, bukan dari daftar), **ukuran berjenjang** (parameter
+pertama tiap efek digambar lebih besar — diturunkan, bukan didaftar, atau ia jadi pajak berikutnya
+per blok baru), dan **label tersablon**. Plus **Mixer A/B jadi sepasang fader vertikal** — satu-satunya
+blok yang hardware-nya memang console, dan satu-satunya tempat di mana tugasnya membandingkan dua
+nilai. Pan tetap kenop; gestur fader harus identik dengan kenop.
+
+## v0.34.0 — "Rentang yang terasa benar" (P18) — ~0.5–1 weekend
+
+Yang saya duga sebenarnya terasa kurang, dan angkanya sudah diperiksa: rentang dipetakan **linear**
+ke jarak drag, jadi `compressor.attackMs` (0.1–200 ms, rasio **2000×**) menaruh seluruh wilayah
+berguna di **2.5 % pertama** dari drag. Mengganti kenop jadi fader tidak memperbaikinya — pikselnya
+sama. Aturannya prinsip, bukan daftar: **waktu dan frekuensi dapat kurva logaritmik; dB sudah
+logaritmik jadi tetap linear; persen dan 0..1 tetap linear.** `skew` diisi di `ChainFactory.cpp`
+bersama parameternya, tapi **sengaja tidak diterapkan ke `NormalisableRange` VST3** — itu akan
+menggeser setiap lajur otomasi DAW yang sudah ada demi masalah yang hanya menyangkut drag mouse.
+Nilai tersimpan, API, preset, dan otomasi tidak berubah sama sekali.
