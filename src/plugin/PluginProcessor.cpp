@@ -339,7 +339,15 @@ void MilodikFXAudioProcessor::followHostTempo() noexcept
         return;
 
     lastHostBpm = clamped;
+
+    // Every delay instance, not just the first: a synced repeat on the second
+    // one would otherwise run on whatever tempo it was last given and drift
+    // against the project grid.
     chain.delay->setBpm (clamped);
+
+    for (const auto& layer : chain.extras)
+        if (layer.delay != nullptr)
+            layer.delay->setBpm (clamped);
 }
 
 //==============================================================================
@@ -438,8 +446,15 @@ int MilodikFXAudioProcessor::computeLatencySamples() const
 {
     int latency = 0;
 
+    // Every overdrive instance, because in a plugin there is no board to take
+    // one off: all of them run, so all of their oversampling latencies add up.
+    // Reporting only the first would misalign the track by the rest.
     if (chain.overdrive != nullptr)
         latency += (int) std::lround (chain.overdrive->getLatencySamples());
+
+    for (const auto& layer : chain.extras)
+        if (layer.overdrive != nullptr)
+            latency += (int) std::lround (layer.overdrive->getLatencySamples());
 
     // Measured at load time by pushing an impulse through the round trip, not
     // estimated -- and zero when the session rate already matches the model's,

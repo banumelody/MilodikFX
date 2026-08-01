@@ -1,5 +1,8 @@
 #include "dsp/ChainFactory.h"
 
+#include <string>
+#include <type_traits>
+
 #include <cmath>
 
 namespace milodikfx::dsp
@@ -133,9 +136,40 @@ ParameterDescriptor makeNamFileParam (NamProcessor* processor,
 }
 } // namespace
 
-GuitarChain buildGuitarChain (DSPChainManager& chain, ChainOptions options)
+int ChainInventory::maxInstances() const noexcept
+{
+    // jmax only takes three at a time, and a fold reads better than nesting.
+    const int counts[] = { 1, noiseGate, cleanBoost, compressor, overdrive,
+                           eq, toneStack, cabinet, delay, reverb };
+
+    int most = 1;
+
+    for (const auto count : counts)
+        most = juce::jmax (most, count);
+
+    return most;
+}
+
+GuitarChain buildGuitarChain (DSPChainManager& chain, ChainOptions options, ChainInventory inventory)
 {
     GuitarChain result;
+    result.extras.resize ((size_t) juce::jmax (0, inventory.maxInstances() - 1));
+
+    // Instances of one type are built next to each other, so the chain's
+    // starting order reads Overdrive, Overdrive 2, Overdrive 3 rather than
+    // scattering them -- a default anyone can then drag apart. `member` names
+    // the same field on every layer, so instance 1 and its siblings are filled
+    // by one call.
+    const auto addInstances = [&chain, &result] (auto GuitarChain::* member, int count)
+    {
+        using Slot = std::remove_reference_t<decltype (result.*member)>;
+        using Processor = std::remove_pointer_t<Slot>;
+
+        result.*member = add<Processor> (chain);
+
+        for (int i = 1; i < count; ++i)
+            result.extras[(size_t) (i - 1)].*member = add<Processor> (chain);
+    };
 
     // Signal order matters: trim the guitar to the chain before the gate sees
     // it, so the gate threshold stays correct relative to the signal; gate the
@@ -143,24 +177,24 @@ GuitarChain buildGuitarChain (DSPChainManager& chain, ChainOptions options)
     // so the drive sees a steady level; and put the cabinet after all the
     // distortion it is meant to be filtering.
     result.inputTrim = add<InputTrimProcessor> (chain);
-    result.noiseGate = add<NoiseGateProcessor> (chain);
-    result.cleanBoost = add<GainProcessor> (chain);
-    result.compressor = add<CompressorProcessor> (chain);
+    addInstances (&GuitarChain::noiseGate, inventory.noiseGate);
+    addInstances (&GuitarChain::cleanBoost, inventory.cleanBoost);
+    addInstances (&GuitarChain::compressor, inventory.compressor);
 
     // The parallel section's opening bracket. Sits here by default -- after the
     // dynamics, before the drive -- which is where splitting is most useful:
     // clean low end down one path, drive down the other. Both brackets are
     // draggable, so this is a starting point rather than a rule.
     result.split = add<SplitProcessor> (chain);
-    result.overdrive = add<OverdriveProcessor> (chain);
-    result.eq = add<EQProcessor> (chain);
-    result.toneStack = add<ToneStackProcessor> (chain);
+    addInstances (&GuitarChain::overdrive, inventory.overdrive);
+    addInstances (&GuitarChain::eq, inventory.eq);
+    addInstances (&GuitarChain::toneStack, inventory.toneStack);
     // The amp head sits between the tone shaping and the cabinet, exactly where
     // a real head sits between the pedals and the speaker.
     result.nam = add<NamProcessor> (chain);
-    result.cabinet = add<CabinetProcessor> (chain);
-    result.delay = add<DelayProcessor> (chain);
-    result.reverb = add<ReverbProcessor> (chain);
+    addInstances (&GuitarChain::cabinet, inventory.cabinet);
+    addInstances (&GuitarChain::delay, inventory.delay);
+    addInstances (&GuitarChain::reverb, inventory.reverb);
     // The closing bracket, immediately before the master stage.
     result.mixer = add<MixerProcessor> (chain);
 
@@ -188,16 +222,43 @@ GuitarChain buildGuitarChain (DSPChainManager& chain, ChainOptions options)
     return result;
 }
 
-void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
-                              const GuitarChain& chain,
-                              DSPChainManager& manager,
-                              ChainExtras extras)
+namespace
 {
+/**
+ * Registers one instance of every stage a layer holds.
+ *
+ * Called once per instance, and that is the whole trick behind duplicate
+ * blocks: the descriptions live in exactly one place, so a second overdrive is
+ * provably the same overdrive rather than a copy that can drift. Instance 1
+ * carries today's bare id (`overdrive`) and later ones get a numeric suffix
+ * (`overdrive2`), which is what lets every preset, settings file, MIDI mapping
+ * and DAW automation lane written before v0.31 keep working untouched.
+ *
+ * A layer that has no instance of a type leaves its pointer null and the block
+ * is skipped, so the non-duplicable stages -- the amp head, the split brackets,
+ * the master limiter -- appear only in the first layer without needing a guard.
+ */
+void registerLayer (milodikfx::api::ParameterRegistry& registry,
+                    const GuitarChain& chain,
+                    DSPChainManager& manager,
+                    ChainExtras& extras,
+                    const std::string& suffix,
+                    bool first)
+{
+    juce::ignoreUnused (manager);
+
+    /** Instance 2 is labelled "Overdrive 2"; instance 1 stays "Overdrive". */
+    const auto instanced = [&suffix] (const char* label)
+    {
+        return suffix.empty() ? std::string (label) : std::string (label) + " " + suffix;
+    };
+
     auto getInputMode = std::move (extras.getInputMode);
     auto setInputMode = std::move (extras.setInputMode);
 
     // Global controls that belong to the chain as a whole rather than to any one
     // effect. Always in the path, so never toggleable as a unit.
+    if (first)
     {
         EffectDescriptor e;
         e.id = "global";
@@ -217,31 +278,50 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
         // click) still needs the tempo, because a synced delay and a synced LFO
         // read it. The delay then holds it instead -- one owner either way, so
         // there is still never a second BPM to disagree with.
+        // **Every** delay, not just the first. One BPM for the whole app is the
+        // rule -- two independently-edited tempi would let a synced repeat drift
+        // against the click -- and with more than one delay instance, reaching
+        // only `chain.delay` would leave the others running on a stale tempo.
+        std::vector<DelayProcessor*> delays;
+
+        if (chain.delay != nullptr)
+            delays.push_back (chain.delay);
+
+        for (const auto& layer : chain.extras)
+            if (layer.delay != nullptr)
+                delays.push_back (layer.delay);
+
         if (auto* metronome = chain.metronome)
         {
-            auto* delay = chain.delay;
-
             e.parameters.push_back (makeParam ("bpm", "Tempo", "BPM",
                                                MetronomeProcessor::kMinBpm,
                                                MetronomeProcessor::kMaxBpm,
                                                1.0f, 120.0f,
                                                [metronome] { return metronome->getBpm(); },
-                                               [metronome, delay] (float v)
+                                               [metronome, delays] (float v)
                                                {
                                                    metronome->setBpm (v);
 
-                                                   if (delay != nullptr)
+                                                   for (auto* delay : delays)
                                                        delay->setBpm (v);
                                                }));
         }
-        else if (auto* delay = chain.delay)
+        else if (! delays.empty())
         {
+            // No metronome (a plugin): the first delay owns the tempo, and the
+            // rest follow it so there is still exactly one.
+            auto* owner = delays.front();
+
             e.parameters.push_back (makeParam ("bpm", "Tempo", "BPM",
                                                MetronomeProcessor::kMinBpm,
                                                MetronomeProcessor::kMaxBpm,
                                                1.0f, 120.0f,
-                                               [delay] { return delay->getBpm(); },
-                                               [delay] (float v) { delay->setBpm (v); }));
+                                               [owner] { return owner->getBpm(); },
+                                               [delays] (float v)
+                                               {
+                                                   for (auto* delay : delays)
+                                                       delay->setBpm (v);
+                                               }));
         }
 
         registry.addEffect (std::move (e));
@@ -281,8 +361,8 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
     if (auto* p = chain.noiseGate)
     {
         EffectDescriptor e;
-        e.id = "noiseGate";
-        e.label = "Noise Gate";
+        e.id = "noiseGate" + suffix;
+        e.label = instanced ("Noise Gate");
         e.description = "Meredam dengung pickup di sela nada";
         e.isEnabled = [p] { return p->isEnabled(); };
         e.setEnabled = [p] (bool v) { p->setEnabled (v); };
@@ -304,8 +384,8 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
     if (auto* p = chain.cleanBoost)
     {
         EffectDescriptor e;
-        e.id = "cleanBoost";
-        e.label = "Clean Boost";
+        e.id = "cleanBoost" + suffix;
+        e.label = instanced ("Clean Boost");
         // Distinct from Input Gain on purpose: that one matches the guitar to
         // the chain and is set once, this one is pushed in for a solo.
         e.description = "Dorong front-end untuk solo - hanya menambah, setelah noise gate";
@@ -320,8 +400,8 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
     if (auto* p = chain.compressor)
     {
         EffectDescriptor e;
-        e.id = "compressor";
-        e.label = "Compressor";
+        e.id = "compressor" + suffix;
+        e.label = instanced ("Compressor");
         e.description = "Meratakan dinamika petikan";
         e.isEnabled = [p] { return p->isEnabled(); };
         e.setEnabled = [p] (bool v) { p->setEnabled (v); };
@@ -417,8 +497,8 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
     if (auto* p = chain.overdrive)
     {
         EffectDescriptor e;
-        e.id = "overdrive";
-        e.label = "Overdrive";
+        e.id = "overdrive" + suffix;
+        e.label = instanced ("Overdrive");
         e.description = "Overdrive, distorsi, dan fuzz - pilih voicing pedalnya, kontrol menyesuaikan tipe";
         e.isEnabled = [p] { return p->isEnabled(); };
         e.setEnabled = [p] (bool v) { p->setEnabled (v); };
@@ -472,8 +552,8 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
     if (auto* p = chain.eq)
     {
         EffectDescriptor e;
-        e.id = "eq";
-        e.label = "EQ";
+        e.id = "eq" + suffix;
+        e.label = instanced ("EQ");
         e.description = "Pembentuk nada SEBELUM distorsi - 120 Hz / 1 kHz / 7 kHz";
         e.isEnabled = [p] { return p->isEnabled(); };
         e.setEnabled = [p] (bool v) { p->setEnabled (v); };
@@ -492,8 +572,8 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
     if (auto* p = chain.toneStack)
     {
         EffectDescriptor e;
-        e.id = "toneStack";
-        e.label = "Contour";
+        e.id = "toneStack" + suffix;
+        e.label = instanced ("Contour");
         e.description = "Pembentuk nada SETELAH distorsi, sebelum cabinet - 50 Hz / 500 Hz / 5 kHz";
         e.isEnabled = [p] { return p->isEnabled(); };
         e.setEnabled = [p] (bool v) { p->setEnabled (v); };
@@ -534,8 +614,8 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
     if (auto* p = chain.cabinet)
     {
         EffectDescriptor e;
-        e.id = "cabinet";
-        e.label = "Cabinet";
+        e.id = "cabinet" + suffix;
+        e.label = instanced ("Cabinet");
         e.description = "Simulasi speaker - biarkan menyala untuk gitar DI";
         e.isEnabled = [p] { return p->isEnabled(); };
         e.setEnabled = [p] (bool v) { p->setEnabled (v); };
@@ -604,8 +684,8 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
     if (auto* p = chain.delay)
     {
         EffectDescriptor e;
-        e.id = "delay";
-        e.label = "Delay";
+        e.id = "delay" + suffix;
+        e.label = instanced ("Delay");
         e.description = "Delay berumpan balik dengan waktu yang meluncur";
         e.isEnabled = [p] { return p->isEnabled(); };
         e.setEnabled = [p] (bool v) { p->setEnabled (v); };
@@ -640,8 +720,8 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
     if (auto* p = chain.reverb)
     {
         EffectDescriptor e;
-        e.id = "reverb";
-        e.label = "Reverb";
+        e.id = "reverb" + suffix;
+        e.label = instanced ("Reverb");
         e.description = "Ruang gema bergaya Freeverb";
         e.isEnabled = [p] { return p->isEnabled(); };
         e.setEnabled = [p] (bool v) { p->setEnabled (v); };
@@ -726,5 +806,21 @@ void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
                                            [p] (float v) { p->setBeatsPerBar ((int) std::lround (v)); }));
         registry.addEffect (std::move (e));
     }
+}
+} // namespace
+
+void registerChainParameters (milodikfx::api::ParameterRegistry& registry,
+                              const GuitarChain& chain,
+                              DSPChainManager& manager,
+                              ChainExtras extras)
+{
+    registerLayer (registry, chain, manager, extras, {}, true);
+
+    // Instance 2 upwards. The suffix is the instance number, so the ids read
+    // `overdrive2`, `overdrive3` -- and instance 1 keeps the bare id it has
+    // always had, which is why nothing written before v0.31 needs migrating.
+    for (size_t i = 0; i < chain.extras.size(); ++i)
+        registerLayer (registry, chain.extras[i], manager, extras,
+                       std::to_string (i + 2), false);
 }
 } // namespace milodikfx::dsp

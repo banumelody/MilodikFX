@@ -8,30 +8,24 @@
  *   npx cypress run --spec cypress/e2e/shot.cy.ts
  */
 describe('docs screenshots', () => {
-  it('captures the empty board and the two-line router', () => {
-    // An almost-empty board first: the palette on the right, a straight wire
-    // where the rack would be. This is the state a new install now starts in
-    // conceptually, even though an update keeps everyone's rig intact.
-    cy.request('PUT', '/api/chain/board', { placed: [] });
-    cy.visit('/');
-    // Not "kabel lurus": the master stage is pinned, so even an empty board
-    // still shows it in the strip. The rack is where emptiness is stated.
-    cy.contains('Board kosong').should('be.visible');
-    cy.wait(800);
-    cy.screenshot('empty-board', { capture: 'viewport', overwrite: true });
-
-    // Then a parallel section, so the router's two bus lines are on screen.
+  it('captures two overdrives on one board', () => {
+    // The headline of v0.31: a screamer into a fuzz, dialled differently,
+    // which is the one thing a one-per-type board could never do.
     cy.request('PUT', '/api/chain/board', {
-      placed: ['noiseGate', 'split', 'overdrive', 'cabinet', 'reverb', 'mixer'],
+      placed: ['noiseGate', 'overdrive', 'overdrive2', 'nam', 'cabinet', 'reverb'],
     });
-    cy.request('PUT', '/api/chain/buses', { busB: ['reverb'] });
-    cy.request('POST', '/api/effects/split/enabled', { enabled: true });
-    cy.request('PUT', '/api/parameters/split/mode', { value: 0 });
+    cy.request('PUT', '/api/parameters/overdrive/type', { value: 1 });   // Tube Screamer
+    cy.request('PUT', '/api/parameters/overdrive/drivePct', { value: 35 });
+    cy.request('PUT', '/api/parameters/overdrive2/type', { value: 11 }); // Big Muff
+    cy.request('PUT', '/api/parameters/overdrive2/drivePct', { value: 82 });
 
     cy.visit('/');
-    cy.get('.chain__fork').should('be.visible');
-    cy.wait(800);
-    cy.screenshot('router', { capture: 'viewport', overwrite: true });
+    // exist, not be.visible: the card may sit below the fold in a 1000px
+    // viewport, and the shot is of the top of the rack either way.
+    cy.contains('h2', 'Overdrive 2').should('exist');
+    cy.wait(900);
+
+    cy.screenshot('two-overdrives', { capture: 'viewport', overwrite: true });
   });
 });
 

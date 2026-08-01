@@ -1,6 +1,7 @@
 import { memo } from 'react';
 
 import { EFFECT_ACCENTS } from './EffectRack';
+import { effectType } from '../services/api';
 import type { EffectDescriptor } from '../services/api';
 
 /**
@@ -37,15 +38,38 @@ const GROUPS: Array<{ title: string; ids: string[] }> = [
   { title: 'Ruang', ids: ['delay', 'reverb'] },
 ];
 
+/** "Overdrive 2" is an instance; the palette offers the type, so drop the number. */
+const stripInstance = (label: string) => label.replace(/\s+\d+$/, '');
+
 function BoardPaletteBase({ stages, disabled = false, paletteProps, activeId }: BoardPaletteProps) {
-  const unplaced = stages.filter((stage) => stage.placed === false);
+  // One entry per *type*, carrying how many of it are left. Three separate
+  // Overdrive rows would be a list of near-identical entries where the only
+  // real question is "have I got another one" -- which the count answers.
+  //
+  // The Mixer never appears: it arrives with the Splitter and leaves with it,
+  // exactly as Apple's does. On its own it would be a mix point with nothing
+  // to mix.
+  const byType = new Map<string, { next: EffectDescriptor; left: number; total: number }>();
 
-  // The Mixer is never fetched by hand: it arrives with the Splitter and leaves
-  // with it, exactly as Apple's does. Offering it on its own would let someone
-  // build a board with a mix point and nothing to mix.
-  const offered = unplaced.filter((stage) => stage.id !== 'mixer');
+  for (const stage of stages) {
+    const type = effectType(stage.id);
 
-  const byId = new Map(offered.map((stage) => [stage.id, stage]));
+    if (type === 'mixer') continue;
+
+    const entry = byType.get(type) ?? { next: stage, left: 0, total: 0 };
+
+    entry.total += 1;
+
+    if (stage.placed === false) {
+      // The lowest-numbered free instance, so placing twice gives 2 then 3.
+      if (entry.left === 0) entry.next = stage;
+      entry.left += 1;
+    }
+
+    byType.set(type, entry);
+  }
+
+  const offered = [...byType.values()].filter((entry) => entry.left > 0);
 
   return (
     <section className="panel palette" aria-label="Blok tersedia">
@@ -68,35 +92,47 @@ function BoardPaletteBase({ stages, disabled = false, paletteProps, activeId }: 
           <div className="palette__list">
             {GROUPS.map((group) => {
               const items = group.ids
-                .map((id) => byId.get(id))
-                .filter(Boolean) as EffectDescriptor[];
+                .map((type) => byType.get(type))
+                .filter(
+                  (entry): entry is NonNullable<typeof entry> => entry != null && entry.left > 0
+                );
+
               if (items.length === 0) return null;
 
               return (
                 <div key={group.title} className="palette__group">
                   <p className="palette__group-title">{group.title}</p>
 
-                  {items.map((stage) => (
-                    <button
-                      key={stage.id}
-                      type="button"
-                      className={`palette__chip${
-                        activeId === stage.id ? ' palette__chip--dragging' : ''
-                      }`}
-                      style={{ ['--hue' as string]: EFFECT_ACCENTS[stage.id] ?? '#4da3ff' }}
-                      disabled={disabled}
-                      data-palette-stage={stage.id}
-                      title={
-                        stage.id === 'split'
-                          ? 'Buka jalur kedua - Mixer menyusul sendiri'
-                          : stage.description
-                      }
-                      {...paletteProps(stage.id)}
-                    >
-                      <i aria-hidden="true" />
-                      {stage.label}
-                    </button>
-                  ))}
+                  {items.map(({ next, left, total }) => {
+                    const type = effectType(next.id);
+
+                    return (
+                      <button
+                        key={type}
+                        type="button"
+                        className={`palette__chip${
+                          activeId === next.id ? ' palette__chip--dragging' : ''
+                        }`}
+                        style={{ ['--hue' as string]: EFFECT_ACCENTS[type] ?? '#4da3ff' }}
+                        disabled={disabled}
+                        data-palette-stage={next.id}
+                        title={
+                          type === 'split'
+                            ? 'Buka jalur kedua - Mixer menyusul sendiri'
+                            : next.description
+                        }
+                        {...paletteProps(next.id)}
+                      >
+                        <i aria-hidden="true" />
+                        {stripInstance(next.label)}
+                        {total > 1 ? (
+                          <span className="palette__left">
+                            {left}/{total}
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
                 </div>
               );
             })}

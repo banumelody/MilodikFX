@@ -78,6 +78,19 @@ if ($newerSources.Count -gt 0) {
     Log "         Re-run with -Build, or this suite is testing something you did not write."
 }
 
+# The suite asserts on the chain the engine reports, and the chain now carries
+# a board and an order that persist in the settings file. Running against
+# whatever the last session happened to leave there is how this reported one
+# failure on one run and three on the next -- so the file is set aside first and
+# put back afterwards, the same way smoke.ps1 has always done.
+$settingsPath = Join-Path $env:APPDATA 'MilodikFX\MilodikFX.settings'
+$settingsBackup = "$settingsPath.e2ebak"
+
+if (Test-Path $settingsPath) {
+    Log 'Setting the existing settings file aside for the run'
+    Move-Item -Path $settingsPath -Destination $settingsBackup -Force
+}
+
 Log "Starting $exePath"
 $proc = Start-Process -FilePath $exePath -PassThru
 
@@ -120,6 +133,15 @@ try {
     if ($proc -and -not $proc.HasExited) {
         Log 'Stopping MilodikFX...'
         Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+    }
+
+    # Give the app a moment to write its own settings out before replacing them,
+    # or the restore races the shutdown flush and loses.
+    Start-Sleep -Milliseconds 800
+
+    if (Test-Path $settingsBackup) {
+        Log 'Restoring the settings file'
+        Move-Item -Path $settingsBackup -Destination $settingsPath -Force
     }
 }
 

@@ -224,6 +224,75 @@ public:
             expect (order.getIds() == before, "putting stages back reordered the chain");
         }
 
+        beginTest ("A chain longer than sixteen stages can still be reordered");
+        {
+            // The old packing gave each stage four bits of a single uint64, so
+            // setOrder refused outright past sixteen. v0.31's inventory builds
+            // twenty-four, which is the whole reason the packing had to go.
+            DSPChainManager chain;
+
+            constexpr int kStages = 24;
+
+            for (int i = 0; i < kStages; ++i)
+                chain.addProcessor (std::make_unique<GainMarker> (1.0f));
+
+            chain.prepareToPlay (kRate, kBlock, 2);
+
+            std::vector<int> reversedMiddle;
+            reversedMiddle.reserve (kStages);
+            reversedMiddle.push_back (0);
+
+            for (int i = kStages - 2; i >= 1; --i)
+                reversedMiddle.push_back (i);
+
+            reversedMiddle.push_back (kStages - 1);
+
+            expect (chain.setOrder (reversedMiddle), "a 24-stage order was refused");
+            expect (chain.getOrder() == reversedMiddle, "the order did not round-trip");
+        }
+
+        beginTest ("Order, buses and placement stay consistent with each other");
+        {
+            // They used to be three separate atomics, so a block could see a new
+            // order with a stale placement. One snapshot closes that window;
+            // this checks the three still agree after being set in any sequence.
+            DSPChainManager chain;
+
+            for (int i = 0; i < 20; ++i)
+                chain.addProcessor (std::make_unique<GainMarker> (1.0f));
+
+            chain.prepareToPlay (kRate, kBlock, 2);
+
+            std::vector<int> order;
+            for (int i = 19; i >= 0; --i) order.push_back (i);
+            order[0] = 0;
+            order[19] = 19;
+            for (int i = 1; i < 19; ++i) order[(size_t) i] = 19 - i;
+
+            expect (chain.setOrder (order));
+            chain.setStagePlaced (7, false);
+            chain.setStageOnBusB (11, true);
+            chain.setStagePlaced (13, false);
+
+            expect (chain.getOrder() == order, "setting placement disturbed the order");
+            expect (! chain.isStagePlaced (7));
+            expect (! chain.isStagePlaced (13));
+            expect (chain.isStagePlaced (11), "a bus change disturbed placement");
+            expect (chain.isStageOnBusB (11));
+            expect (! chain.isStageOnBusB (7));
+
+            // And the audio thread must be able to pick all of it up.
+            juce::AudioBuffer<float> buffer (2, kBlock);
+            fillTone (buffer);
+            chain.processBlock (buffer);
+
+            auto finite = true;
+            for (int i = 0; i < kBlock; ++i)
+                if (! std::isfinite (buffer.getSample (0, i))) finite = false;
+
+            expect (finite, "the chain produced non-finite samples after a snapshot change");
+        }
+
         beginTest ("A preset with no board loads as a full board");
         {
             // The migration rule, stated as a test because getting it backwards

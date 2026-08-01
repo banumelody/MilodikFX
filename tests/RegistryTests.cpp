@@ -274,10 +274,12 @@ public:
         milodikfx::dsp::DSPChainManager manager;
         const auto chain = milodikfx::dsp::buildGuitarChain (manager);
 
-        // Fourteen stages: the twelve the guitar passes through plus the two
-        // brackets of the parallel section. The metronome is deliberately not
-        // one of them -- it is mixed in afterwards, outside bypass.
-        expectEquals (manager.getNumProcessors(), 14);
+        // Twenty-four stages: the default inventory. Nine types can repeat
+        // (three overdrives, two of most of the rest), plus the five that
+        // cannot -- input, split, amp head, mixer, master. The metronome is
+        // deliberately not one of them: it is mixed in afterwards, outside
+        // bypass. This was fourteen before duplicate blocks existed.
+        expectEquals (manager.getNumProcessors(), 24);
         expect (chain.split != nullptr);
         expect (chain.mixer != nullptr);
         expect (! chain.split->isEnabled(), "the split must be off by default");
@@ -313,7 +315,7 @@ public:
         expect (hostChain.looper == nullptr, "a plugin must not carry a looper");
 
         // The chain stages are unchanged: only the post-master mixers are gone.
-        expectEquals (hostManager.getNumProcessors(), 14);
+        expectEquals (hostManager.getNumProcessors(), 24);
         expect (hostChain.masterOut != nullptr);
 
         beginTest ("Tempo survives without a metronome to hold it");
@@ -400,8 +402,9 @@ public:
 
         libraryRoot.deleteRecursively();
 
-        expectEquals ((int) pluginRegistry.getEffects().size(), 16);
-        expectEquals ((int) appRegistry.getEffects().size(), 16);
+        // Twenty-four chain stages plus the global card and the metronome.
+        expectEquals ((int) pluginRegistry.getEffects().size(), 26);
+        expectEquals ((int) appRegistry.getEffects().size(), 26);
 
         // The plugin has the Input card too, with the trim but without Mode.
         const auto* pluginInput = pluginRegistry.findEffect ("input");

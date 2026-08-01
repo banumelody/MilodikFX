@@ -3,6 +3,7 @@ import { Fragment, memo } from 'react';
 import { Knob } from './Knob';
 import { Toggle } from './Toggle';
 import { ToneCurve } from './ToneCurve';
+import { effectType } from '../services/api';
 import type { EffectDescriptor, ParameterDescriptor } from '../services/api';
 
 /** Accent per effect, so the rack reads as a signal chain rather than a list. */
@@ -239,7 +240,7 @@ function EffectRackBase({
   disabled = false,
   sampleRate,
 }: EffectRackProps) {
-  const accent = EFFECT_ACCENTS[effect.id] ?? '#4da3ff';
+  const accent = EFFECT_ACCENTS[effectType(effect.id)] ?? '#4da3ff';
   const inactive = disabled || !effect.enabled;
 
   // Channel tabs (A/B/C/D) belong on the real effect blocks -- the ones with a
@@ -342,7 +343,7 @@ function EffectRackBase({
               <span
                 className="rack__move-locked"
                 title={
-                  effect.id === 'master'
+                  effectType(effect.id) === 'master'
                     ? 'Selalu terakhir — membawa limiter pengaman'
                     : 'Selalu pertama — meter input mengandalkan posisinya'
                 }
@@ -449,7 +450,9 @@ function EffectRackBase({
 
       <div className="rack__body">
         {visibleParameters.map((parameter) => {
-          const enumKey = `${effect.id}.${parameter.id}`;
+          // Keyed by type, not id: `overdrive2` shares every table with
+          // `overdrive`, and looking it up raw would drop the lot.
+          const enumKey = `${effectType(effect.id)}.${parameter.id}`;
           const options = ENUM_OPTIONS[enumKey];
 
           // A text parameter (an impulse response, say) picks from whatever the

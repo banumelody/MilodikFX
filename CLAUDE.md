@@ -103,6 +103,11 @@ The E2E suite is not in CI; it needs a running engine and is run locally. Two th
   intermittent device-panel failure was a real layout bug (an unbounded palette pushing the panel out
   of the sidebar's scroll area) that only fired when enough blocks happened to be unplaced.
 
+**The E2E suite sets the settings file aside for the run** and puts it back afterwards, the way
+`smoke.ps1` always has. Without that it asserted on whatever board and order the previous session
+left behind, which is how it reported one failure on one run and three on the next — a state
+problem wearing a flake's clothes.
+
 **A panel that renders before its data arrives is the project's most common flaky test**, and it has
 now reddened CI three times in different files. `LooperPanel`, `MidiMapping`, `ModulationPanel` and
 `SceneGrid` all compute `busy = disabled || state == null` and disable every control until their
@@ -163,11 +168,17 @@ safety limiter plus a final clamp — **no stage may be added after it**.
 #### Chain order
 
 The order the chain runs in is a **value**, not a rearrangement of the processors: the objects are
-built once and never move. A permutation of up to sixteen stages packs into four bits each, so the
-whole order lives in one `std::atomic<uint64_t>` on `DSPChainManager`. The control thread stores a
-new packing; the audio thread loads it **once** at the top of a block and uses it for that whole
-block. A single 64-bit load either sees the old order or the new one, never half of each, and
-nothing allocates on either side.
+built once and never move. Order, bus assignment and board placement live together in one `Snapshot`
+on `DSPChainManager`. The control thread writes it under a spin lock and bumps a version; the audio
+thread notices the version moved and copies the snapshot into its own `live` copy under a
+**try-lock** — it never blocks, and a lock it cannot get simply leaves the previous copy in force
+for that block. Nothing allocates on either side, and the copy only happens when something actually
+changed.
+
+Until v0.31 this was four bits per stage packed into a single `std::atomic<uint64_t>`, which was
+cheaper still but capped the chain at **sixteen** stages — and the inventory builds twenty-four.
+Keeping the three together also closed a real window: they used to be separate atomics, so a block
+could see a new order with a stale placement.
 
 Two stages are pinned, and neither is a matter of taste:
 
@@ -198,6 +209,44 @@ release and the rack redraws from what it answers, so a refusal leaves everythin
 no local state to unwind. Card rects are measured once at drag start (nothing reflows mid-drag) and
 hit-tested via `data-chain-stage`. A keyboard path runs alongside rather than behind it — Enter lifts,
 arrows move, Enter drops, Escape cancels — and the ↑▼ buttons stay as the plain fallback.
+
+#### Duplicate blocks (the inventory)
+
+Nine block types can repeat. The counts live in `ChainInventory` (`ChainFactory.h`) and are chosen
+from measurements, not taste — `tests/InventoryTests.cpp` logs them: at 96 kHz a delay costs
+~1.5 MB, a cabinet ~1.2 MB, a reverb ~1 MB, and the whole inventory takes a chain from **3.8 MB to
+7.7 MB**. Three overdrives, two of most things, and **NAM stays at one** — that one is a CPU limit,
+not a memory one, since a single Standard model is already ~29 % of the budget at 96 kHz/32.
+
+**Fractal's model, not a dynamic registry.** Every instance is built at startup and simply waits, so
+`ParameterRegistry` is still populated once and never mutated, and the VST3 parameter list is still a
+constant. Placing a block is enabling one that already exists. The chain is 24 stages and 26 effects,
+up from 14 and 16.
+
+The decision that made this cheap: **instance 1 keeps the bare id it has always had.** `overdrive`
+is still `overdrive`; the new ones are `overdrive2`, `overdrive3`. So every preset, settings file,
+MIDI mapping, modifier target and DAW automation lane written before v0.31 keeps working with **no
+migration table anywhere**, and the VST3 parameter list grows append-only so existing automation
+lanes do not shift.
+
+`registerLayer` in `ChainFactory.cpp` describes one instance of everything and is called once per
+layer. The descriptions live in exactly one place, so a second overdrive is provably the same
+overdrive rather than a copy that can drift — `tests/InventoryTests.cpp` asserts the control sets
+match. A layer leaves non-duplicable types null, so the amp head, the split brackets and the master
+limiter appear only in the first pass without needing a guard.
+
+Two things that only reach instance 1 by default and had to be made deliberate:
+
+- **`global.bpm` writes to every delay.** One BPM for the whole app is the rule, and a second delay
+  left on a stale tempo would drift against the click. Same in the plugin's `followHostTempo`.
+- **The plugin's reported latency sums every overdrive**, because a host has no board to take one
+  off: all three run, so their oversampling latencies add.
+
+On the UI side, **every table keyed by what a block *is* must be looked up by type, not by id** —
+`effectType()` in `services/api.ts` strips the trailing digits. Accent colours, enum labels, drive
+control layouts and tone-curve bands are all keyed that way; looking up `overdrive2` raw silently
+drops the lot. The palette offers one chip per *type* with a remaining count (`2/3`) rather than one
+row per instance, and hands out the lowest free instance so placing twice gives 2 then 3.
 
 #### Board placement
 

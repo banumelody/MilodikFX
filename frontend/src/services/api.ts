@@ -102,6 +102,23 @@ export interface DeviceTypeInfo {
   outputs: string[];
 }
 
+/**
+ * The block type an instance id names.
+ *
+ * Instance 1 keeps the bare id (`overdrive`) and later ones carry a number
+ * (`overdrive2`), so stripping the trailing digits gives the type back. Every
+ * table keyed by what a block *is* -- its accent colour, its enum labels, its
+ * drive control layout -- has to be looked up by this rather than by the raw
+ * id, or a second instance silently loses all of it.
+ */
+export const effectType = (effectId: string) => effectId.replace(/[0-9]+$/, '');
+
+/** The instance number an id names; 1 for the bare id. */
+export const effectInstance = (effectId: string) => {
+  const match = effectId.match(/[0-9]+$/);
+  return match ? Number(match[0]) : 1;
+};
+
 /** One physical jack on the open interface. */
 export interface InputPort {
   name: string;

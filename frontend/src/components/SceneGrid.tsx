@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
 import { EFFECT_ACCENTS } from './EffectRack';
 import { captureScene, getScenes, recallScene, renameScene, setSceneEffect } from '../services/api';
+import { effectType } from '../services/api';
 import type { EffectDescriptor, ScenesState } from '../services/api';
 
 interface SceneGridProps {
@@ -87,7 +88,7 @@ function SceneGridBase({ effects, disabled = false, onRecalled, refreshToken }: 
               className="scenes__col"
               role="columnheader"
               title={effect.label}
-              style={{ '--accent': EFFECT_ACCENTS[effect.id] ?? '#4da3ff' } as React.CSSProperties}
+              style={{ '--accent': EFFECT_ACCENTS[effectType(effect.id)] ?? '#4da3ff' } as React.CSSProperties}
             >
               {effect.label.slice(0, 2)}
             </abbr>
@@ -141,7 +142,7 @@ function SceneGridBase({ effects, disabled = false, onRecalled, refreshToken }: 
                   type="button"
                   role="cell"
                   className={`scenes__cell${on ? ' scenes__cell--on' : ''}`}
-                  style={{ '--accent': EFFECT_ACCENTS[effect.id] ?? '#4da3ff' } as React.CSSProperties}
+                  style={{ '--accent': EFFECT_ACCENTS[effectType(effect.id)] ?? '#4da3ff' } as React.CSSProperties}
                   disabled={busy}
                   aria-pressed={on}
                   aria-label={`${scene.name}: ${effect.label} ${on ? 'menyala' : 'mati'}`}

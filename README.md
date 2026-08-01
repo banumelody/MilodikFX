@@ -117,6 +117,15 @@ duplikasi blok, jadi preset lama tetap utuh. Mode **crossover** (Linkwitz-Riley)
 jalur dan high ke jalur lain: low bersih, high di-drive, gerakan klasik rig bass. Mati secara default,
 dan saat mati rantainya bit-identik dengan sebelumnya.
 
+**Blok bisa lebih dari satu.** Tiga overdrive, dua dari hampir semua yang lain - tumpuk dua drive
+seri di satu jalur, atau taruh satu di tiap jalur dengan kenop yang sepenuhnya terpisah. Daftar
+**Blok** menunjukkan sisa jatah tiap tipe (`2/3`). **Amp (NAM) tetap satu**: itu batas CPU, bukan
+batas format - satu model Standard sudah sekitar 29% budget di 96 kHz.
+
+Setelah update, semua yang kamu punya tetap jalan: **instance pertama memakai id yang sama seperti
+dulu**, jadi preset, settings, pemetaan MIDI, dan lajur otomasi DAW lama tidak perlu dimigrasi sama
+sekali. Yang baru cuma bernomor - `overdrive2`, `overdrive3`.
+
 **Board bisa dikosongkan.** Tiap blok bisa dibuang dari board lewat tombol x di kartunya, dan diambil
 lagi dari daftar **Blok** di kanan - seret ke rack, atau tekan Enter untuk menaruhnya di ujung rantai.
 Board kosong bukan keadaan khusus: sinyalnya lewat lurus, seperti *shunt* di grid Fractal. Membuang

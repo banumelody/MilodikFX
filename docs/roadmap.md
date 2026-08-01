@@ -1305,7 +1305,7 @@ dan ikut hilang bersama Splitter-nya (kutipan Apple); dua aturan letak Logic dit
 Migrasi: preset lama = semua stage di board — bunyi tak berubah sesudah update. Scene tetap
 hanya menyentuh enable flags stage yang di board; penempatan milik preset, bukan scene.
 
-## v0.31.0 — "Inventaris blok ganda" (P13) — ~2.5–3 weekend
+## v0.31.0 — "Inventaris blok ganda" (P13) — **SELESAI (1 Agu 2026)**
 
 Cara FM9, bukan registry dinamis: **3 Overdrive, 2× hampir semua yang lain, NAM tetap 1**
 (batas CPU, bukan format) — semua instance dibangun saat startup, 24 stage / ±133 parameter.

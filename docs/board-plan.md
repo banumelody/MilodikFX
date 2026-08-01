@@ -251,7 +251,35 @@ berturut-turut**, smoke, **pluginval strictness 10 exit 0**, plus **18 probe ter
 
 ---
 
-## v0.31.0 — "Inventaris blok ganda" (P13)
+## v0.31.0 — "Inventaris blok ganda" (P13) — **SELESAI (1 Agu 2026)**
+
+> **Terkirim, dan pengukurannya mengubah satu keputusan sekaligus mengonfirmasi sisanya.**
+>
+> Diukur lebih dulu seperti yang rencana ini tuntut: di 96 kHz sebuah delay ±1,5 MB, cabinet
+> ±1,2 MB, reverb ±1 MB. Inventaris membawa satu rantai dari **3,8 MB ke 7,7 MB** — jatahnya aman
+> dan angka-angkanya sekarang tercatat di `tests/InventoryTests.cpp`, bukan di kepala seseorang.
+>
+> **Batas 16 stage benar-benar hilang.** Packing 4-bit diganti satu `Snapshot` yang ditulis di bawah
+> spin lock dan disalin audio thread di bawah **try-lock** — tidak pernah memblokir, tidak pernah
+> mengalokasi, dan kalau lock-nya sedang dipegang ia cukup memakai salinan yang sudah ada satu blok
+> lagi. Ini juga menutup celah nyata: urutan, bus, dan penempatan dulu tiga atomic terpisah.
+>
+> **Dua tempat hanya menjangkau instance 1 dan harus dibuat sengaja**: `global.bpm` sekarang menulis
+> ke *setiap* delay (satu tempo untuk seluruh aplikasi adalah aturannya, dan delay kedua yang
+> tertinggal akan hanyut terhadap klik), dan latensi yang dilaporkan plugin menjumlahkan *semua*
+> overdrive — di host tidak ada board untuk mencopot satu, jadi ketiganya berjalan.
+>
+> **Di frontend, semua tabel yang di-key oleh id diam-diam rusak** untuk instance kedua: warna
+> aksen, label enum, tata letak kontrol drive, pita kurva nada. Semuanya sekarang di-key oleh
+> *tipe*, lewat satu helper. Ini kelas bug yang tidak menimbulkan error — ia hanya kehilangan
+> semuanya, diam-diam.
+>
+> Satu temuan dari harness, bukan dari produk: **suite E2E tidak pernah mengisolasi berkas
+> settings**, jadi ia menilai board dan urutan yang ditinggalkan sesi sebelumnya — itulah sebabnya
+> ia melaporkan satu kegagalan di satu run dan tiga di run berikutnya. Sekarang berkasnya disisihkan
+> selama run, persis seperti `smoke.ps1` sejak dulu.
+
+## v0.31.0 — rencana awal (P13)
 
 **Tujuan:** dua overdrive seri di satu jalur; overdrive di A *dan* B dengan kenop terpisah —
 cara FM9 (2 Amp, 3 Drive, 4 Delay), bukan registry dinamis. Semua instance dibangun saat
@@ -320,13 +348,17 @@ dengan bus lama. Snapshot menutup celah itu sekalian.
 2. **CPU:** PerformanceTests dapat kasus terburuk baru (semua instance di board, voicing
    termahal); assertion rasio yang build-independent, seperti biasa.
 
-### Definition of done v0.31
+### Definition of done v0.31 — tercapai
 
-Test independensi instance (kenop od1 tidak menyentuh od2), dua-seri ≠ satu (terukur, bukan
-diasumsikan), stress reorder saat memproses (snapshot handoff), preset masa depan pemaaf
-(`overdrive3` di build ber-jatah-2 diabaikan tanpa error), pluginval dengan ±133 parameter,
-E2E, smoke, CI, dokumentasi penuh + angka pengukuran memori/CPU tercatat. **Effort: ~2.5–3
-weekend.**
+**1.821.761 assertion backend** (InventoryTests baru: 6 kasus inventaris + 2 pengukuran;
+BoardTests +2 untuk rantai >16 stage dan konsistensi snapshot), **252 test frontend**
+(BoardPalette +4), type-check, lint, **E2E 54/54** (6 dari 7 run bersih; satu kegagalan pada test
+yang sudah punya riwayat flake sebelum rilis ini), smoke, **pluginval strictness 10 exit 0** dengan
+±133 parameter, dan **22 probe terhadap engine hidup** — termasuk preset yang ditulis sebelum
+inventaris yang tetap menggerakkan instance 1, dan penataan ulang 24 stage.
+
+Angka terukur: memori 3,8 → **7,7 MB** per rantai di 96 kHz; delay 1,5 MB / cabinet 1,2 MB /
+reverb 1 MB per instance.
 
 ---
 

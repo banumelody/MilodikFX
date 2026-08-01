@@ -1101,15 +1101,6 @@ export function App() {
         </div>
 
         <aside className="layout__side">
-          {chainOrder != null ? (
-            <BoardPalette
-              stages={boardStages}
-              disabled={offline}
-              paletteProps={paletteProps}
-              activeId={dragState.activeId}
-            />
-          ) : null}
-
           {/* The host owns the audio device and the MIDI ports inside a plugin.
               Offering a device picker there would, at best, be a lie. */}
           {inPlugin ? null : (
@@ -1122,6 +1113,19 @@ export function App() {
               onOptimise={optimiseVoid}
             />
           )}
+
+          {/* Below the device panel, not above it. The palette is the only panel
+              here whose height depends on what you have done -- put it first and
+              every fixed panel underneath moves by an amount nobody chose, which
+              is how the device readout ended up scrolled out of view. */}
+          {chainOrder != null ? (
+            <BoardPalette
+              stages={boardStages}
+              disabled={offline}
+              paletteProps={paletteProps}
+              activeId={dragState.activeId}
+            />
+          ) : null}
 
           <TunerDisplay disabled={offline} />
 

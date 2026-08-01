@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 
+#include <array>
 #include <atomic>
 #include <memory>
 #include <vector>
@@ -45,15 +46,16 @@ public:
     /** @name Processing order
      *
      * The order the chain runs in is a *value*, not a rearrangement of the
-     * processors themselves: the objects are built once and never move. A
-     * permutation of up to sixteen stages packs into four bits each, so the
-     * whole order lives in one `std::atomic<uint64_t>`. The control thread
-     * stores a new packing; the audio thread loads it once at the top of a block
-     * and uses it for that whole block.
+     * processors themselves: the objects are built once and never move. Order,
+     * bus assignment and board placement live together in one `Snapshot`, which
+     * the control thread writes under a spin lock and the audio thread copies
+     * once, when it changes, under a **try**-lock.
      *
-     * That is what makes reordering safe without a lock: a single 64-bit load
-     * either sees the old order or the new one, never half of each, and nothing
-     * is allocated or freed on either side.
+     * That is what makes reordering safe without ever blocking the audio
+     * thread: it either takes the new snapshot whole or keeps the one it has,
+     * never a mix of the two, and nothing is allocated or freed on either side.
+     * Until v0.31 this was four bits per stage in a single `uint64`, which was
+     * cheaper still but capped the chain at sixteen stages.
      *
      * A reorder is audible as a small discontinuity, and that is accepted rather
      * than hidden. The processors are stateful -- delay lines, filter memory --
@@ -63,8 +65,14 @@ public:
      */
     /** @{ */
 
-    /** Four bits per stage in a uint64, so sixteen is the ceiling. */
-    static constexpr int kMaxOrderedProcessors = 16;
+    /**
+     * How many stages a chain may contain.
+     *
+     * Was sixteen while the order was packed four bits at a time into a single
+     * atomic. v0.31's inventory builds twenty-four stages, so the packing is
+     * gone; this is now just the size of the fixed arrays a snapshot holds.
+     */
+    static constexpr int kMaxOrderedProcessors = 32;
 
     /**
      * Marks stages at the head and tail of the chain as immovable.
@@ -100,8 +108,8 @@ public:
      * Pedalboard: a stage is *assigned* to a bus, never duplicated onto one, so
      * there is still exactly one overdrive and the registry's flat id set holds.
      *
-     * The assignment is a bitmask, one bit per processor index, published the
-     * same way the order is -- read once per block, no allocation, no lock.
+     * The assignment travels inside the same snapshot as the order, so a block
+     * can never see a new order with a stale bus assignment.
      */
     /** @{ */
 
@@ -125,9 +133,9 @@ public:
      * footswitch -- the whole point of bypass. A delay that is off the board has
      * no tail to keep, because it is not there.
      *
-     * One bit per processor index, published exactly like the order and the bus
-     * assignment: one acquire load per block, no allocation, no lock. Everything
-     * starts placed, so a build that never calls this behaves as it always did.
+     * Carried in the same snapshot as the order and the bus assignment.
+     * Everything starts placed, so a build that never calls this behaves as it
+     * always did.
      */
     /** @{ */
 
@@ -168,24 +176,60 @@ private:
     /** Crossfade length, in seconds, when entering or leaving bypass. */
     static constexpr double kBypassFadeSeconds = 0.01;
 
-    /** Identity order (0, 1, 2, ...) for the current processor count. */
-    juce::uint64 identityOrder() const noexcept;
+    /**
+     * Everything the run loop needs for one block, in one object.
+     *
+     * Order, bus assignment and board placement used to be three separate
+     * atomics, which left a window where a block could see a new order with an
+     * old placement. Keeping them together closes it, and is what allows more
+     * than sixteen stages -- a permutation of twenty-four no longer fits in a
+     * uint64 however it is packed.
+     */
+    struct Snapshot
+    {
+        int count = 0;
+        std::array<juce::int8, kMaxOrderedProcessors> order {};
+        std::array<bool, kMaxOrderedProcessors> onBusB {};
+        std::array<bool, kMaxOrderedProcessors> placed {};
+    };
+
+    /** Rebuilds `pending` from the current stage list and bumps the version. */
+    void publishIdentity();
+
+    /**
+     * Publishes whatever the control thread has just written into `pending`.
+     *
+     * Callers must already hold `snapshotLock`.
+     */
+    void publishLocked() noexcept;
 
     std::vector<std::unique_ptr<AudioProcessorBase>> processors;
     std::vector<std::unique_ptr<AudioProcessorBase>> postProcessors;
 
-    // Four bits per stage. Written by the control thread with release, read once
-    // per block by the audio thread with acquire.
-    std::atomic<juce::uint64> packedOrder { 0 };
     int leadingFixedStages = 0;
     int trailingFixedStages = 0;
 
-    // One bit per processor index: set means the stage runs on path B.
-    std::atomic<juce::uint32> busBMask { 0 };
+    /**
+     * How the snapshot reaches the audio thread.
+     *
+     * The control thread mutates `pending` under `snapshotLock` and bumps
+     * `snapshotVersion`. The audio thread notices the version moved and copies
+     * `pending` into its own `live` copy under a **try**-lock: it never blocks,
+     * and if the lock happens to be held it simply keeps using the copy it
+     * already has and picks the change up on the next block.
+     *
+     * That is what makes this realtime-safe without a garbage-collected pointer
+     * handoff: nothing is allocated, nothing is freed, and the audio thread
+     * always has a complete and self-consistent snapshot to run from. The copy
+     * itself only happens when something actually changed -- an editing
+     * gesture, not a per-block cost.
+     */
+    mutable juce::SpinLock snapshotLock;
+    Snapshot pending;                              // guarded by snapshotLock
+    std::atomic<juce::uint32> snapshotVersion { 0 };
 
-    // One bit per processor index: set means the stage is on the board. All set
-    // by default, so nothing that never touches placement changes behaviour.
-    std::atomic<juce::uint32> placedMask { ~0u };
+    Snapshot live;                                 // audio thread only
+    juce::uint32 liveVersion = 0;
 
     /** True when the index is inside the fixed head or tail of the chain. */
     bool isFixedStage (int processorIndex) const noexcept;

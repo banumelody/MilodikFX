@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 
 import { TONE_BANDS, computeToneCurve } from '../services/biquad';
+import { effectType } from '../services/api';
 import type { EffectDescriptor } from '../services/api';
 
 /** Vertical extent of the plot. Matches the +/-12 dB the knobs allow. */
@@ -29,7 +30,7 @@ function label(hz: number) {
  * wire -- see services/biquad.ts for why it is a port rather than an endpoint.
  */
 export function ToneCurve({ effect, sampleRate = 48000, accent = '#4da3ff' }: ToneCurveProps) {
-  const bands = TONE_BANDS[effect.id];
+  const bands = TONE_BANDS[effectType(effect.id)];
 
   const gains = useMemo(() => {
     const result: Record<string, number> = {};

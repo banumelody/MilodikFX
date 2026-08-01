@@ -75,12 +75,22 @@ void DSPChainManager::processChain (juce::AudioBuffer<float>& buffer)
         for (int ch = 0; ch < numChannels; ++ch)
             dryCopy.copyFrom (ch, 0, buffer, ch, 0, numSamples);
 
-    // One acquire load for the whole block: either the old order or the new one,
-    // never a mix of the two, and no allocation on either side of the handover.
-    const auto order = packedOrder.load (std::memory_order_acquire);
-    const auto buses = busBMask.load (std::memory_order_acquire);
-    const auto placed = placedMask.load (std::memory_order_acquire);
-    const auto count = (int) processors.size();
+    // Take the new snapshot if there is one, and never block to get it: a
+    // try-lock that fails simply leaves the previous copy in force for this
+    // block, and the change lands on the next. Nothing is allocated, and the
+    // copy only happens when something actually changed.
+    if (snapshotVersion.load (std::memory_order_acquire) != liveVersion)
+    {
+        const juce::SpinLock::ScopedTryLockType tryLock (snapshotLock);
+
+        if (tryLock.isLocked())
+        {
+            live = pending;
+            liveVersion = snapshotVersion.load (std::memory_order_acquire);
+        }
+    }
+
+    const auto count = juce::jmin (live.count, (int) processors.size());
 
     // The parallel section, if there is one. `running` turns on at the split
     // stage and off at the mixer; while it is on, each stage runs on whichever
@@ -96,14 +106,14 @@ void DSPChainManager::processChain (juce::AudioBuffer<float>& buffer)
 
     for (int position = 0; position < count; ++position)
     {
-        const auto index = (int) ((order >> (position * 4)) & 0xFULL);
+        const auto index = (int) live.order[(size_t) position];
 
-        if (index >= count || processors[(size_t) index] == nullptr)
+        if (index < 0 || index >= count || processors[(size_t) index] == nullptr)
             continue;
 
         // Off the board is not in the chain at all -- not even to the extent a
         // bypassed stage is, which still runs so its tail can decay.
-        if ((placed & (1u << (unsigned) index)) == 0)
+        if (! live.placed[(size_t) index])
             continue;
 
         auto* processor = processors[(size_t) index].get();
@@ -133,9 +143,7 @@ void DSPChainManager::processChain (juce::AudioBuffer<float>& buffer)
             continue;
         }
 
-        const auto onBusB = (buses & (1u << (unsigned) index)) != 0;
-
-        processor->processBlock (running && onBusB ? pathBView : buffer);
+        processor->processBlock (running && live.onBusB[(size_t) index] ? pathBView : buffer);
     }
 
     // A mixer dragged in front of its split would otherwise leave path B
@@ -194,7 +202,7 @@ AudioProcessorBase* DSPChainManager::addProcessor (std::unique_ptr<AudioProcesso
 
     // A new stage invalidates whatever permutation was in force, so the order
     // returns to the one the chain was built in. Only ever called at build time.
-    packedOrder.store (identityOrder(), std::memory_order_release);
+    publishIdentity();
 
     return raw;
 }
@@ -216,7 +224,7 @@ void DSPChainManager::clear()
 {
     processors.clear();
     postProcessors.clear();
-    packedOrder.store (0, std::memory_order_release);
+    publishIdentity();
 }
 
 void DSPChainManager::setBypassed (bool shouldBypass) noexcept
@@ -234,15 +242,32 @@ int DSPChainManager::getNumProcessors() const noexcept
     return static_cast<int> (processors.size());
 }
 
-juce::uint64 DSPChainManager::identityOrder() const noexcept
+void DSPChainManager::publishLocked() noexcept
 {
-    juce::uint64 packed = 0;
+    // Release, paired with the audio thread's acquire on the version: whatever
+    // was written into `pending` is visible before the version says to look.
+    snapshotVersion.fetch_add (1, std::memory_order_release);
+}
+
+void DSPChainManager::publishIdentity()
+{
+    const juce::SpinLock::ScopedLockType lock (snapshotLock);
+
     const auto count = juce::jmin ((int) processors.size(), kMaxOrderedProcessors);
+    pending.count = count;
 
     for (int i = 0; i < count; ++i)
-        packed |= ((juce::uint64) (unsigned) i) << (i * 4);
+    {
+        pending.order[(size_t) i] = (juce::int8) i;
+        pending.onBusB[(size_t) i] = false;
 
-    return packed;
+        // Everything starts on the board. That default is the migration rule:
+        // a preset written before v0.30 says nothing about placement, and
+        // reading its silence as an empty board would blank the rig.
+        pending.placed[(size_t) i] = true;
+    }
+
+    publishLocked();
 }
 
 void DSPChainManager::setParallelStages (SplitProcessor* split, MixerProcessor* mixer) noexcept
@@ -289,12 +314,9 @@ void DSPChainManager::setStagePlaced (int processorIndex, bool placed) noexcept
     if (! placed && isFixedStage (processorIndex))
         return;
 
-    const auto bit = 1u << (unsigned) processorIndex;
-
-    if (placed)
-        placedMask.fetch_or (bit, std::memory_order_release);
-    else
-        placedMask.fetch_and (~bit, std::memory_order_release);
+    const juce::SpinLock::ScopedLockType lock (snapshotLock);
+    pending.placed[(size_t) processorIndex] = placed;
+    publishLocked();
 }
 
 bool DSPChainManager::isStagePlaced (int processorIndex) const noexcept
@@ -302,7 +324,8 @@ bool DSPChainManager::isStagePlaced (int processorIndex) const noexcept
     if (processorIndex < 0 || processorIndex >= kMaxOrderedProcessors)
         return false;
 
-    return (placedMask.load (std::memory_order_acquire) & (1u << (unsigned) processorIndex)) != 0;
+    const juce::SpinLock::ScopedLockType lock (snapshotLock);
+    return pending.placed[(size_t) processorIndex];
 }
 
 void DSPChainManager::setStageOnBusB (int processorIndex, bool onBusB) noexcept
@@ -310,12 +333,9 @@ void DSPChainManager::setStageOnBusB (int processorIndex, bool onBusB) noexcept
     if (processorIndex < 0 || processorIndex >= kMaxOrderedProcessors)
         return;
 
-    const auto bit = 1u << (unsigned) processorIndex;
-
-    if (onBusB)
-        busBMask.fetch_or (bit, std::memory_order_release);
-    else
-        busBMask.fetch_and (~bit, std::memory_order_release);
+    const juce::SpinLock::ScopedLockType lock (snapshotLock);
+    pending.onBusB[(size_t) processorIndex] = onBusB;
+    publishLocked();
 }
 
 bool DSPChainManager::isStageOnBusB (int processorIndex) const noexcept
@@ -323,7 +343,8 @@ bool DSPChainManager::isStageOnBusB (int processorIndex) const noexcept
     if (processorIndex < 0 || processorIndex >= kMaxOrderedProcessors)
         return false;
 
-    return (busBMask.load (std::memory_order_acquire) & (1u << (unsigned) processorIndex)) != 0;
+    const juce::SpinLock::ScopedLockType lock (snapshotLock);
+    return pending.onBusB[(size_t) processorIndex];
 }
 
 void DSPChainManager::setFixedStages (int leadingFixed, int trailingFixed) noexcept
@@ -336,8 +357,6 @@ bool DSPChainManager::setOrder (const std::vector<int>& order) noexcept
 {
     const auto count = (int) processors.size();
 
-    // Beyond sixteen stages a nibble per stage no longer fits in the atomic, so
-    // reordering is refused rather than silently corrupting the run order.
     if (count > kMaxOrderedProcessors || (int) order.size() != count)
         return false;
 
@@ -363,25 +382,28 @@ bool DSPChainManager::setOrder (const std::vector<int>& order) noexcept
             return false;
     }
 
-    juce::uint64 packed = 0;
+    const juce::SpinLock::ScopedLockType lock (snapshotLock);
+
+    pending.count = count;
 
     for (int position = 0; position < count; ++position)
-        packed |= ((juce::uint64) (unsigned) order[(size_t) position]) << (position * 4);
+        pending.order[(size_t) position] = (juce::int8) order[(size_t) position];
 
-    packedOrder.store (packed, std::memory_order_release);
+    publishLocked();
     return true;
 }
 
 std::vector<int> DSPChainManager::getOrder() const
 {
-    const auto packed = packedOrder.load (std::memory_order_acquire);
-    const auto count = juce::jmin ((int) processors.size(), kMaxOrderedProcessors);
+    const juce::SpinLock::ScopedLockType lock (snapshotLock);
+
+    const auto count = juce::jmin (pending.count, (int) processors.size());
 
     std::vector<int> order;
     order.reserve ((size_t) count);
 
     for (int position = 0; position < count; ++position)
-        order.push_back ((int) ((packed >> (position * 4)) & 0xFULL));
+        order.push_back ((int) pending.order[(size_t) position]);
 
     return order;
 }

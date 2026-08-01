@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <vector>
 
 #include "api/ParameterRegistry.h"
 #include "dsp/CabinetProcessor.h"
@@ -61,6 +62,20 @@ struct GuitarChain
 
     /** Also after the master stage: the loop plays on across a global bypass. */
     LooperProcessor* looper = nullptr;
+
+    /**
+     * Instances 2..N of the types that can repeat; index 0 is instance 2.
+     *
+     * Fractal's model, not a dynamic registry: the inventory is fixed and every
+     * instance is built at startup, which is what keeps `ParameterRegistry`
+     * immutable and the VST3 parameter list a constant. Placing a block is
+     * still just enabling one that already exists.
+     *
+     * Only duplicable types are set in an extra layer -- the amp head, the
+     * split brackets and the master limiter stay null there, so the code that
+     * registers a layer skips them without needing to know which is which.
+     */
+    std::vector<GuitarChain> extras;
 };
 
 /**
@@ -79,12 +94,39 @@ struct ChainOptions
 };
 
 /**
+ * How many of each block the chain builds.
+ *
+ * Chosen from measurements rather than taste (`tests/InventoryTests.cpp` logs
+ * them): at 96 kHz a delay costs ~1.5 MB, a cabinet ~1.2 MB and a reverb ~1 MB,
+ * so this inventory adds about four megabytes over a single chain. The amp head
+ * is the exception and it is a CPU limit, not a memory one -- one NAM Standard
+ * model is already around 29 % of the budget at 96 kHz / 32 samples.
+ */
+struct ChainInventory
+{
+    int noiseGate = 2;
+    int cleanBoost = 2;
+    int compressor = 2;
+    int overdrive = 3;
+    int eq = 2;
+    int toneStack = 2;
+    int cabinet = 2;
+    int delay = 2;
+    int reverb = 2;
+
+    /** The most instances any one type has, which is how many layers exist. */
+    int maxInstances() const noexcept;
+};
+
+/**
  * Builds the signal chain in its fixed order and returns pointers into it.
  *
  * Shared by the standalone app and the plugin so the two can never disagree
  * about what the chain is or what order it runs in.
  */
-GuitarChain buildGuitarChain (DSPChainManager& chain, ChainOptions options = {});
+GuitarChain buildGuitarChain (DSPChainManager& chain,
+                              ChainOptions options = {},
+                              ChainInventory inventory = {});
 
 /**
  * Host-provided pieces the chain can use but does not own.

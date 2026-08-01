@@ -2153,6 +2153,17 @@ input[type='text']:disabled {
   flex: 0 0 auto;
 }
 
+.palette__left {
+  margin-left: auto;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 15px;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--hue) 70%, var(--text-dim));
+}
+
 .palette__chip:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--hue) 55%, var(--line));
 }

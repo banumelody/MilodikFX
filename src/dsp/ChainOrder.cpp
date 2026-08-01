@@ -1,6 +1,7 @@
 #include "dsp/ChainOrder.h"
 
 #include <algorithm>
+#include <string>
 
 namespace milodikfx::dsp
 {
@@ -10,26 +11,44 @@ ChainOrder::ChainOrder (const GuitarChain& chain, DSPChainManager& managerToUse)
     // Build order, and it must match the order buildGuitarChain adds them in:
     // index N here is processor N in the manager. Adding a stage means adding it
     // in both places, which is why they sit next to each other in the file.
-    const std::pair<const AudioProcessorBase*, const char*> stages[] = {
-        { chain.inputTrim, "input" },
-        { chain.noiseGate, "noiseGate" },
-        { chain.cleanBoost, "cleanBoost" },
-        { chain.compressor, "compressor" },
-        { chain.split, "split" },
-        { chain.overdrive, "overdrive" },
-        { chain.eq, "eq" },
-        { chain.toneStack, "toneStack" },
-        { chain.nam, "nam" },
-        { chain.cabinet, "cabinet" },
-        { chain.delay, "delay" },
-        { chain.reverb, "reverb" },
-        { chain.mixer, "mixer" },
-        { chain.masterOut, "master" },
+    // Instance 1 keeps the bare id it has always had; later instances get a
+    // numeric suffix. That is what lets every preset, settings file and MIDI
+    // mapping written before duplicate blocks existed keep working with no
+    // migration at all -- the ids they name are still exactly these.
+    const auto layerFor = [&chain] (size_t instance) -> const GuitarChain&
+    {
+        return instance == 0 ? chain : chain.extras[instance - 1];
     };
 
-    for (const auto& [processor, id] : stages)
-        if (processor != nullptr)
-            stageIds.emplace_back (id);
+    const auto suffixFor = [] (size_t instance)
+    {
+        return instance == 0 ? std::string() : std::to_string (instance + 1);
+    };
+
+    const auto addInstances = [&] (auto GuitarChain::* member, const char* id)
+    {
+        for (size_t instance = 0; instance <= chain.extras.size(); ++instance)
+            if (layerFor (instance).*member != nullptr)
+                stageIds.emplace_back (std::string (id) + suffixFor (instance));
+    };
+
+    // Must match the order buildGuitarChain adds them in: index N here is
+    // processor N in the manager. They sit next to each other in the file for
+    // exactly that reason.
+    if (chain.inputTrim != nullptr) stageIds.emplace_back ("input");
+    addInstances (&GuitarChain::noiseGate, "noiseGate");
+    addInstances (&GuitarChain::cleanBoost, "cleanBoost");
+    addInstances (&GuitarChain::compressor, "compressor");
+    if (chain.split != nullptr) stageIds.emplace_back ("split");
+    addInstances (&GuitarChain::overdrive, "overdrive");
+    addInstances (&GuitarChain::eq, "eq");
+    addInstances (&GuitarChain::toneStack, "toneStack");
+    if (chain.nam != nullptr) stageIds.emplace_back ("nam");
+    addInstances (&GuitarChain::cabinet, "cabinet");
+    addInstances (&GuitarChain::delay, "delay");
+    addInstances (&GuitarChain::reverb, "reverb");
+    if (chain.mixer != nullptr) stageIds.emplace_back ("mixer");
+    if (chain.masterOut != nullptr) stageIds.emplace_back ("master");
 }
 
 bool ChainOrder::isFixed (const std::string& id) const noexcept

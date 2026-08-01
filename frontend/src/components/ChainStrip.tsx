@@ -1,6 +1,7 @@
 import { memo } from 'react';
 
 import { EFFECT_ACCENTS } from './EffectRack';
+import { effectType } from '../services/api';
 import type { EffectDescriptor } from '../services/api';
 
 const NOT_A_STAGE = new Set(['input', 'global', 'metronome']);
@@ -54,7 +55,7 @@ function ChainStripBase({
   );
 
   const renderBlock = (effect: EffectDescriptor) => {
-    const accent = EFFECT_ACCENTS[effect.id] ?? '#4da3ff';
+    const accent = EFFECT_ACCENTS[effectType(effect.id)] ?? '#4da3ff';
     const canToggle = effect.toggleable !== false;
     const dragProps = dragHandleProps?.(effect.id);
 

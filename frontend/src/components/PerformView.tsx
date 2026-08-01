@@ -4,6 +4,7 @@ import { EFFECT_ACCENTS } from './EffectRack';
 import { Knob } from './Knob';
 import { recordLabel, useLooper } from '../hooks/useLooper';
 import { getScenes, recallScene, setTunerEnabled, subscribeTuner } from '../services/api';
+import { effectType } from '../services/api';
 import type {
   EffectDescriptor,
   Levels,
@@ -385,7 +386,7 @@ function PerformViewBase({
               defaultValue={pin.value}
               label={`${pin.effectLabel} ${pin.label}`}
               unit={pin.unit}
-              accent={EFFECT_ACCENTS[pin.effect] ?? '#4da3ff'}
+              accent={EFFECT_ACCENTS[effectType(pin.effect)] ?? '#4da3ff'}
               disabled={offline}
               size={92}
               onChange={(value) => onParameterChange(pin.effect, pin.parameter, value)}
