@@ -1,5 +1,6 @@
 #include "plugin/PluginBackend.h"
 
+#include "api/ChainOrderHandler.h"
 #include "api/EffectsHandler.h"
 #include "api/HealthHandler.h"
 #include "api/IrHandler.h"
@@ -20,12 +21,38 @@ const juce::Identifier kScenesProperty { "scenes" };
 const juce::Identifier kChannelsProperty { "channels" };
 const juce::Identifier kPinsProperty { "pins" };
 const juce::Identifier kModifiersProperty { "modifiers" };
+const juce::Identifier kChainOrderProperty { "chainOrder" };
+const juce::Identifier kChainBusBProperty { "chainBusB" };
+const juce::Identifier kChainBoardProperty { "chainBoard" };
+
+/** A juce array of ids, for the layout blob. */
+juce::var idsToVar (const std::vector<std::string>& ids)
+{
+    juce::Array<juce::var> array;
+
+    for (const auto& id : ids)
+        array.add (juce::String (id));
+
+    return juce::var (array);
+}
+
+std::vector<std::string> idsFromVar (const juce::var& value)
+{
+    std::vector<std::string> ids;
+
+    if (const auto* array = value.getArray())
+        for (const auto& item : *array)
+            ids.push_back (item.toString().toStdString());
+
+    return ids;
+}
 } // namespace
 
 PluginBackend::PluginBackend (MilodikFXAudioProcessor& processorToUse)
     : processor (processorToUse),
       sceneManager (processorToUse.getRegistry()),
-      channelStore (processorToUse.getRegistry())
+      channelStore (processorToUse.getRegistry()),
+      chainOrder (processorToUse.getChain(), processorToUse.getChainManager())
 {
     auto& registry = processor.getRegistry();
 
@@ -37,10 +64,33 @@ PluginBackend::PluginBackend (MilodikFXAudioProcessor& processorToUse)
     auto effects = std::make_shared<EffectsHandler> (registry);
     effects->setChannelStore (&channelStore);
 
+    // The rack and the chain strip draw straight from this listing, so emitting
+    // the effects in the order they actually run is what makes a reorder show up
+    // everywhere at once -- exactly as in the app.
+    effects->setOrderProvider ([this] { return chainOrder.getIds(); });
+
+    effects->setPlacementProvider ([this]
+    {
+        EffectsHandler::Placement placement;
+        placement.stageIds = chainOrder.getStageIds();
+        placement.placed = chainOrder.getPlacedIds();
+
+        for (const auto& id : placement.stageIds)
+            if (chainOrder.isFixed (id))
+                placement.fixed.push_back (id);
+
+        return placement;
+    });
+
     auto presets = std::make_shared<PresetsHandler> (processor.getPresetManager(), registry);
     presets->setSceneManager (&sceneManager);
     presets->setChannelStore (&channelStore);
     presets->setPinnedControls (&pinnedControls);
+
+    // Without this a preset's stage order, bus assignment and board were simply
+    // ignored on load and left out on save -- the single most damaging line
+    // missing from this file.
+    presets->setChainOrder (&chainOrder);
 
     // The host owns persistence, so a change does not write a settings file --
     // it marks the processor's state dirty, and the host asks for it when it
@@ -84,6 +134,13 @@ PluginBackend::PluginBackend (MilodikFXAudioProcessor& processorToUse)
     auto modifiers = std::make_shared<ModulationHandler> (registry, processor.getModulation());
     modifiers->onChanged = touched;
 
+    // The chain surface. `ChainOrderHandler` was never tied to a socket -- it
+    // takes (method, path, body) and hands back (status, body) -- so the plugin
+    // reuses the identical handler through the native-function transport.
+    auto chain = std::make_shared<ChainOrderHandler> (chainOrder);
+    chain->onChanged = [this] { processor.markStateChanged(); };
+
+    dispatcher.registerHandler ("/api/chain", chain);
     dispatcher.registerHandler ("/api/effects", effects);
     dispatcher.registerHandler ("/api/parameters",
                                 std::make_shared<ParametersHandler> (registry, "master", "volumeDb"));
@@ -128,6 +185,12 @@ juce::var PluginBackend::captureLayout() const
     root->setProperty (kChannelsProperty, channelStore.toVar());
     root->setProperty (kPinsProperty, pinnedControls.toVar());
     root->setProperty (kModifiersProperty, captureModifiers());
+
+    // The arrangement belongs in the host's project file too. Without it a
+    // reordered chain survived a preset load but not a project save.
+    root->setProperty (kChainOrderProperty, idsToVar (chainOrder.getIds()));
+    root->setProperty (kChainBusBProperty, idsToVar (chainOrder.getBusBIds()));
+    root->setProperty (kChainBoardProperty, idsToVar (chainOrder.getPlacedIds()));
 
     return juce::var (root);
 }
@@ -217,6 +280,8 @@ void PluginBackend::applyLayout (const juce::var& layout)
         channelStore.resetToCurrent();
         sceneManager.resetToCurrent();
         applyModifiers (juce::var());
+        chainOrder.reset();
+        chainOrder.placeAll();
         return;
     }
 
@@ -232,5 +297,20 @@ void PluginBackend::applyLayout (const juce::var& layout)
 
     pinnedControls.fromVar (layout[kPinsProperty], &processor.getRegistry());
     applyModifiers (layout[kModifiersProperty]);
+
+    // A project saved before v0.34 says nothing about any of these, and absent
+    // has to mean "as built" and "all placed" -- reading silence as an empty
+    // board would blank the rig on open.
+    if (const auto order = layout[kChainOrderProperty]; order.isArray())
+        chainOrder.applyIds (idsFromVar (order));
+    else
+        chainOrder.reset();
+
+    chainOrder.setBusBIds (idsFromVar (layout[kChainBusBProperty]));
+
+    if (const auto board = layout[kChainBoardProperty]; board.isArray())
+        chainOrder.setPlacedIds (idsFromVar (board));
+    else
+        chainOrder.placeAll();
 }
 } // namespace milodikfx::plugin

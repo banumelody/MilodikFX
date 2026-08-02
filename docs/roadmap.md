@@ -1366,6 +1366,30 @@ yang meniru produk tertentu. Satu-satunya rilis di rencana ini yang menunggu kep
 kode: **siapa yang menggambar.** Aset setingkat studi desain bisa saya buat; ilustrasi yang
 terlihat mahal tidak.
 
+# P19 — Menutup konsekuensi v0.29–v0.31 (1 Agu 2026) — **SELESAI**
+
+Hasil audit yang diminta setelah v0.33: adakah yang belum terimplementasi? Empat temuan, semuanya
+konsekuensi rilis-rilis sebelumnya yang belum ditutup.
+
+**1. Preset kehilangan data di plugin — sejak v0.26.** `PluginBackend` tidak pernah memanggil
+`presets->setChainOrder`, jadi `chainOrder`, `chainBusB` dan `chainBoard` **diabaikan saat memuat dan
+tidak ditulis saat menyimpan**. Preset yang dibangun di aplikasi berbunyi berbeda di DAW; yang
+disimpan di DAW kembali ke aplikasi tanpa susunannya. `/api/chain` juga tidak terdaftar — satu-satunya
+endpoint yang hilang tanpa alasan tercatat. Keduanya diperbaiki, plus susunan kini ikut di state blob
+plugin. Diverifikasi end-to-end: jendela plugin merender router dua garis dan panel Blok.
+
+**2. Meter gain reduction hanya membaca instance pertama.** Menaruh `compressor2` tanpa yang pertama
+membuat meter COMP menunjukkan nol sementara kompresornya bekerja. Sekarang mengambil reduksi
+terbesar dari semua instance — kelas yang sama dengan `getMagnitude` di v0.32.
+
+**3. Tuner hanya mengetuk kanal kiri.** Dengan mode split L/R, sumber di kanal R tidak bisa di-tune
+sama sekali. Sekarang mengikuti kanal yang lebih keras; tanpa pengaturan baru.
+
+**4. Test worst-case sudah usang sejak v0.31** — komentarnya mengklaim "kasus terburuk yang bisa
+disetel user" padahal hanya menyetel satu dari tiga overdrive. Terukur: **16,7 %** untuk ketiganya di
+MIAB 8× lawan 9,5 % untuk satu, keduanya Release. Risikonya teoretis, sekarang terkunci. Log-nya juga
+diperbaiki: ia menulis "(Debug build)" tanpa syarat, termasuk saat mengukur biner Release.
+
 **Total P14–P16: ±3.5 weekend.** Ketiganya **terkirim sebagai satu rilis, v0.32.0 (1 Agu 2026)**,
 plus satu hal di luar rencana: gain input dipecah per kanal.
 

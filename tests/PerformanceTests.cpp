@@ -70,6 +70,22 @@ double measureLoad (milodikfx::dsp::DSPChainManager& chain, int blocks = kBlocks
     return elapsed / audioSeconds;
 }
 
+/**
+ * Which configuration these figures came from.
+ *
+ * It used to say "Debug" unconditionally, and printed that while the suite was
+ * running as Release. A log that misreports what it measured is the same hazard
+ * as a green suite against the wrong binary.
+ */
+juce::String buildName()
+{
+   #if JUCE_DEBUG
+    return "Debug";
+   #else
+    return "Release";
+   #endif
+}
+
 /** Switches every effect on, so nothing is skipped by an early return. */
 void enableEverything (const milodikfx::api::ParameterRegistry& registry)
 {
@@ -111,7 +127,7 @@ public:
             const auto load = measureLoad (chain);
 
             logMessage ("  everything on, Custom drive: "
-                        + juce::String (load * 100.0, 1) + " % of realtime (Debug build)");
+                        + juce::String (load * 100.0, 1) + " % of realtime (" + buildName() + " build)");
 
             expect (load < 1.0,
                     "the chain cannot keep up even in a Debug build: "
@@ -200,10 +216,51 @@ public:
             const auto load = measureLoad (chain);
 
             logMessage ("  worst case, MIAB at 8x: "
-                        + juce::String (load * 100.0, 1) + " % of realtime (Debug build)");
+                        + juce::String (load * 100.0, 1) + " % of realtime (" + buildName() + " build)");
 
             expect (load < 1.0,
                     "the worst case cannot keep up even in a Debug build: "
+                        + juce::String (load * 100.0, 1) + " %");
+        }
+
+        beginTest ("Every overdrive instance at its worst still keeps up");
+        {
+            // The real worst case since v0.31. The test above dials MIAB at 8x
+            // on one overdrive, which was every overdrive there was when it was
+            // written; the inventory now lets a user place three and dial all of
+            // them the same way.
+            milodikfx::dsp::DSPChainManager chain;
+            const auto processors = milodikfx::dsp::buildGuitarChain (chain);
+
+            milodikfx::api::ParameterRegistry registry;
+            milodikfx::dsp::registerChainParameters (registry, processors, chain);
+
+            enableEverything (registry);
+
+            const auto dialWorstCase = [] (milodikfx::dsp::OverdriveProcessor* drive)
+            {
+                if (drive == nullptr)
+                    return;
+
+                drive->setType (milodikfx::dsp::drive::marshallInABox);
+                drive->setDrivePercent (90.0f);
+                drive->setOversamplingIndex (3); // 8x
+            };
+
+            dialWorstCase (processors.overdrive);
+
+            for (const auto& layer : processors.extras)
+                dialWorstCase (layer.overdrive);
+
+            chain.prepareToPlay (kRate, kBlock, 2);
+
+            const auto load = measureLoad (chain);
+
+            logMessage ("  every overdrive at MIAB 8x: "
+                        + juce::String (load * 100.0, 1) + " % of realtime (" + buildName() + " build)");
+
+            expect (load < 1.0,
+                    "the full inventory's worst case cannot keep up even in a Debug build: "
                         + juce::String (load * 100.0, 1) + " %");
         }
 

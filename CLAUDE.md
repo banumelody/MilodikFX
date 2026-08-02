@@ -425,7 +425,13 @@ catch it: a WaveNet fed silence still emits a DC bias above any sensible floor. 
 symmetry — the same signal down the left and down the right must produce identical output.
 
 `DSPChainManager::findProcessor<T>()` is a `dynamic_cast` scan returning the *first* instance of a
-type, so the chain may contain at most one processor of each type.
+type. Since v0.31's inventory that no longer identifies a stage uniquely for the duplicable types, so
+it is only safe on the single ones -- and nothing in `src/` uses it.
+
+**Anything that reads "the" instance of a type is a bug waiting to be found.** Two have been:
+`global.bpm` reached only the first delay, and the gain-reduction meters reported only the first gate
+and compressor, so the COMP meter read zero while a *second* compressor was working. Both now fold
+across every instance -- the most reduction any of them is applying.
 
 #### Post-chain processors
 
@@ -444,6 +450,11 @@ its own clamp, because it adds level to an already-limited signal.
 `milodikfx::dsp::TunerAnalyzer` (`src/dsp/TunerAnalyzer.*`) is not in the chain at all. `MainComponent`
 taps the input buffer *before* `audioEngine.processBlock`: pitch detection has to see the raw pickup,
 since a signal that has been through the overdrive has harmonics that mislead it.
+
+It taps **whichever channel is louder**, not channel 0. With one source both carry the same signal so
+nothing changes; with two -- a magnetic on L and a piezo on R -- feeding the left one alone made the
+right source impossible to tune. No setting for it: you pick up an instrument and play, and the
+louder channel is the one being tuned.
 
 The audio thread only copies into a ring buffer. YIN is around a million operations — running it inline
 would overrun a 32-sample callback's 0.67 ms budget several times over — so a worker thread analyses

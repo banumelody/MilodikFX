@@ -1232,7 +1232,12 @@ void MainComponent::audioDeviceIOCallbackWithContext (const float* const* inputC
     // Tap the signal before the chain: the tuner has to see the raw pickup, not
     // a clipped and cabinet-filtered version of it whose harmonics would fool
     // pitch detection. A no-op unless the tuner is actually open.
-    tunerAnalyzer.pushSamples (left, samples);
+    // Whichever channel is actually being played. With one source both carry the
+    // same signal so nothing changes; with two -- a magnetic on L and a piezo on
+    // R -- feeding the left one alone made the right source impossible to tune.
+    // No setting for it: you pick up an instrument and play, and the louder
+    // channel is the one you are tuning.
+    tunerAnalyzer.pushSamples (inputPeakR > inputPeakL ? right : left, samples);
 
     // Modifiers write their swept values into the parameter atomics just before
     // the chain reads them. The input magnitude feeds the envelope follower, and
@@ -1289,8 +1294,29 @@ void MainComponent::audioDeviceIOCallbackWithContext (const float* const* inputC
                               juce::Decibels::gainToDecibels (outputPeakL, kMeterFloorDb),
                               juce::Decibels::gainToDecibels (outputPeakR, kMeterFloorDb));
 
-        levels->updateGainReduction (noiseGateProcessor != nullptr ? noiseGateProcessor->getCurrentGain() : 1.0f,
-                                     compressorProcessor != nullptr ? compressorProcessor->getGainReductionDb() : 0.0f,
+        // The most reduction any instance is applying, not the first one's.
+        // Reading instance 1 alone made the meter read zero while a second
+        // compressor was working -- a meter that lies is worse than no meter.
+        auto gateGain = 1.0f;
+        auto compressorDb = 0.0f;
+
+        if (noiseGateProcessor != nullptr)
+            gateGain = noiseGateProcessor->getCurrentGain();
+
+        if (compressorProcessor != nullptr)
+            compressorDb = compressorProcessor->getGainReductionDb();
+
+        for (const auto& layer : chainProcessors.extras)
+        {
+            if (layer.noiseGate != nullptr)
+                gateGain = juce::jmin (gateGain, layer.noiseGate->getCurrentGain());
+
+            if (layer.compressor != nullptr)
+                compressorDb = juce::jmax (compressorDb, layer.compressor->getGainReductionDb());
+        }
+
+        levels->updateGainReduction (gateGain,
+                                     compressorDb,
                                      masterOutProcessor != nullptr ? masterOutProcessor->getLimiterReductionDb() : 0.0f);
 
         // Rides along with the meters rather than costing the looper panel a

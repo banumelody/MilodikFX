@@ -97,6 +97,16 @@ public:
     milodikfx::dsp::TunerAnalyzer& getTuner() noexcept { return tunerAnalyzer; }
     milodikfx::dsp::ModulationEngine& getModulation() noexcept { return modulationEngine; }
 
+    /**
+     * The built chain and the manager that runs it.
+     *
+     * Needed to give the backend a `ChainOrder`, which is what lets a preset's
+     * stage order, bus assignment and board reach the plugin at all. Without it
+     * a preset written in the app quietly loads with none of them.
+     */
+    const milodikfx::dsp::GuitarChain& getChain() const noexcept { return chain; }
+    milodikfx::dsp::DSPChainManager& getChainManager() noexcept { return engine.getChain(); }
+
     /** The API surface the editor's WebView talks to. Built on first use. */
     PluginBackend& getBackend();
 

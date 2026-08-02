@@ -8,6 +8,7 @@
 #include "api/LevelsHandler.h"
 #include "api/ParameterRegistry.h"
 #include "api/RestApiDispatcher.h"
+#include "dsp/ChainOrder.h"
 #include "preset/ChannelStore.h"
 #include "preset/PinnedControls.h"
 #include "preset/PresetManager.h"
@@ -73,6 +74,17 @@ private:
     milodikfx::preset::SceneManager sceneManager;
     milodikfx::preset::ChannelStore channelStore;
     milodikfx::preset::PinnedControls pinnedControls;
+
+    /**
+     * Translates the chain's order, bus assignment and board between ids and
+     * processor indices.
+     *
+     * The plugin went without one until v0.34, which meant `PresetsHandler` had
+     * nothing to apply a preset's `chainOrder`, `chainBusB` or `chainBoard` to --
+     * so they were ignored on load and omitted on save. A preset built in the
+     * app sounded different here, and one saved here lost its arrangement.
+     */
+    milodikfx::dsp::ChainOrder chainOrder;
 
     std::shared_ptr<LevelsHandler> levelsHandler;
     RestApiDispatcher dispatcher;

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(MilodikFX VERSION 0.33.0 LANGUAGES CXX)
+project(MilodikFX VERSION 0.34.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -606,6 +606,7 @@ target_sources(MilodikFX_tests
     tests/BoardTests.cpp
     tests/InventoryTests.cpp
     tests/MeterTests.cpp
+    tests/PluginChainTests.cpp
     tests/UndoTests.cpp
     tests/InputTrimTests.cpp
     tests/DriveVoicingTests.cpp
@@ -622,6 +623,9 @@ target_sources(MilodikFX_tests
     # Likewise the meter payload: per-channel levels are easy to get subtly
     # wrong in a way nothing else in the suite would notice.
     src/api/LevelsHandler.cpp
+    # And the preset handler, so the plugin's save/load path can be exercised
+    # here rather than only by loading a plugin into a host.
+    src/api/PresetsHandler.cpp
 )
 
 # Point the NAM tests at the example models that came with the fetched core, so

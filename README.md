@@ -82,6 +82,8 @@ Yang berbeda di dalam DAW, dan semuanya disengaja:
 - **Tanpa looper, metronom, pemilih device, dan panel MIDI.** DAW sudah punya semuanya, dan looper
   akan menyita 23–46 MB per instance untuk fitur yang tak punya kontrol di sana. Pemetaan footswitch
   ke scene/channel juga belum ada di plugin (di aplikasi ada).
+- **Menata ulang rantai dan menyusun board jalan penuh** sejak v0.34 — sama persis dengan aplikasi,
+  dan susunannya ikut tersimpan di berkas proyek DAW.
 
 Divalidasi dengan `pluginval --strictness-level 10` (tingkat tertinggi) di CI setiap push.
 
