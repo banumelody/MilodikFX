@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { useT } from '../i18n';
 
 import { getNamLibrary, importNam, revealNamFolder } from '../services/api';
 import type { NamLibraryResponse } from '../services/api';
@@ -19,6 +20,8 @@ interface NamPanelProps {
  * failing a load silently.
  */
 function NamPanelBase({ disabled = false, onLibraryChanged }: NamPanelProps) {
+  const t = useT();
+
   const [library, setLibrary] = useState<NamLibraryResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement | null>(null);
@@ -90,18 +93,17 @@ function NamPanelBase({ disabled = false, onLibraryChanged }: NamPanelProps) {
 
       {!available && library ? (
         <p className="panel__error" role="alert">
-          {library.unavailableReason || 'Model NAM tidak bisa dijalankan di sistem ini.'}
+          {library.unavailableReason || t('nam.unsupported')}
         </p>
       ) : null}
 
       <p className="panel__hint">
-        Letakkan berkas <code>.nam</code> hasil capture (mis. dari TONE3000) di folder model, lalu
-        pilih pada kartu Amp (NAM). Tanpa model, stage ini meneruskan sinyal apa adanya.
+        {t('nam.hintBefore')} <code>.nam</code> {t('nam.hintAfter')}
       </p>
 
       <div className="preset__row">
         <button type="button" className="btn btn--ghost" disabled={disabled} onClick={() => void handleReveal()}>
-          Buka folder
+          {t('app.openFolder')}
         </button>
 
         <button
@@ -110,7 +112,7 @@ function NamPanelBase({ disabled = false, onLibraryChanged }: NamPanelProps) {
           disabled={disabled || !available}
           onClick={() => fileInput.current?.click()}
         >
-          Impor model
+          {t('nam.importModel')}
         </button>
 
         <input
@@ -118,7 +120,7 @@ function NamPanelBase({ disabled = false, onLibraryChanged }: NamPanelProps) {
           type="file"
           accept=".nam"
           hidden
-          aria-label="Berkas model NAM"
+          aria-label={t('nam.fileAria')}
           onChange={(event) => {
             const file = event.target.files?.[0];
             if (file) handleFile(file);

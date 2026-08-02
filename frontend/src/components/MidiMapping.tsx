@@ -1,5 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { useT } from '../i18n';
+import type { StringKey, Translate } from '../i18n';
 import {
   clearMidiMapping,
   getMidi,
@@ -20,11 +22,11 @@ const LEARN_POLL_MS = 250;
 const NUM_SCENES = 4;
 
 /** Looper footswitch actions; index matches the engine's onLooperAction. */
-const LOOPER_ACTIONS = [
-  { index: 0, label: 'Rekam / Overdub' },
-  { index: 1, label: 'Stop' },
-  { index: 2, label: 'Hapus' },
-  { index: 3, label: 'Main' },
+const LOOPER_ACTIONS: { index: number; key: StringKey }[] = [
+  { index: 0, key: 'midi.looperRecord' },
+  { index: 1, key: 'looper.stop' },
+  { index: 2, key: 'midi.clear' },
+  { index: 3, key: 'midi.looperPlay' },
 ];
 
 interface MidiMappingProps {
@@ -59,7 +61,7 @@ function keyForMapping(mapping: {
  * finally its parameters. Text parameters are left out -- nothing sensible maps
  * 0..127 onto a list of filenames.
  */
-function collectAssignable(effects: EffectDescriptor[]): Assignable[] {
+function collectAssignable(effects: EffectDescriptor[], t: Translate): Assignable[] {
   const result: Assignable[] = [];
 
   for (let i = 0; i < NUM_SCENES; i += 1) {
@@ -73,7 +75,7 @@ function collectAssignable(effects: EffectDescriptor[]): Assignable[] {
   for (const action of LOOPER_ACTIONS) {
     result.push({
       key: `looper.${action.index}`,
-      label: `Looper — ${action.label}`,
+      label: `Looper — ${t(action.key)}`,
       target: { kind: 'looper', index: action.index, mode: 'toggle' },
     });
   }
@@ -121,7 +123,9 @@ function MidiMappingBase({ effects, disabled = false }: MidiMappingProps) {
   const [error, setError] = useState<string | null>(null);
   const [target, setTarget] = useState('');
 
-  const assignable = useMemo(() => collectAssignable(effects), [effects]);
+  const t = useT();
+
+  const assignable = useMemo(() => collectAssignable(effects, t), [effects, t]);
   const byKey = useMemo(
     () => new Map(assignable.map((item) => [item.key, item])),
     [assignable],
@@ -168,11 +172,14 @@ function MidiMappingBase({ effects, disabled = false }: MidiMappingProps) {
       // needs a readable line rather than a blank one.
       if (mapping.kind === 'scene') return `Scene ${(mapping.index ?? 0) + 1}`;
       if (mapping.kind === 'looper')
-        return `Looper — ${LOOPER_ACTIONS.find((a) => a.index === mapping.index)?.label ?? mapping.index}`;
+      {
+        const key = LOOPER_ACTIONS.find((a) => a.index === mapping.index)?.key;
+        return `Looper — ${key ? t(key) : mapping.index}`;
+      }
       if (mapping.kind === 'channel') return `${mapping.effect} — Channel ${mapping.index}`;
       return `${mapping.effect} — ${mapping.parameter}`;
     },
-    [byKey],
+    [byKey, t],
   );
 
   const startLearn = useCallback(() => {
@@ -243,19 +250,19 @@ function MidiMappingBase({ effects, disabled = false }: MidiMappingProps) {
           disabled={disabled}
           onClick={() => void run(getMidi)}
         >
-          Muat ulang
+          {t('midi.reload')}
         </button>
       </header>
 
       <label className="field">
-        <span className="field__label">Perangkat</span>
+        <span className="field__label">{t('midi.device')}</span>
         <select
-          aria-label="Perangkat"
+          aria-label={t('midi.device')}
           value={state?.current ?? ''}
           disabled={busy}
           onChange={(event) => void run(() => setMidiDevice(event.target.value))}
         >
-          <option value="">Tidak dipakai</option>
+          <option value="">{t('rack.notUsed')}</option>
           {(state?.devices ?? []).map((device) => (
             <option key={device} value={device}>
               {device}
@@ -264,27 +271,26 @@ function MidiMappingBase({ effects, disabled = false }: MidiMappingProps) {
           {/* A controller unplugged since last run still has its mappings, and
               they must not silently disappear from the list. */}
           {state?.current && !(state.devices ?? []).includes(state.current) ? (
-            <option value={state.current}>{state.current} (tidak terhubung)</option>
+            <option value={state.current}>
+              {t('midi.notConnected', { name: state.current })}
+            </option>
           ) : null}
         </select>
       </label>
 
       {state && state.devices.length === 0 ? (
-        <p className="panel__hint">
-          Tidak ada perangkat MIDI terdeteksi. Colokkan footswitch atau controller, lalu tekan Muat
-          ulang.
-        </p>
+        <p className="panel__hint">{t('midi.noDeviceHint')}</p>
       ) : null}
 
       <label className="field">
-        <span className="field__label">Pasang kontrol ke</span>
+        <span className="field__label">{t('midi.assignTo')}</span>
         <select
-          aria-label="Pasang kontrol ke"
+          aria-label={t('midi.assignTo')}
           value={target}
           disabled={busy || !state?.open || inWizard}
           onChange={(event) => setTarget(event.target.value)}
         >
-          <option value="">Pilih tujuan...</option>
+          <option value="">{t('midi.pickTarget')}</option>
           {assignable.map((item) => (
             <option key={item.key} value={item.key}>
               {item.label}
@@ -296,7 +302,7 @@ function MidiMappingBase({ effects, disabled = false }: MidiMappingProps) {
       <div className="midi__actions">
         {inWizard ? (
           <button type="button" className="btn btn--danger" onClick={cancelWizard}>
-            Batal wizard
+            {t('midi.cancelWizard')}
           </button>
         ) : (
           <>
@@ -306,39 +312,36 @@ function MidiMappingBase({ effects, disabled = false }: MidiMappingProps) {
               disabled={busy || !state?.open || (!learning && target === '')}
               onClick={() => (learning ? void run(() => learnMidi()) : startLearn())}
             >
-              {learning ? 'Batal' : 'MIDI Learn'}
+              {learning ? t('midi.cancel') : t('midi.learn')}
             </button>
             <button
               type="button"
               className="btn btn--ghost"
               disabled={busy || !state?.open || learning !== null}
-              title="Pasang 4 tombol footswitch ke Scene 1-4, satu per satu"
+              title={t('midi.wizardHint')}
               onClick={startWizard}
             >
-              Wizard 4-tombol
+              {t('midi.wizardButton')}
             </button>
           </>
         )}
 
         {state && state.lastCc >= 0 ? (
           <span className="midi__last">
-            Terakhir: CC {state.lastCc} = {state.lastValue}
+            {t('midi.lastCc', { cc: state.lastCc, value: state.lastValue })}
           </span>
         ) : null}
       </div>
 
       {inWizard ? (
         <p className="panel__hint" role="status">
-          <strong>
-            Wizard footswitch ({wizardStep + 1}/{NUM_SCENES}):
-          </strong>{' '}
-          injak tombol yang mau dipasang ke <strong>Scene {wizardStep + 1}</strong>. Injak satu per
-          satu — tombol berikutnya menyusul otomatis.
+          <strong>{t('midi.wizardStep', { step: wizardStep + 1, total: NUM_SCENES })}</strong>{' '}
+          {t('midi.wizardPress')} <strong>Scene {wizardStep + 1}</strong>
+          {t('midi.wizardAfter')}
         </p>
       ) : learning ? (
         <p className="panel__hint" role="status">
-          Menunggu... gerakkan knob atau injak footswitch untuk memasangnya ke{' '}
-          <strong>{describe(learning)}</strong>.
+          {t('midi.waiting')} <strong>{describe(learning)}</strong>.
         </p>
       ) : null}
 
@@ -348,24 +351,23 @@ function MidiMappingBase({ effects, disabled = false }: MidiMappingProps) {
             <li key={mapping.cc} className="midi__item">
               <span className="midi__cc">CC {mapping.cc}</span>
               <span className="midi__target">{describe(mapping)}</span>
-              <span className="pill">{mapping.mode === 'toggle' ? 'Saklar' : 'Kontinu'}</span>
+              <span className="pill">
+                {t(mapping.mode === 'toggle' ? 'midi.toggleMode' : 'midi.continuousMode')}
+              </span>
               <button
                 type="button"
                 className="btn btn--ghost"
-                aria-label={`Hapus CC ${mapping.cc}`}
+                aria-label={t('midi.clearCc', { cc: mapping.cc })}
                 disabled={busy}
                 onClick={() => void run(() => clearMidiMapping(mapping.cc))}
               >
-                Hapus
+                {t('midi.clear')}
               </button>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="panel__hint">
-          Belum ada kontrol terpasang. Pilih parameter di atas, tekan MIDI Learn, lalu gerakkan
-          kontrol fisiknya. Program Change memuat preset sesuai urutan daftar preset.
-        </p>
+        <p className="panel__hint">{t('midi.emptyHint')}</p>
       )}
 
       {error ? (

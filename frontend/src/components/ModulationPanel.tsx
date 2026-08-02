@@ -1,18 +1,23 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { useT } from '../i18n';
+import type { StringKey } from '../i18n';
 import { clearModifier, getModifiers, setModifier } from '../services/api';
 import type { EffectDescriptor, ModifiersState, ModifierSource } from '../services/api';
 
-const SOURCES: { value: ModifierSource; label: string }[] = [
-  { value: 'lfoSine', label: 'LFO Sinus' },
-  { value: 'lfoTriangle', label: 'LFO Segitiga' },
-  { value: 'lfoSquare', label: 'LFO Kotak' },
-  { value: 'envelope', label: 'Envelope (dinamika)' },
-  { value: 'expression', label: 'Pedal ekspresi' },
+const SOURCES: { value: ModifierSource; key: StringKey }[] = [
+  { value: 'lfoSine', key: 'mod.lfoSine' },
+  { value: 'lfoTriangle', key: 'mod.lfoTriangle' },
+  { value: 'lfoSquare', key: 'mod.lfoSquare' },
+  { value: 'envelope', key: 'mod.envelope' },
+  { value: 'expression', key: 'mod.expression' },
 ];
 
-/** Note divisions an LFO can lock to the tempo. Index matches the engine's enum. */
-const SYNC_DIVISIONS = ['Bebas', '1/1', '1/2', '1/4', '1/8', '1/8.', '1/8T', '1/16'];
+/**
+ * Note divisions an LFO can lock to the tempo. Index matches the engine's enum,
+ * so entries may be appended but never reordered. Only the first is a word.
+ */
+const SYNC_DIVISIONS = ['1/1', '1/2', '1/4', '1/8', '1/8.', '1/8T', '1/16'];
 
 interface Target {
   key: string;
@@ -61,6 +66,8 @@ interface ModulationPanelProps {
  * contour frequency swept by the envelope. Up to four at once.
  */
 function ModulationPanelBase({ effects, disabled = false, onModifiersChanged }: ModulationPanelProps) {
+  const t = useT();
+
   const [state, setState] = useState<ModifiersState | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -142,14 +149,13 @@ function ModulationPanelBase({ effects, disabled = false, onModifiersChanged }: 
   return (
     <section className="panel" aria-label="Modifier">
       <header className="panel__head">
-        <h2 className="panel__title">Modifier</h2>
+        <h2 className="panel__title">{t('mod.title')}</h2>
         <span className="panel__count">{active.length}/4</span>
       </header>
 
       <p className="panel__hint">
-        LFO, envelope, atau pedal ekspresi menyapu satu parameter antara dua nilai — tremolo,
-        auto-wah, wah. LFO bisa dikunci ke tempo. Knob yang dimodulasi tetap aktif: ia menyetel titik
-        tengah sapuan (tag <b>MOD</b>); hapus modifier untuk melepaskannya.
+        {t('mod.hintBefore')} <b>MOD</b>
+        {t('mod.hintAfter')}
       </p>
 
       {active.length > 0 ? (
@@ -160,15 +166,20 @@ function ModulationPanelBase({ effects, disabled = false, onModifiersChanged }: 
                 {byKey.get(`${modifier.effect}.${modifier.parameter}`)?.label ??
                   `${modifier.effect} — ${modifier.parameter}`}
               </span>
-              <span className="pill">{SOURCES.find((s) => s.value === modifier.source)?.label ?? modifier.source}</span>
+              <span className="pill">
+                {(() => {
+                  const key = SOURCES.find((s) => s.value === modifier.source)?.key;
+                  return key ? t(key) : modifier.source;
+                })()}
+              </span>
               <button
                 type="button"
                 className="btn btn--ghost"
-                aria-label={`Hapus modifier ${modifier.slot}`}
+                aria-label={t('mod.clear', { slot: modifier.slot })}
                 disabled={busy}
                 onClick={() => void run(() => clearModifier(modifier.slot), true)}
               >
-                Hapus
+                {t('midi.clear')}
               </button>
             </li>
           ))}
@@ -178,14 +189,14 @@ function ModulationPanelBase({ effects, disabled = false, onModifiersChanged }: 
       {freeSlot >= 0 ? (
         <div className="modform">
           <label className="field">
-            <span className="field__label">Parameter</span>
+            <span className="field__label">{t('mod.parameter')}</span>
             <select
-              aria-label="Parameter"
+              aria-label={t('mod.parameter')}
               value={targetKey}
               disabled={busy}
               onChange={(event) => onPickTarget(event.target.value)}
             >
-              <option value="">Pilih parameter...</option>
+              <option value="">{t('mod.pickParameter')}</option>
               {targets.map((target) => (
                 <option key={target.key} value={target.key}>
                   {target.label}
@@ -195,16 +206,16 @@ function ModulationPanelBase({ effects, disabled = false, onModifiersChanged }: 
           </label>
 
           <label className="field">
-            <span className="field__label">Sumber</span>
+            <span className="field__label">{t('mod.source')}</span>
             <select
-              aria-label="Sumber"
+              aria-label={t('mod.source')}
               value={source}
               disabled={busy}
               onChange={(event) => setSource(event.target.value as ModifierSource)}
             >
               {SOURCES.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.label}
+                  {t(option.key)}
                 </option>
               ))}
             </select>
@@ -212,10 +223,10 @@ function ModulationPanelBase({ effects, disabled = false, onModifiersChanged }: 
 
           <div className="modform__range">
             <label className="field field--inline">
-              <span className="field__label">Dari</span>
+              <span className="field__label">{t('mod.from')}</span>
               <input
                 type="number"
-                aria-label="Dari"
+                aria-label={t('mod.from')}
                 value={low}
                 min={selected?.min}
                 max={selected?.max}
@@ -224,10 +235,10 @@ function ModulationPanelBase({ effects, disabled = false, onModifiersChanged }: 
               />
             </label>
             <label className="field field--inline">
-              <span className="field__label">Sampai</span>
+              <span className="field__label">{t('mod.to')}</span>
               <input
                 type="number"
-                aria-label="Sampai"
+                aria-label={t('mod.to')}
                 value={high}
                 min={selected?.min}
                 max={selected?.max}
@@ -237,15 +248,16 @@ function ModulationPanelBase({ effects, disabled = false, onModifiersChanged }: 
             </label>
             {isLfo ? (
               <label className="field field--inline">
-                <span className="field__label">Sync</span>
+                <span className="field__label">{t('mod.sync')}</span>
                 <select
-                  aria-label="Sync"
+                  aria-label={t('mod.sync')}
                   value={syncDivision}
                   disabled={busy}
                   onChange={(event) => setSyncDivision(Number(event.target.value))}
                 >
+                  <option value={0}>{t('mod.syncFree')}</option>
                   {SYNC_DIVISIONS.map((label, index) => (
-                    <option key={label} value={index}>
+                    <option key={label} value={index + 1}>
                       {label}
                     </option>
                   ))}
@@ -254,10 +266,10 @@ function ModulationPanelBase({ effects, disabled = false, onModifiersChanged }: 
             ) : null}
             {isLfo && syncDivision === 0 ? (
               <label className="field field--inline">
-                <span className="field__label">Rate (Hz)</span>
+                <span className="field__label">{t('mod.rateHz')}</span>
                 <input
                   type="number"
-                  aria-label="Rate (Hz)"
+                  aria-label={t('mod.rateHz')}
                   value={rate}
                   min={0.05}
                   max={20}
@@ -269,10 +281,10 @@ function ModulationPanelBase({ effects, disabled = false, onModifiersChanged }: 
             ) : null}
             {isExpression ? (
               <label className="field field--inline">
-                <span className="field__label">CC pedal</span>
+                <span className="field__label">{t('mod.pedalCc')}</span>
                 <input
                   type="number"
-                  aria-label="CC pedal"
+                  aria-label={t('mod.pedalCc')}
                   value={expressionCc}
                   min={0}
                   max={127}
@@ -285,11 +297,11 @@ function ModulationPanelBase({ effects, disabled = false, onModifiersChanged }: 
           </div>
 
           <button type="button" className="btn" disabled={busy || !selected} onClick={add}>
-            Tambah modifier
+            {t('mod.addModifier')}
           </button>
         </div>
       ) : (
-        <p className="panel__hint">Keempat slot terpakai. Hapus salah satu untuk menambah yang baru.</p>
+        <p className="panel__hint">{t('mod.full')}</p>
       )}
 
       {error ? (

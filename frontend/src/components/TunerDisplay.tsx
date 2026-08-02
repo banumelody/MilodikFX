@@ -1,4 +1,5 @@
 import { memo, useEffect, useState } from 'react';
+import { useT } from '../i18n';
 
 import { setTunerEnabled, subscribeTuner } from '../services/api';
 import type { TunerReading } from '../services/api';
@@ -28,6 +29,8 @@ interface TunerDisplayProps {
  * running behind a collapsed card.
  */
 function TunerDisplayBase({ disabled = false }: TunerDisplayProps) {
+  const t = useT();
+
   const [open, setOpen] = useState(false);
   const [reading, setReading] = useState<TunerReading>(IDLE);
 
@@ -71,7 +74,7 @@ function TunerDisplayBase({ disabled = false }: TunerDisplayProps) {
   return (
     <section className={`panel tuner tuner--${state}`} aria-label="Tuner">
       <header className="panel__head">
-        <h2 className="panel__title">Tuner</h2>
+        <h2 className="panel__title">{t('tuner.title')}</h2>
         <button
           type="button"
           className={`pill-btn${open ? ' pill-btn--active' : ''}`}
@@ -79,7 +82,7 @@ function TunerDisplayBase({ disabled = false }: TunerDisplayProps) {
           aria-pressed={open}
           onClick={() => setOpen((current) => !current)}
         >
-          {open ? 'Berhenti' : 'Mulai'}
+          {open ? t('tuner.stop') : t('tuner.start')}
         </button>
       </header>
 
@@ -92,7 +95,7 @@ function TunerDisplayBase({ disabled = false }: TunerDisplayProps) {
             aria-label={
               detected
                 ? `${reading.note}, ${cents > 0 ? '+' : ''}${cents.toFixed(0)} cent`
-                : 'Tidak ada nada terdeteksi'
+                : t('tuner.noNote')
             }
           >
             {detected ? reading.note : '--'}
@@ -116,11 +119,11 @@ function TunerDisplayBase({ disabled = false }: TunerDisplayProps) {
 
           <dl className="tuner__readout">
             <div>
-              <dt>Frekuensi</dt>
+              <dt>{t('tuner.frequency')}</dt>
               <dd>{detected ? `${reading.frequency.toFixed(2)} Hz` : '--'}</dd>
             </div>
             <div>
-              <dt>Deviasi</dt>
+              <dt>{t('tuner.deviation')}</dt>
               <dd>
                 {detected ? `${cents > 0 ? '+' : ''}${cents.toFixed(1)} cent` : '--'}
               </dd>
@@ -130,16 +133,16 @@ function TunerDisplayBase({ disabled = false }: TunerDisplayProps) {
           <p className="panel__hint">
             {detected
               ? inTune
-                ? 'Pas.'
+                ? t('tuner.inTune')
                 : cents < 0
-                  ? 'Terlalu rendah — kencangkan.'
-                  : 'Terlalu tinggi — kendurkan.'
-              : 'Petik satu senar saja, biarkan berdering.'}
+                  ? t('tuner.flat')
+                  : t('tuner.sharp')
+              : t('tuner.pluckOne')}
           </p>
         </>
       ) : (
         <p className="panel__hint">
-          Tuner mati agar tidak membebani CPU. Tekan Mulai saat perlu menyetem.
+          {t('tuner.idle')}
         </p>
       )}
     </section>

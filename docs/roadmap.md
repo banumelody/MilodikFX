@@ -1428,3 +1428,43 @@ logaritmik jadi tetap linear; persen dan 0..1 tetap linear.** `skew` diisi di `C
 bersama parameternya, tapi **sengaja tidak diterapkan ke `NormalisableRange` VST3** — itu akan
 menggeser setiap lajur otomasi DAW yang sudah ada demi masalah yang hanya menyangkut drag mouse.
 Nilai tersimpan, API, preset, dan otomasi tidak berubah sama sekali.
+
+# P20 — Dua bahasa (2 Agu 2026) — **SELESAI**
+
+## v0.35.0 — Bahasa Indonesia + English
+
+Aplikasinya selama ini berbahasa Indonesia saja. Sekarang keduanya, dipilih dari footer dan diingat
+di `localStorage` — Indonesia tetap default, karena itu yang selalu ia bicarakan dan berganti diam-diam
+saat update adalah kejutan.
+
+**Aturannya satu, dan itu yang menentukan bentuknya: istilah teknis tidak diterjemahkan.** Overdrive
+tetap overdrive, head tetap head, cabinet tetap cabinet — begitu juga gain, threshold, attack, release,
+ratio, mix, feedback, spillover, crossover, oversampling, impulse response, preset, scene, channel,
+bypass dan mute. Ini kata yang tercetak di perangkatnya sendiri dan kata yang ditemui siapa pun yang
+membaca manual; mengarang padanan Indonesia justru membuat aplikasinya **lebih sulit** dipakai. Yang
+diterjemahkan adalah jaringan penghubungnya: apa yang dilakukan sebuah blok, apa yang akan terjadi
+kalau tombol ditekan, apa yang salah.
+
+Aturan itu dikunci oleh test, bukan oleh niat baik. `strings.test.ts` menyapu **kedua** kamus dan
+gagal dua arah: kalau "head" muncul sebagai "kepala", dan kalau "head" hilang sama sekali. Versi
+pertama test itu hanya membaca `STRINGS` — disabotase dengan mengganti `nam` jadi "Kepala amp", ia
+**lulus**, karena deskripsi blok tinggal di `chain.ts`. Kelas yang sama dengan suite yang menilai
+keadaan yang tidak ia siapkan sendiri.
+
+**Tiga berkas, tiga tanggung jawab.** `i18n/strings.ts` memegang chrome UI (±220 kunci, dinamai
+menurut tempat munculnya). `i18n/chain.ts` memegang deskripsi blok, enam label parameter yang berupa
+kalimat, dan pilihan enum — dikunci per **tipe** blok, jadi `overdrive2` terbaca persis seperti
+`overdrive`. `i18n/index.tsx` adalah provider-nya; `useT()` mengembalikan penerjemah, `useLanguage()`
+menambah bahasa aktif untuk kamus rantai. Placeholder `{name}` diganti satu lintasan — sengaja bukan
+mesin template, karena setiap string di sini kalimat, bukan program.
+
+**Engine tetap satu bahasa, dan sekarang Inggris.** Enam label parameter yang masih Indonesia
+(`Frekuensi`, `Kaitkan L/R`, `Ketukan/Bar`, `Mode IR`, `Pakai IR`, `Tipe`) diubah ke Inggris karena
+itulah nama lajur otomasi di DAW — dan lajur otomasi tidak bisa ikut berganti saat runtime. Label dan
+deskripsi dari engine tetap jadi *fallback*; yang digambar UI datang dari kamus.
+
+**Ikut tertangkap:** ambang absolut di `PerformanceTests.cpp` untuk tiga overdrive di MIAB 8×
+mengukur **119 %** di build Debug dan gagal, padahal Release-nya 16,7 %. Persis yang diperingatkan
+berkas itu sendiri ("angka absolutnya dari build Debug dan bukan angka rilis"). Sekarang rasio yang
+menggigit di semua build — tiga drive tidak boleh melebihi tiga kali satu, terukur 1,87× — dan cek
+absolutnya hanya di Release, tempat ia berarti.

@@ -3,6 +3,7 @@ import { memo } from 'react';
 import { EFFECT_ACCENTS } from './EffectRack';
 import { effectType } from '../services/api';
 import type { EffectDescriptor } from '../services/api';
+import { useT } from '../i18n';
 
 /**
  * The blocks that are not on the board yet.
@@ -42,6 +43,8 @@ const GROUPS: Array<{ title: string; ids: string[] }> = [
 const stripInstance = (label: string) => label.replace(/\s+\d+$/, '');
 
 function BoardPaletteBase({ stages, disabled = false, paletteProps, activeId }: BoardPaletteProps) {
+  const t = useT();
+
   // One entry per *type*, carrying how many of it are left. Three separate
   // Overdrive rows would be a list of near-identical entries where the only
   // real question is "have I got another one" -- which the count answers.
@@ -72,17 +75,17 @@ function BoardPaletteBase({ stages, disabled = false, paletteProps, activeId }: 
   const offered = [...byType.values()].filter((entry) => entry.left > 0);
 
   return (
-    <section className="panel palette" aria-label="Blok tersedia">
+    <section className="panel palette" aria-label={t('board.paletteAria')}>
       <header className="panel__head">
         <h2 className="panel__title">Blok</h2>
       </header>
 
       {offered.length === 0 ? (
-        <p className="panel__empty">Semua blok sudah ada di board.</p>
+        <p className="panel__empty">{t('board.paletteFull')}</p>
       ) : (
         <>
           <p className="palette__hint">
-            Seret ke rack, atau tekan Enter untuk menaruhnya di ujung rantai.
+            {t('board.paletteHint')}
           </p>
 
           {/* The list scrolls inside itself rather than growing the sidebar. An
@@ -118,7 +121,7 @@ function BoardPaletteBase({ stages, disabled = false, paletteProps, activeId }: 
                         data-palette-stage={next.id}
                         title={
                           type === 'split'
-                            ? 'Buka jalur kedua - Mixer menyusul sendiri'
+                            ? t('board.splitterHint')
                             : next.description
                         }
                         {...paletteProps(next.id)}

@@ -383,7 +383,7 @@ void registerLayer (milodikfx::api::ParameterRegistry& registry,
             // is what this stage is for -- so a single figure can only ever get
             // one of them right. Linked by default, which is what a mono rig and
             // every preset written before this already assume.
-            e.parameters.push_back (makeToggle ("trimLink", "Kaitkan L/R", true,
+            e.parameters.push_back (makeToggle ("trimLink", "Link L/R", true,
                                                 [p] { return p->isLinked(); },
                                                 [p] (bool v) { p->setLinked (v); }));
 
@@ -497,7 +497,7 @@ void registerLayer (milodikfx::api::ParameterRegistry& registry,
                                                p->setMode ((SplitProcessor::Mode) index);
                                            }));
 
-        e.parameters.push_back (makeLogParam ("freqHz", "Frekuensi", "Hz",
+        e.parameters.push_back (makeLogParam ("freqHz", "Frequency", "Hz",
                                            SplitProcessor::kMinFrequencyHz,
                                            SplitProcessor::kMaxFrequencyHz,
                                            1.0f, 250.0f,
@@ -551,7 +551,7 @@ void registerLayer (milodikfx::api::ParameterRegistry& registry,
         // given type actually uses is a presentation question, so the UI hides
         // the rest -- the registry stays a flat, stable set of ids that presets
         // and settings can rely on.
-        e.parameters.push_back (makeParam ("type", "Tipe", "", 0.0f,
+        e.parameters.push_back (makeParam ("type", "Type", "", 0.0f,
                                            (float) (drive::numTypes - 1), 1.0f, 0.0f,
                                            [p] { return (float) p->getType(); },
                                            [p] (float v) { p->setType ((int) std::lround (v)); }));
@@ -672,7 +672,7 @@ void registerLayer (milodikfx::api::ParameterRegistry& registry,
 
         if (extras.irLibrary != nullptr)
         {
-            e.parameters.push_back (makeToggle ("irEnabled", "Pakai IR", false,
+            e.parameters.push_back (makeToggle ("irEnabled", "Use IR", false,
                                                 [p] { return p->isUsingImpulseResponse(); },
                                                 [p] (bool v) { p->setUseImpulseResponse (v); }));
             e.parameters.push_back (makeIrFileParam (p, *extras.irLibrary,
@@ -712,7 +712,7 @@ void registerLayer (milodikfx::api::ParameterRegistry& registry,
             // is how a real stereo rig is built -- one mono amp into two
             // cabinets panned apart -- and it costs nothing, because a blend
             // already runs both convolution engines every block.
-            e.parameters.push_back (makeParam ("irMode", "Mode IR", "", 0.0f, 1.0f, 1.0f, 0.0f,
+            e.parameters.push_back (makeParam ("irMode", "IR Mode", "", 0.0f, 1.0f, 1.0f, 0.0f,
                                                [p] { return (float) (int) p->getIrMode(); },
                                                [p] (float v)
                                                {
@@ -787,7 +787,7 @@ void registerLayer (milodikfx::api::ParameterRegistry& registry,
 
         if (extras.irLibrary != nullptr)
         {
-            e.parameters.push_back (makeToggle ("irEnabled", "Pakai IR", false,
+            e.parameters.push_back (makeToggle ("irEnabled", "Use IR", false,
                                                 [p] { return p->isUsingImpulseResponse(); },
                                                 [p] (bool v) { p->setUseImpulseResponse (v); }));
             e.parameters.push_back (makeIrFileParam (p, *extras.irLibrary,
@@ -844,7 +844,7 @@ void registerLayer (milodikfx::api::ParameterRegistry& registry,
         e.parameters.push_back (makeParam ("volumePct", "Volume", "%", 0.0f, 100.0f, 1.0f, 50.0f,
                                            [p] { return p->getVolumePercent(); },
                                            [p] (float v) { p->setVolumePercent (v); }));
-        e.parameters.push_back (makeParam ("beatsPerBar", "Ketukan/Bar", "",
+        e.parameters.push_back (makeParam ("beatsPerBar", "Beats/Bar", "",
                                            1.0f, (float) MetronomeProcessor::kMaxBeatsPerBar, 1.0f, 4.0f,
                                            [p] { return (float) p->getBeatsPerBar(); },
                                            [p] (float v) { p->setBeatsPerBar ((int) std::lround (v)); }));

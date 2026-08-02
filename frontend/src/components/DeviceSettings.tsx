@@ -1,4 +1,5 @@
 import { memo, useState } from 'react';
+import { useT } from '../i18n';
 import type { DeviceRequest, DevicesResponse } from '../services/api';
 
 export interface DeviceSettingsProps {
@@ -25,6 +26,8 @@ function DeviceSettingsBase({
   onRefresh,
   onOptimise,
 }: DeviceSettingsProps) {
+  const t = useT();
+
   const [open, setOpen] = useState(false);
 
   const current = devices?.current;
@@ -36,19 +39,19 @@ function DeviceSettingsBase({
   return (
     <section className="panel" aria-label="Audio device">
       <header className="panel__head">
-        <h2 className="panel__title">Audio Device</h2>
+        <h2 className="panel__title">{t('device.title')}</h2>
         <div className="panel__actions">
           <button
             type="button"
             className="btn btn--ghost"
             disabled={busy}
             onClick={onOptimise}
-            title="Cari ulang driver dengan latensi terendah"
+            title={t('device.optimiseHint')}
           >
-            Optimalkan latensi
+            {t('device.optimise')}
           </button>
           <button type="button" className="btn btn--ghost" onClick={() => setOpen((v) => !v)}>
-            {open ? 'Tutup' : 'Ubah'}
+            {open ? t('device.close') : t('device.change')}
           </button>
         </div>
       </header>
@@ -56,11 +59,11 @@ function DeviceSettingsBase({
       {current ? (
         <div className="device-summary">
           <div className="device-summary__name" title={current.outputDevice}>
-            {current.inputDevice || 'Tidak ada input'}
+            {current.inputDevice || t('device.noInput')}
           </div>
           <div className="device-summary__pills">
             <span className={`pill${current.lowLatency ? ' pill--good' : ' pill--warn'}`}>
-              {current.type || 'Belum terbuka'}
+              {current.type || t('device.notOpen')}
             </span>
             <span className="pill">{(current.sampleRate / 1000).toFixed(1)} kHz</span>
             <span className="pill">{current.bufferSize} smp</span>
@@ -73,7 +76,7 @@ function DeviceSettingsBase({
           </div>
         </div>
       ) : (
-        <p className="panel__empty">Menunggu perangkat audio...</p>
+        <p className="panel__empty">{t('device.waiting')}</p>
       )}
 
       {error ? <p className="panel__error">{error}</p> : null}
@@ -81,7 +84,7 @@ function DeviceSettingsBase({
       {open && available ? (
         <div className="device-form">
           <label>
-            <span>Driver</span>
+            <span>{t('device.driver')}</span>
             <select
               value={available.currentType}
               disabled={busy}
@@ -90,14 +93,14 @@ function DeviceSettingsBase({
               {available.types.map((type) => (
                 <option key={type.name} value={type.name}>
                   {type.name}
-                  {type.lowLatency ? ' - latensi rendah' : ''}
+                  {type.lowLatency ? ' - ' + t('device.lowLatency') + '' : ''}
                 </option>
               ))}
             </select>
           </label>
 
           <label>
-            <span>Input</span>
+            <span>{t('device.input')}</span>
             <select
               value={current?.inputDevice ?? ''}
               disabled={busy || !currentType?.inputs.length}
@@ -112,7 +115,7 @@ function DeviceSettingsBase({
           </label>
 
           <label>
-            <span>Output</span>
+            <span>{t('device.output')}</span>
             <select
               value={current?.outputDevice ?? ''}
               disabled={busy || !currentType?.outputs.length}
@@ -127,7 +130,7 @@ function DeviceSettingsBase({
           </label>
 
           <label>
-            <span>Sample rate</span>
+            <span>{t('device.sampleRate')}</span>
             <select
               value={current?.sampleRate ?? 0}
               disabled={busy || !available.availableSampleRates.length}
@@ -142,7 +145,7 @@ function DeviceSettingsBase({
           </label>
 
           <label>
-            <span>Buffer</span>
+            <span>{t('device.buffer')}</span>
             <select
               value={current?.bufferSize ?? 0}
               disabled={busy || !available.availableBufferSizes.length}
@@ -162,7 +165,7 @@ function DeviceSettingsBase({
           {routing && routing.ports.length > 1 ? (
             <>
               <label>
-                <span>Kanal L dari</span>
+                <span>{t('device.channelFrom', { side: 'L' })}</span>
                 <select
                   value={routing.left}
                   disabled={busy}
@@ -179,7 +182,7 @@ function DeviceSettingsBase({
               </label>
 
               <label>
-                <span>Kanal R dari</span>
+                <span>{t('device.channelFrom', { side: 'R' })}</span>
                 <select
                   value={routing.right}
                   disabled={busy}
@@ -202,16 +205,12 @@ function DeviceSettingsBase({
           </button>
 
           <p className="device-form__hint">
-            Buffer terkecil memberi latensi terendah. Kalau suara mulai putus-putus, naikkan satu
-            langkah. ASIO muncul di daftar ini setelah aplikasi dibangun dengan Steinberg ASIO SDK.
+            {t('device.bufferHint')}
           </p>
 
           {routing && routing.ports.length > 1 ? (
             <p className="device-form__hint">
-              Pilihan port melekat pada perangkat, bukan pada preset - ia menggambarkan kabel di
-              rig-mu. Port mana pun boleh dipetakan ke kanal mana pun. Dengan dua sumber di dua
-              port, mode split <strong>L/R</strong> memberi masing-masing chain sendiri, dan
-              Gain di kartu Input bisa dilepas kaitannya supaya tiap sumber punya trim sendiri.
+              {t('device.portHint')}
             </p>
           ) : null}
         </div>

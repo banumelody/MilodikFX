@@ -187,6 +187,13 @@ view, **undo/redo**, kurva respons EQ, metering lewat Server-Sent Events, dan **
 update otomatis** — aplikasi memeriksa GitHub Releases saat dibuka dan memunculkan pemberitahuan bila
 ada versi baru.
 
+**Dua bahasa: Indonesia dan English**, dipilih dari footer dan diingat untuk sesi berikutnya.
+Istilah teknisnya sengaja **tidak** diterjemahkan — head tetap head, cabinet tetap cabinet, begitu
+juga gain, threshold, attack, release, mix, feedback, impulse response, preset, scene, bypass. Itu
+kata yang tercetak di perangkatnya sendiri; mengarang padanannya justru bikin lebih sulit dibaca.
+Yang berganti bahasa adalah kalimat di sekitarnya — apa yang dilakukan sebuah blok, apa yang terjadi
+kalau tombol ditekan, apa yang salah.
+
 Situs: **https://banumelody.github.io/MilodikFX/**
 
 ## Build (Windows)

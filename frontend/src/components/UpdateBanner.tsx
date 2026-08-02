@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 import type { UpdateInfo } from '../services/api';
 
 export interface UpdateBannerProps {
@@ -12,22 +13,25 @@ export interface UpdateBannerProps {
  * Renders nothing unless the engine actually confirmed an update.
  */
 export function UpdateBanner({ info, onDismiss }: UpdateBannerProps) {
+  const t = useT();
+
   if (!info || !info.updateAvailable) return null;
 
   return (
     <div className="banner banner--update" role="status">
       <span>
-        Versi baru <strong>{info.latest}</strong> tersedia — kamu memakai v{info.current}.
+        {t('update.newVersionBefore')} <strong>{info.latest}</strong>{' '}
+        {t('update.newVersionAfter', { current: info.current })}
       </span>
       <span className="banner__actions">
         <a href={info.url} target="_blank" rel="noreferrer" className="banner__link">
-          Lihat rilis
+          {t('update.view')}
         </a>
         <button
           type="button"
           className="banner__close"
           onClick={onDismiss}
-          aria-label="Tutup pemberitahuan pembaruan"
+          aria-label={t('update.dismissAria')}
         >
           ×
         </button>

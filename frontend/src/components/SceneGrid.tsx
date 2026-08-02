@@ -4,6 +4,7 @@ import { EFFECT_ACCENTS } from './EffectRack';
 import { captureScene, getScenes, recallScene, renameScene, setSceneEffect } from '../services/api';
 import { effectType } from '../services/api';
 import type { EffectDescriptor, ScenesState } from '../services/api';
+import { useT } from '../i18n';
 
 interface SceneGridProps {
   effects: EffectDescriptor[];
@@ -22,6 +23,8 @@ interface SceneGridProps {
  * touching what is playing; the number button recalls it.
  */
 function SceneGridBase({ effects, disabled = false, onRecalled, refreshToken }: SceneGridProps) {
+  const t = useT();
+
   const [state, setState] = useState<ScenesState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
@@ -68,18 +71,15 @@ function SceneGridBase({ effects, disabled = false, onRecalled, refreshToken }: 
   return (
     <section className="panel scenes" aria-label="Scene">
       <header className="panel__head">
-        <h2 className="panel__title">Scene</h2>
+        <h2 className="panel__title">{t('scene.title')}</h2>
         {state && state.active < 0 ? (
-          <span className="panel__count">Diubah manual</span>
+          <span className="panel__count">{t('scene.manual')}</span>
         ) : null}
       </header>
 
-      <p className="panel__hint">
-        Scene hanya menyimpan efek mana yang menyala — knob tidak ikut berpindah. Klik nomor untuk
-        pindah, klik sel untuk mengubah pola, klik nama untuk mengganti namanya.
-      </p>
+      <p className="panel__hint">{t('scene.hint')}</p>
 
-      <div className="scenes__grid" role="table" aria-label="Pola efek per scene">
+      <div className="scenes__grid" role="table" aria-label={t('scene.gridAria')}>
         <div className="scenes__row scenes__row--head" role="row">
           <span className="scenes__corner" role="columnheader" aria-label="Scene" />
           {columns.map((effect) => (
@@ -100,7 +100,7 @@ function SceneGridBase({ effects, disabled = false, onRecalled, refreshToken }: 
             {editing === scene.index ? (
               <input
                 className="scenes__rename"
-                aria-label={`Nama scene ${scene.index + 1}`}
+                aria-label={t('scene.renameAria', { n: scene.index + 1 })}
                 defaultValue={scene.name}
                 autoFocus
                 onBlur={(event) => {
@@ -122,8 +122,8 @@ function SceneGridBase({ effects, disabled = false, onRecalled, refreshToken }: 
                 aria-pressed={state?.active === scene.index}
                 title={
                   scene.populated
-                    ? `Pindah ke ${scene.name}`
-                    : `${scene.name} masih kosong — simpan dulu`
+                    ? t('scene.switchTo', { name: scene.name })
+                    : t('scene.emptySlot', { name: scene.name })
                 }
                 onClick={() => void run(() => recallScene(scene.index), true)}
                 onDoubleClick={() => setEditing(scene.index)}
@@ -145,7 +145,7 @@ function SceneGridBase({ effects, disabled = false, onRecalled, refreshToken }: 
                   style={{ '--accent': EFFECT_ACCENTS[effectType(effect.id)] ?? '#4da3ff' } as React.CSSProperties}
                   disabled={busy}
                   aria-pressed={on}
-                  aria-label={`${scene.name}: ${effect.label} ${on ? 'menyala' : 'mati'}`}
+                  aria-label={`${scene.name}: ${effect.label} ${t(on ? 'scene.on' : 'scene.off')}`}
                   onClick={() => void run(() => setSceneEffect(scene.index, effect.id, !on))}
                 />
               );
@@ -155,14 +155,14 @@ function SceneGridBase({ effects, disabled = false, onRecalled, refreshToken }: 
               type="button"
               className="btn btn--ghost scenes__store"
               disabled={busy}
-              aria-label={`Rekam kondisi sekarang ke ${scene.name}`}
-              title="Rekam pola efek yang sedang aktif ke scene ini"
+              aria-label={t('scene.captureAria', { name: scene.name })}
+              title={t('scene.captureHint')}
               onClick={() => void run(() => captureScene(scene.index))}
             >
-              {/* Not "Simpan": that is what the preset panel's button says, and
-                  two buttons a few centimetres apart both reading "Simpan" but
-                  writing different things is a trap. */}
-              Rekam
+              {/* Not the preset panel's word for Save: two buttons a few
+                  centimetres apart reading the same and writing different
+                  things is a trap. */}
+              {t('scene.capture')}
             </button>
           </div>
         ))}

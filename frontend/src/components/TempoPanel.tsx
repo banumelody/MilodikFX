@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { useT } from '../i18n';
 
 import type { EffectDescriptor, ParameterDescriptor } from '../services/api';
 
@@ -36,6 +37,8 @@ function TempoPanelBase({
   onParameterChange,
   onEnabledChange,
 }: TempoPanelProps) {
+  const t = useT();
+
   const volume = findParameter(metronome, 'volumePct');
   const beatsPerBar = findParameter(metronome, 'beatsPerBar');
 
@@ -100,7 +103,7 @@ function TempoPanelBase({
   return (
     <section className="panel tempo" aria-label="Tempo">
       <header className="panel__head">
-        <h2 className="panel__title">Tempo</h2>
+        <h2 className="panel__title">{t('tempo.title')}</h2>
         {metronome ? (
           <button
             type="button"
@@ -110,7 +113,7 @@ function TempoPanelBase({
             aria-label="Metronom"
             onClick={() => onEnabledChange('metronome', !running)}
           >
-            {running ? 'Klik aktif' : 'Klik'}
+            {running ? t('tempo.clickOn') : t('tempo.click')}
           </button>
         ) : null}
       </header>
@@ -161,7 +164,7 @@ function TempoPanelBase({
 
       {beatsPerBar ? (
         <label className="field">
-          <span className="field__label">Ketukan per bar</span>
+          <span className="field__label">{t('tempo.beatsPerBar')}</span>
           <select
             value={String(Math.round(Number(beatsPerBar.value)))}
             disabled={disabled}
@@ -183,7 +186,7 @@ function TempoPanelBase({
 
       {volume ? (
         <label className="field">
-          <span className="field__label">Volume klik</span>
+          <span className="field__label">{t('tempo.clickVolume')}</span>
           <input
             type="range"
             min={volume.min}

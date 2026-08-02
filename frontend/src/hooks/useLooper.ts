@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getLooper, looperAction, setLooperLevel } from '../services/api';
 import type { LooperAction, LooperInfo } from '../services/api';
+import type { StringKey } from '../i18n';
 
 /** Field-by-field, so an unchanged looper does not re-render the panel. */
 function sameLooper(a: LooperInfo | null, b: LooperInfo): boolean {
@@ -80,19 +81,24 @@ export function useLooper(active: boolean, streamed?: LooperInfo, intervalMs = 2
   return { info, act, setLevel, refresh };
 }
 
-/** What pressing the context-sensitive Record button does next, given the state. */
-export function recordLabel(state: LooperInfo['state'] | undefined): string {
+/**
+ * What pressing the context-sensitive Record button does next, given the state.
+ *
+ * A key rather than a word: the button is rendered in whichever language the app
+ * is set to, and a hook has no business knowing which that is.
+ */
+export function recordKey(state: LooperInfo['state'] | undefined): StringKey {
   switch (state) {
     case 'recording':
-      return 'Tutup loop';
+      return 'looper.closeLoop';
     case 'playing':
-      return 'Overdub';
+      return 'looper.overdub';
     case 'overdubbing':
-      return 'Selesai overdub';
+      return 'looper.finishOverdub';
     case 'stopped':
-      return 'Main';
+      return 'looper.play';
     case 'empty':
     default:
-      return 'Rekam';
+      return 'looper.record';
   }
 }

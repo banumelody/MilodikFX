@@ -3,6 +3,7 @@ import { memo } from 'react';
 import { EFFECT_ACCENTS } from './EffectRack';
 import { effectType } from '../services/api';
 import type { EffectDescriptor } from '../services/api';
+import { useT } from '../i18n';
 
 const NOT_A_STAGE = new Set(['input', 'global', 'metronome']);
 
@@ -46,6 +47,8 @@ function ChainStripBase({
   dropTargetId = null,
   busB,
 }: ChainStripProps) {
+  const t = useT();
+
   // Input routing, the global controls and the metronome are not stages the
   // guitar passes through, so they stay out of the picture. The metronome is
   // genuinely outside the chain -- it is mixed in after the master stage.
@@ -81,7 +84,7 @@ function ChainStripBase({
           {...(dragProps ?? {})}
           title={
             canToggle
-              ? `${effect.label} — klik untuk menuju, seret untuk menata ulang, klik kanan untuk hidup/mati`
+              ? t('chain.stageHint', { name: effect.label })
               : effect.label
           }
           aria-label={effect.label}
@@ -114,7 +117,7 @@ function ChainStripBase({
       <nav className="chain chain--empty" aria-label="Rantai sinyal">
         <span className="chain__terminal">IN</span>
         <span className="chain__link" aria-hidden="true" />
-        <span className="chain__empty">kabel lurus — belum ada blok</span>
+        <span className="chain__empty">{t('board.straightWire')}</span>
         <span className="chain__link" aria-hidden="true" />
         <span className="chain__terminal">OUT</span>
       </nav>
@@ -150,7 +153,7 @@ function ChainStripBase({
               <div
                 key={bus}
                 className={`chain__rail chain__rail--${bus.toLowerCase()}`}
-                aria-label={`Jalur ${bus}`}
+                aria-label={t('chain.busAria', { bus })}
               >
                 <span className="chain__rail-tag" aria-hidden="true">
                   {bus}

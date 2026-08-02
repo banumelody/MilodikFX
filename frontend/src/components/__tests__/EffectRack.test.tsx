@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { LanguageProvider } from '../../i18n';
 import { EffectRack } from '../EffectRack';
 import type { EffectDescriptor } from '../../services/api';
 
@@ -859,5 +860,41 @@ describe('EffectRack instance layouts', () => {
     // Controls belonging to other voicings must not be on the card.
     expect(screen.queryByRole('slider', { name: 'Asymmetry' })).not.toBeInTheDocument();
     expect(screen.queryByRole('slider', { name: 'Bass' })).not.toBeInTheDocument();
+  });
+});
+
+describe('EffectRack in English', () => {
+  const inEnglish = (effect: EffectDescriptor) => {
+    window.localStorage.setItem('milodikfx.language', 'en');
+
+    render(
+      <LanguageProvider>
+        <EffectRack effect={effect} onParameterChange={vi.fn()} onEnabledChange={vi.fn()} />
+      </LanguageProvider>,
+    );
+  };
+
+  afterEach(() => window.localStorage.clear());
+
+  it('describes the block in the chosen language rather than the engine’s', () => {
+    // The engine sends one description, in one language, and a DAW automation
+    // lane is stuck with it. What the UI draws comes from the dictionary.
+    inEnglish(overdrive);
+
+    expect(screen.getByText(/pick the pedal voicing/i)).toBeInTheDocument();
+    expect(screen.queryByText(/pilih voicing pedalnya/i)).not.toBeInTheDocument();
+  });
+
+  it('words the choices in English too', () => {
+    inEnglish({ ...input, id: 'input' });
+
+    expect(screen.getByRole('option', { name: 'Mono - sum of both' })).toBeInTheDocument();
+  });
+
+  it('leaves the voicing names alone — they are products, not words', () => {
+    inEnglish(overdrive);
+
+    expect(screen.getByRole('option', { name: 'Tube Screamer' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Marshall-in-a-Box' })).toBeInTheDocument();
   });
 });

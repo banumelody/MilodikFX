@@ -1819,6 +1819,34 @@ input[type='text']:disabled {
   text-decoration: underline;
 }
 
+.appfooter__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+/* The language picker sits in the footer rather than the top bar: it is set
+   once and then never again, and the top bar is for what you touch on stage. */
+.appfooter__lang {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.appfooter__lang-label {
+  color: var(--text-faint);
+}
+
+.appfooter__lang select {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text-dim);
+  font: inherit;
+}
+
 .appfooter__sponsor {
   flex: 0 0 auto;
   padding: 5px 12px;

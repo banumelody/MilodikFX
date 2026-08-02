@@ -1,15 +1,18 @@
 import { memo } from 'react';
+import { useT } from '../i18n';
+import type { StringKey } from '../i18n';
 
 import { Knob } from './Knob';
-import { recordLabel, useLooper } from '../hooks/useLooper';
+import { recordKey, useLooper } from '../hooks/useLooper';
 import type { LooperInfo, LooperState } from '../services/api';
 
-const STATE_LABELS: Record<LooperState, string> = {
-  empty: 'Kosong',
-  recording: 'Merekam',
-  playing: 'Main',
-  overdubbing: 'Overdub',
-  stopped: 'Berhenti',
+/** Keyed rather than worded, because the words depend on the chosen language. */
+const STATE_KEYS: Record<LooperState, StringKey> = {
+  empty: 'looper.empty',
+  recording: 'looper.recording',
+  playing: 'looper.play',
+  overdubbing: 'looper.overdub',
+  stopped: 'looper.stop',
 };
 
 export interface LooperPanelProps {
@@ -24,10 +27,12 @@ export interface LooperPanelProps {
 /**
  * A single-loop phrase looper, mixed in after the master stage so it keeps
  * playing across a global bypass. One Record button carries the whole cycle
- * (rekam → tutup → overdub/main); Stop and Hapus are explicit. Bind a footswitch
+ * (record → close → overdub/play); Stop and Clear are explicit. Bind a footswitch
  * to it from the MIDI panel to run it hands-free.
  */
 function LooperPanelBase({ disabled = false, streamed }: LooperPanelProps) {
+  const t = useT();
+
   const { info, act, setLevel } = useLooper(!disabled, streamed);
 
   const state = info?.state ?? 'empty';
@@ -38,20 +43,18 @@ function LooperPanelBase({ disabled = false, streamed }: LooperPanelProps) {
   return (
     <section className="panel looper" aria-label="Looper">
       <header className="panel__head">
-        <h2 className="panel__title">Looper</h2>
-        <span className={`looper__state looper__state--${state}`}>{STATE_LABELS[state]}</span>
+        <h2 className="panel__title">{t('looper.title')}</h2>
+        <span className={`looper__state looper__state--${state}`}>{t(STATE_KEYS[state])}</span>
       </header>
 
       <p className="panel__hint">
-        Rekam satu frasa lalu bermain di atasnya. Tombol <b>{recordLabel(state)}</b> menjalankan
-        siklusnya; loop tetap berbunyi walau global bypass menyala. Petakan footswitch dari panel MIDI
-        untuk kendali kaki.
+        {t('looper.hintBefore')} <b>{t(recordKey(state))}</b> {t('looper.hintAfter')}
       </p>
 
       <div
         className="looper__progress"
         role="progressbar"
-        aria-label="Posisi loop"
+        aria-label={t('looper.position')}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round((info?.position ?? 0) * 100)}
@@ -63,8 +66,10 @@ function LooperPanelBase({ disabled = false, streamed }: LooperPanelProps) {
       </div>
 
       <div className="looper__meta">
-        <span>{info?.hasLoop ? `${seconds.toFixed(1)} d` : 'Belum ada loop'}</span>
-        <span className="muted">maks {Math.round(info?.maxSeconds ?? 60)} d</span>
+        <span>
+          {info?.hasLoop ? t('looper.seconds', { n: seconds.toFixed(1) }) : t('looper.noLoop')}
+        </span>
+        <span className="muted">{t('looper.max', { n: Math.round(info?.maxSeconds ?? 60) })}</span>
       </div>
 
       <div className="looper__controls">
@@ -74,7 +79,7 @@ function LooperPanelBase({ disabled = false, streamed }: LooperPanelProps) {
           disabled={busy}
           onClick={() => act('record')}
         >
-          {recordLabel(state)}
+          {t(recordKey(state))}
         </button>
         <button
           type="button"
@@ -82,7 +87,7 @@ function LooperPanelBase({ disabled = false, streamed }: LooperPanelProps) {
           disabled={busy || state === 'empty'}
           onClick={() => act('stop')}
         >
-          Stop
+          {t('looper.stop')}
         </button>
         <button
           type="button"
@@ -90,7 +95,7 @@ function LooperPanelBase({ disabled = false, streamed }: LooperPanelProps) {
           disabled={busy || !info?.hasLoop}
           onClick={() => act('clear')}
         >
-          Hapus
+          {t('looper.clear')}
         </button>
       </div>
 
@@ -101,7 +106,7 @@ function LooperPanelBase({ disabled = false, streamed }: LooperPanelProps) {
           max={100}
           step={1}
           defaultValue={100}
-          label="Level"
+          label={t('looper.level')}
           unit="%"
           size={64}
           disabled={busy}

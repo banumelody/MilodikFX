@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { PresetMetadata } from '../services/api';
+import { useT } from '../i18n';
 
 export interface PresetControlsProps {
   presets: string[];
@@ -39,6 +40,8 @@ function PresetControlsBase({
   onExport,
   onImport,
 }: PresetControlsProps) {
+  const t = useT();
+
   const [draftName, setDraftName] = useState('');
   const [search, setSearch] = useState('');
   const [showNotes, setShowNotes] = useState(false);
@@ -95,7 +98,7 @@ function PresetControlsBase({
   return (
     <section className="panel" aria-label="Preset">
       <header className="panel__head">
-        <h2 className="panel__title">Preset</h2>
+        <h2 className="panel__title">{t('preset.title')}</h2>
         <span className="panel__count">{presets.length}</span>
       </header>
 
@@ -104,11 +107,11 @@ function PresetControlsBase({
           <input
             className="preset__input"
             type="search"
-            placeholder="Cari nama, tag, atau deskripsi"
+            placeholder={t('preset.search')}
             value={search}
             disabled={busy}
             onChange={(event) => setSearch(event.target.value)}
-            aria-label="Cari preset"
+            aria-label={t('preset.searchAria')}
           />
         ) : null}
 
@@ -118,10 +121,12 @@ function PresetControlsBase({
           value={selected}
           disabled={busy || visible.length === 0}
           onChange={(event) => onLoad(event.target.value)}
-          aria-label="Pilih preset"
+          aria-label={t('preset.selectAria')}
         >
           {visible.length === 0 ? (
-            <option value="">{presets.length === 0 ? 'Belum ada preset' : 'Tidak ada yang cocok'}</option>
+            <option value="">
+              {presets.length === 0 ? t('preset.none') : t('preset.noMatch')}
+            </option>
           ) : null}
           {visible.map((name) => (
             <option key={name} value={name}>
@@ -134,7 +139,7 @@ function PresetControlsBase({
           <input
             className="preset__input"
             type="text"
-            placeholder="Nama preset baru"
+            placeholder={t('preset.newName')}
             value={draftName}
             disabled={busy}
             onChange={(event) => setDraftName(event.target.value)}
@@ -144,7 +149,7 @@ function PresetControlsBase({
                 setDraftName('');
               }
             }}
-            aria-label="Nama preset"
+            aria-label={t('preset.nameAria')}
           />
           <button
             type="button"
@@ -155,7 +160,7 @@ function PresetControlsBase({
               setDraftName('');
             }}
           >
-            Simpan
+            {t('preset.save')}
           </button>
           <button
             type="button"
@@ -163,7 +168,7 @@ function PresetControlsBase({
             disabled={busy || !selected}
             onClick={() => onDelete(selected)}
           >
-            Hapus
+            {t('preset.delete')}
           </button>
         </div>
 
@@ -174,8 +179,8 @@ function PresetControlsBase({
               className={`pill-btn${current.favourite ? ' pill-btn--active' : ''}`}
               disabled={busy}
               aria-pressed={current.favourite}
-              aria-label="Favorit"
-              title="Tandai sebagai favorit"
+              aria-label={t('preset.favourite')}
+              title={t('preset.markFavourite')}
               onClick={() => onMetadataChange(selected, { favourite: !current.favourite })}
             >
               {current.favourite ? '★' : '☆'}
@@ -184,10 +189,10 @@ function PresetControlsBase({
             <input
               className="preset__input"
               type="text"
-              placeholder="Tag, dipisah koma"
+              placeholder={t('preset.tagsPlaceholder')}
               value={tags}
               disabled={busy}
-              aria-label="Tag preset"
+              aria-label={t('preset.tagsAria')}
               onChange={(event) => setTags(event.target.value)}
               onBlur={() =>
                 onMetadataChange(selected, {
@@ -206,7 +211,7 @@ function PresetControlsBase({
               aria-pressed={showNotes}
               onClick={() => setShowNotes((open) => !open)}
             >
-              Catatan
+              {t('preset.notes')}
             </button>
           </div>
         ) : null}
@@ -215,10 +220,10 @@ function PresetControlsBase({
           <textarea
             className="preset__notes"
             rows={4}
-            placeholder="Catatan untuk preset ini — setelan amp, senar, apa saja."
+            placeholder={t('preset.notesPlaceholder')}
             value={notes}
             disabled={busy}
-            aria-label="Catatan preset"
+            aria-label={t('preset.notesAria')}
             onChange={(event) => setNotes(event.target.value)}
             onBlur={() => onMetadataChange(selected, { notes })}
           />
@@ -232,7 +237,7 @@ function PresetControlsBase({
               disabled={busy || !selected}
               onClick={() => onExport(selected)}
             >
-              Ekspor
+              {t('preset.export')}
             </button>
 
             <button
@@ -241,7 +246,7 @@ function PresetControlsBase({
               disabled={busy}
               onClick={() => fileInput.current?.click()}
             >
-              Impor
+              {t('preset.import')}
             </button>
 
             <input
@@ -249,7 +254,7 @@ function PresetControlsBase({
               type="file"
               accept=".json,application/json"
               hidden
-              aria-label="Berkas preset"
+              aria-label={t('preset.fileAria')}
               onChange={(event) => {
                 const file = event.target.files?.[0];
                 if (!file) return;

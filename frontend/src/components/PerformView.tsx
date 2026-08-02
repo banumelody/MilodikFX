@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { EFFECT_ACCENTS } from './EffectRack';
 import { Knob } from './Knob';
-import { recordLabel, useLooper } from '../hooks/useLooper';
+import { recordKey, useLooper } from '../hooks/useLooper';
 import { getScenes, recallScene, setTunerEnabled, subscribeTuner } from '../services/api';
 import { effectType } from '../services/api';
 import type {
@@ -13,6 +13,7 @@ import type {
   ScenesState,
   TunerReading,
 } from '../services/api';
+import { useT } from '../i18n';
 
 /** Taps further apart than this start a new measurement. */
 const TAP_TIMEOUT_MS = 2000;
@@ -101,6 +102,8 @@ function PerformViewBase({
   onScenesRecalled,
   refreshToken,
 }: PerformViewProps) {
+  const t = useT();
+
   const [scenes, setScenes] = useState<ScenesState | null>(null);
   const [tunerOn, setTunerOn] = useState(false);
   const [reading, setReading] = useState<TunerReading>(IDLE_TUNER);
@@ -262,25 +265,25 @@ function PerformViewBase({
   const sceneList = scenes?.scenes ?? [];
 
   return (
-    <div className="perform" aria-label="Mode Perform">
+    <div className="perform" aria-label={t('perform.mode')}>
       <div className="perform__top">
         <div className="perform__preset">
           <button
             type="button"
             className="perform__nav"
-            aria-label="Preset sebelumnya"
+            aria-label={t('perform.previousPreset')}
             disabled={offline || presets.length === 0}
             onClick={() => changePreset(-1)}
           >
             ‹
           </button>
-          <div className="perform__preset-name" title={selectedPreset || 'Belum ada preset'}>
+          <div className="perform__preset-name" title={selectedPreset || t('preset.none')}>
             {selectedPreset || '—'}
           </div>
           <button
             type="button"
             className="perform__nav"
-            aria-label="Preset berikutnya"
+            aria-label={t('perform.nextPreset')}
             disabled={offline || presets.length === 0}
             onClick={() => changePreset(1)}
           >
@@ -289,12 +292,12 @@ function PerformViewBase({
         </div>
 
         <div className="perform__tempo">
-          <output className="perform__bpm" aria-label="Tempo">
+          <output className="perform__bpm" aria-label={t('tempo.title')}>
             {tempo}
             <span className="perform__bpm-unit">BPM</span>
           </output>
           <button type="button" className="perform__tap" disabled={offline || !bpm} onClick={tap}>
-            Tap
+            {t('tempo.tap')}
           </button>
         </div>
       </div>
@@ -312,11 +315,11 @@ function PerformViewBase({
             ) : null}
           </div>
           <span className="perform__tuner-cents">
-            {detected ? `${reading.cents > 0 ? '+' : ''}${reading.cents.toFixed(0)} ¢` : 'Petik satu senar'}
+            {detected ? `${reading.cents > 0 ? '+' : ''}${reading.cents.toFixed(0)} ¢` : t('tuner.pluckShort')}
           </span>
         </div>
       ) : (
-        <div className="perform__scenes" role="group" aria-label="Scene">
+        <div className="perform__scenes" role="group" aria-label={t('scene.title')}>
           {sceneList.map((scene) => (
             <button
               key={scene.index}
@@ -351,7 +354,7 @@ function PerformViewBase({
           onClick={() => looperAct('record')}
         >
           <span className="perform__loop-dot" aria-hidden="true" />
-          {recordLabel(looper?.state)}
+          {t(recordKey(looper?.state))}
         </button>
         <button
           type="button"
@@ -359,7 +362,7 @@ function PerformViewBase({
           disabled={offline || looper?.state === 'empty'}
           onClick={() => looperAct('stop')}
         >
-          Stop
+          {t('looper.stop')}
         </button>
         <button
           type="button"
@@ -367,7 +370,7 @@ function PerformViewBase({
           disabled={offline || !looper?.hasLoop}
           onClick={() => looperAct('clear')}
         >
-          Hapus
+          {t('looper.clear')}
         </button>
         <div className="perform__loop-bar" aria-hidden="true">
           <span style={{ width: `${Math.min(100, Math.max(0, (looper?.position ?? 0) * 100))}%` }} />
@@ -375,7 +378,7 @@ function PerformViewBase({
       </div>
 
       {pins && pins.length > 0 ? (
-        <div className="perform__pins" role="group" aria-label="Knob tersemat">
+        <div className="perform__pins" role="group" aria-label={t('perform.pinnedKnobs')}>
           {pins.map((pin) => (
             <Knob
               key={`${pin.effect}.${pin.parameter}`}
@@ -412,7 +415,7 @@ function PerformViewBase({
             aria-pressed={tunerOn}
             onClick={() => setTunerOn((on) => !on)}
           >
-            Tuner
+            {t('tuner.title')}
           </button>
           <button
             type="button"
@@ -421,7 +424,7 @@ function PerformViewBase({
             aria-pressed={isBypassed}
             onClick={onToggleBypass}
           >
-            Bypass
+            {t('app.bypass')}
           </button>
           <button
             type="button"
@@ -430,14 +433,16 @@ function PerformViewBase({
             aria-pressed={isMuted}
             onClick={onToggleMute}
           >
-            {isMuted ? 'Bisu' : 'Mute'}
+            {t(isMuted ? 'app.muted' : 'app.mute')}
           </button>
         </div>
       </div>
 
       <p className="perform__hint">
-        Angka <kbd>1</kbd>–<kbd>4</kbd> pindah scene · <kbd>←</kbd> <kbd>→</kbd> ganti preset ·{' '}
-        <kbd>T</kbd> tap tempo · <kbd>R</kbd> looper · <kbd>Esc</kbd> bisu · <kbd>B</kbd> bypass
+        <kbd>1</kbd>–<kbd>4</kbd> {t('perform.keysScenes')} · <kbd>←</kbd> <kbd>→</kbd>{' '}
+        {t('perform.keysPresets')} · <kbd>T</kbd> {t('perform.keysTap')} · <kbd>R</kbd>{' '}
+        {t('perform.keysLooper')} · <kbd>Esc</kbd> {t('perform.keysMute')} · <kbd>B</kbd>{' '}
+        {t('perform.keysBypass')}
       </p>
     </div>
   );

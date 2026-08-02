@@ -62,6 +62,7 @@ import type {
   PresetMetadata,
   UpdateInfo,
 } from './services/api';
+import { useT } from './i18n';
 
 type Connection = 'connecting' | 'online' | 'offline';
 
@@ -108,6 +109,8 @@ function describeError(error: unknown) {
 const IN_PLUGIN = isPluginHost();
 
 export function App() {
+  const t = useT();
+
   const inPlugin = IN_PLUGIN;
   const [effects, setEffects] = useState<EffectDescriptor[]>([]);
   const [levels, setLevels] = useState<Levels>(IDLE_LEVELS);
@@ -608,7 +611,7 @@ export function App() {
       await refreshDevices();
 
       const ms = result.current.roundTripLatencyMs;
-      setMessage(`Latensi sekarang ${ms.toFixed(1)} ms (${result.current.bufferSize} sampel)`);
+      setMessage(t('app.latencyNow', { ms: ms.toFixed(1), samples: result.current.bufferSize }));
       window.setTimeout(() => setMessage(null), 4000);
     } catch (error) {
       setDeviceError(describeError(error));
@@ -616,7 +619,7 @@ export function App() {
     } finally {
       setDeviceBusy(false);
     }
-  }, [refreshDevices]);
+  }, [refreshDevices, t]);
 
   // The rest of the stable wrappers (see toggleEffect above for why).
   const applyDevice = useCallback(
@@ -657,8 +660,8 @@ export function App() {
         // different chain.
         await refreshChainOrder();
         setSelectedPreset(name);
-      }, `Preset "${name}" dimuat`),
-    [refreshEffects, refreshPins, refreshChainOrder, withMessage],
+      }, t('app.presetLoaded', { name })),
+    [refreshEffects, refreshPins, refreshChainOrder, withMessage, t],
   );
 
   const handlePresetSave = useCallback(
@@ -666,8 +669,8 @@ export function App() {
       void withMessage(async () => {
         await savePreset(name);
         await refreshPresets();
-      }, `Preset "${name}" disimpan`),
-    [refreshPresets, withMessage],
+      }, t('app.presetSaved', { name })),
+    [refreshPresets, withMessage, t],
   );
 
   const handlePresetDelete = useCallback(
@@ -675,8 +678,8 @@ export function App() {
       void withMessage(async () => {
         await deletePreset(name);
         await refreshPresets();
-      }, `Preset "${name}" dihapus`),
-    [refreshPresets, withMessage],
+      }, t('app.presetDeleted', { name })),
+    [refreshPresets, withMessage, t],
   );
 
   const handleMetadataChange = useCallback(
@@ -684,8 +687,8 @@ export function App() {
       void withMessage(async () => {
         await setPresetMetadata(name, changes);
         await refreshPresets();
-      }, 'Info preset diperbarui'),
-    [refreshPresets, withMessage],
+      }, t('app.presetMetaSaved')),
+    [refreshPresets, withMessage, t],
   );
 
   const handlePresetExport = useCallback(
@@ -709,8 +712,8 @@ export function App() {
         // Revoked on the next tick; doing it immediately can cancel the
         // download before it starts.
         window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      }, 'Preset diekspor'),
-    [withMessage],
+      }, t('app.presetExported')),
+    [withMessage, t],
   );
 
   const handlePresetImport = useCallback(
@@ -718,8 +721,8 @@ export function App() {
       void withMessage(async () => {
         await importPreset(name, data);
         await refreshPresets();
-      }, `Preset "${name}" diimpor`),
-    [refreshPresets, withMessage],
+      }, t('app.presetImported', { name })),
+    [refreshPresets, withMessage, t],
   );
 
   const handleRevealIr = useCallback(
@@ -728,8 +731,8 @@ export function App() {
         await revealIrFolder('cabinet');
         // The folder is open; a refresh picks up whatever was dropped into it.
         window.setTimeout(() => void refreshEffects(), 1500);
-      }, 'Folder impulse response dibuka'),
-    [refreshEffects, withMessage],
+      }, t('app.irFolderOpened')),
+    [refreshEffects, withMessage, t],
   );
 
   const master = useMemo(() => effects.find((effect) => effect.id === 'master'), [effects]);
@@ -872,11 +875,11 @@ export function App() {
           <span className="topbar__logo" aria-hidden="true" />
           <div>
             <h1>MilodikFX</h1>
-            <p>{levels.audioRunning ? 'Audio berjalan' : 'Audio berhenti'}</p>
+            <p>{t(levels.audioRunning ? 'app.audioRunning' : 'app.audioStopped')}</p>
           </div>
         </div>
 
-        <div className="topbar__view" role="tablist" aria-label="Tampilan">
+        <div className="topbar__view" role="tablist" aria-label={t('app.view')}>
           <button
             type="button"
             role="tab"
@@ -884,7 +887,7 @@ export function App() {
             className={`viewtab${view === 'perform' ? ' viewtab--active' : ''}`}
             onClick={() => chooseView('perform')}
           >
-            Perform
+            {t('app.perform')}
           </button>
           <button
             type="button"
@@ -893,7 +896,7 @@ export function App() {
             className={`viewtab${view === 'edit' ? ' viewtab--active' : ''}`}
             onClick={() => chooseView('edit')}
           >
-            Edit
+            {t('app.edit')}
           </button>
         </div>
 
@@ -946,10 +949,10 @@ export function App() {
               className={`pill-btn${isBypassed ? ' pill-btn--active' : ''}`}
               disabled={offline}
               onClick={toggleBypass}
-              title="Bandingkan dengan sinyal kering (B)"
+              title={t('app.dryHint')}
               aria-pressed={isBypassed}
             >
-              Bypass
+              {t('app.bypass')}
             </button>
           ) : null}
           {masterMuted ? (
@@ -958,10 +961,10 @@ export function App() {
               className={`pill-btn${isMuted ? ' pill-btn--danger' : ''}`}
               disabled={offline}
               onClick={toggleMute}
-              title="Bisukan keluaran (Esc)"
+              title={t('app.muteHint')}
               aria-pressed={isMuted}
             >
-              {isMuted ? 'Bisu' : 'Mute'}
+              {t(isMuted ? 'app.muted' : 'app.mute')}
             </button>
           ) : null}
         </div>
@@ -974,7 +977,7 @@ export function App() {
               max={masterVolume.max}
               step={masterVolume.step}
               defaultValue={masterVolume.default}
-              label="Master"
+              label={t('app.master')}
               unit="dB"
               size={88}
               accent={EFFECT_ACCENTS.master}
@@ -988,24 +991,26 @@ export function App() {
         <div className={`status status--${connection}`}>
           <span className="status__dot" aria-hidden="true" />
           <span>
-            {connection === 'online'
-              ? 'Terhubung'
-              : connection === 'connecting'
-                ? 'Menghubungkan...'
-                : 'Terputus'}
+            {t(
+              connection === 'online'
+                ? 'app.connected'
+                : connection === 'connecting'
+                  ? 'app.connecting'
+                  : 'app.disconnected',
+            )}
           </span>
         </div>
       </header>
 
       {offline ? (
         <div className="banner banner--error" role="alert">
-          Tidak dapat menghubungi engine audio. Pastikan MilodikFX masih berjalan.
+          {t('app.unreachable')}
         </div>
       ) : null}
 
       {isBypassed ? (
         <div className="banner banner--warn" role="status">
-          Global bypass aktif — kamu mendengar sinyal kering tanpa efek.
+          {t('app.bypassNotice')}
         </div>
       ) : null}
 
@@ -1058,7 +1063,7 @@ export function App() {
       <main className="layout">
         <div className="layout__chain">
           {effects.length === 0 && !offline ? (
-            <p className="layout__empty">Memuat rantai efek...</p>
+            <p className="layout__empty">{t('app.loadingChain')}</p>
           ) : null}
 
           {/* "Empty" means nothing of your own is on the board. The input trim
@@ -1067,9 +1072,7 @@ export function App() {
           {chainOrder != null &&
           !offline &&
           rackEffects.every((effect) => effect.removable === false) ? (
-            <p className="layout__empty">
-              Board kosong &mdash; sinyalnya lewat lurus. Ambil blok dari daftar di kanan.
-            </p>
+            <p className="layout__empty">{t('board.empty')}</p>
           ) : null}
 
           {rackEffects.map((effect, index) => (
@@ -1184,35 +1187,35 @@ export function App() {
             <header className="panel__head">
               <h2 className="panel__title">Impulse Response</h2>
               <button type="button" className="btn btn--ghost" disabled={offline} onClick={handleRevealIr}>
-                Buka folder
+                {t('app.openFolder')}
               </button>
             </header>
             <p className="panel__hint">
-              Letakkan berkas WAV di folder <code>Cabinets</code> atau <code>Reverbs</code>, lalu
-              pilih pada kartu Cabinet / Reverb. Tanpa berkas, keduanya memakai algoritma bawaan.
+              {t('app.irHintBefore')} <code>Cabinets</code> {t('app.irHintOr')} <code>Reverbs</code>
+              {t('app.irHintAfter')}
             </p>
           </section>
 
-          <section className="panel" aria-label="Performa">
+          <section className="panel" aria-label={t('app.performance')}>
             <header className="panel__head">
-              <h2 className="panel__title">Performa</h2>
+              <h2 className="panel__title">{t('app.performance')}</h2>
             </header>
 
-            <Sparkline values={cpuHistory} max={100} label="Riwayat beban DSP" />
+            <Sparkline values={cpuHistory} max={100} label={t('app.cpuHistory')} />
 
             <dl className="stats">
               <div>
-                <dt>Beban DSP</dt>
+                <dt>{t('app.cpuLoad')}</dt>
                 <dd className={levels.cpuPercent > 70 ? 'stats--warn' : undefined}>
                   {levels.cpuPercent.toFixed(1)} %
                 </dd>
               </div>
               <div>
-                <dt>Sample rate</dt>
+                <dt>{t('device.sampleRate')}</dt>
                 <dd>{levels.sampleRate ? `${(levels.sampleRate / 1000).toFixed(1)} kHz` : '--'}</dd>
               </div>
               <div>
-                <dt>Buffer</dt>
+                <dt>{t('device.buffer')}</dt>
                 <dd>
                   {levels.bufferSize
                     ? `${levels.bufferSize} (${((levels.bufferSize / (levels.sampleRate || 1)) * 1000).toFixed(1)} ms)`
@@ -1220,13 +1223,15 @@ export function App() {
                 </dd>
               </div>
               <div>
-                <dt>Gate</dt>
+                <dt>{t('meter.gate')}</dt>
                 <dd>
-                  {levels.gateGain > 0.99
-                    ? 'Terbuka'
-                    : levels.gateGain < 0.01
-                      ? 'Tertutup'
-                      : 'Menutup'}
+                  {t(
+                    levels.gateGain > 0.99
+                      ? 'app.gateOpen'
+                      : levels.gateGain < 0.01
+                        ? 'app.gateClosed'
+                        : 'app.gateClosing',
+                  )}
                 </dd>
               </div>
             </dl>

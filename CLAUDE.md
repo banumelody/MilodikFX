@@ -649,7 +649,11 @@ device about to be opened. Hidden in the plugin — the host owns the I/O.
 budget, which is what every realtime rule here exists to protect. The absolute figures it logs are from
 a Debug build and are not the shipping numbers; the assertions that bite are the build-independent
 ratios (a decayed spillover tail must cost less than a ringing one, no voicing may cost 3x another,
-cost must not creep between runs).
+three overdrives may not cost more than three times one, cost must not creep between runs).
+
+**An absolute `load < 1.0` belongs under `#if ! JUCE_DEBUG`.** The three-overdrive worst case measures
+16.7 % in Release and **119 %** in Debug, so asserting it unconditionally reported a problem the
+shipping binary does not have. Debug JUCE is not slow-but-comparable, it is a different machine.
 
 Measured on the developer's rig in Release, ASIO 96 kHz / 32 samples / 4.33 ms round trip: **7.6 % DSP**
 with every effect on, **16.3 %** worst case (Marshall-in-a-Box at 8x oversampling, 90 % drive).
@@ -846,10 +850,10 @@ Three more things the MIDI path does, all aimed at footswitches like the M-Vave 
 
 ### Frontend
 
-`main.tsx` -> `App.tsx` -> the components under `components/` (EffectRack, Knob, Toggle, ChainStrip,
-the meters, DeviceSettings, TunerDisplay, TempoPanel, SceneGrid, PresetControls, MidiMapping, NamPanel,
-ModulationPanel, LooperPanel, UpdateBanner, AppFooter, PerformView) plus `services/api.ts` and the
-`useLooper` hook.
+`main.tsx` -> `LanguageProvider` -> `App.tsx` -> the components under `components/` (EffectRack, Knob,
+Toggle, ChainStrip, the meters, DeviceSettings, TunerDisplay, TempoPanel, SceneGrid, PresetControls,
+MidiMapping, NamPanel, ModulationPanel, LooperPanel, UpdateBanner, AppFooter, PerformView) plus
+`services/api.ts`, the `useLooper` hook and the `i18n/` dictionaries.
 
 `App` holds a **Perform | Edit** view toggle, remembered in localStorage. **Edit** is the dense rack —
 the default, unchanged. **Perform** (`PerformView`) is the stage-facing screen: big preset name with
@@ -894,6 +898,44 @@ thread-per-connection server.
 
 Vite emits **stable filenames** (`assets/index.js`, `assets/index.css`) — the embedding step and the
 resources copy both depend on that.
+
+#### Two languages
+
+The UI speaks **Indonesian and English**, chosen from the footer and remembered in `localStorage`
+(`milodikfx.language`). Indonesian is the default: it is what the app has always spoken, and a silent
+switch on update would be a surprise.
+
+**Technical vocabulary is not translated, and that rule is what shaped the layout.** Overdrive stays
+overdrive, a head stays a head, a cabinet stays a cabinet — and so do gain, threshold, attack, release,
+ratio, mix, feedback, spillover, crossover, oversampling, impulse response, preset, scene, channel,
+bypass and mute. These are the words printed on the gear and the words anyone reading a manual will
+meet; inventing Indonesian for them would make the app *harder* to use. What is translated is the
+connective tissue: what a block does, what a button will do, what went wrong.
+
+Three files, three jobs:
+
+- **`i18n/strings.ts`** — the UI chrome, ~220 keys namespaced by where they appear (`device.*`,
+  `midi.*`, `perform.*`), so a string is easy to find from a screenshot and hard to reuse where it
+  does not fit. The English record is typed `Record<keyof typeof id, string>`, so a key added to one
+  half and not the other is a compile error rather than a blank label.
+- **`i18n/chain.ts`** — block descriptions, the six parameter labels that were sentences, and the
+  enum choices. Keyed by block **type**, so `overdrive2` reads exactly as `overdrive` does.
+- **`i18n/index.tsx`** — the provider. `useT()` hands back the translator, `useLanguage()` adds the
+  current language for the chain dictionaries. `{name}` placeholders are filled in one pass —
+  deliberately not a template engine, since every string here is a sentence rather than a program.
+  Outside a provider it falls back to Indonesian rather than throwing, so a component rendered alone
+  by a test shows words instead of a stack trace.
+
+**The engine speaks one language, and it is English.** Its labels and descriptions are the *fallback*,
+and they are what a DAW prints in its automation lane — where a runtime language switch is not
+possible. The six that were still Indonesian (`Frekuensi`, `Kaitkan L/R`, `Ketukan/Bar`, `Mode IR`,
+`Pakai IR`, `Tipe`) are English for exactly that reason.
+
+The rule is held by a test rather than by good intentions: `i18n/__tests__/strings.test.ts` sweeps
+**both** dictionaries and fails in both directions — if "head" appears as "kepala", and if "head"
+disappears altogether. The first version of that test read only `STRINGS`; sabotaged by changing the
+NAM description to "Kepala amp" it **passed**, because block descriptions live in `chain.ts`. Same
+class as a suite judging state it did not establish.
 
 ## Gotchas
 

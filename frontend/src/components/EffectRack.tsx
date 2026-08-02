@@ -4,6 +4,7 @@ import { Fader } from './Fader';
 import { Knob } from './Knob';
 import { Toggle } from './Toggle';
 import { ToneCurve } from './ToneCurve';
+import { effectDescription, enumLabels, parameterLabel, useLanguage } from '../i18n';
 import { effectType } from '../services/api';
 import type { EffectDescriptor, ParameterDescriptor } from '../services/api';
 
@@ -33,41 +34,23 @@ export const EFFECT_ACCENTS: Record<string, string> = {
  * Parameters whose numeric value is really a choice. The engine stores them as
  * numbers so everything stays uniform on the wire; only the labels live here.
  */
-const ENUM_OPTIONS: Record<string, string[]> = {
-  'input.mode': ['Mono - Input 1', 'Mono - Input 2', 'Mono - Sum both', 'Stereo'],
-  'overdrive.oversampling': ['Mati', '2x', '4x', '8x'],
-  // Blend = one cabinet with two mics. Stereo = A left, B right, which is how a
-  // real stereo rig is built: one mono amp into two cabinets panned apart.
-  'cabinet.irMode': ['Blend A+B', 'Stereo (A kiri / B kanan)'],
-  // Order fixed by drive::Type in DriveVoicing.h; the index is what presets
-  // store, so these may be appended to but never reordered.
-  'overdrive.type': [
-    'Custom',
-    'Tube Screamer',
-    'Bluesbreaker',
-    'Blues Driver',
-    'Transparent',
-    'OCD',
-    'Dumble',
-    'Marshall-in-a-Box',
-    'Clean Boost',
-    'Centaur',
-    'RAT',
-    'Big Muff',
-  ],
-  // Order fixed by DelayProcessor::SyncDivision; the index is what the engine
-  // stores, so these labels must stay lined up with it.
-  'delay.syncMode': ['Mati', '1/4', '1/8.', '1/8', '1/8T', '1/16'],
-  // Order fixed by SplitProcessor::Mode. L/R is the odd one out: it routes two
-  // sources rather than dividing one, which is what a guitar with a magnetic
-  // and a piezo pickup needs.
-  'split.mode': [
-    'Sama ke dua jalur',
-    'Crossover - low ke A, high ke B',
-    'L/R - kanal L ke A, kanal R ke B',
-  ],
-  'mixer.invertB': ['Normal', 'Dibalik'],
-};
+/**
+ * Which parameters are really a choice rather than a number.
+ *
+ * Only the *keys* live here now -- the words come from the language dictionary,
+ * because they are the one part of a control that has to be readable rather
+ * than technical. The order of each list is fixed by the engine's enum and is
+ * what presets store, so entries may be appended but never reordered.
+ */
+const ENUM_PARAMETERS = new Set([
+  'input.mode',
+  'overdrive.oversampling',
+  'overdrive.type',
+  'cabinet.irMode',
+  'delay.syncMode',
+  'split.mode',
+  'mixer.invertB',
+]);
 
 /**
  * Parameters that another control overrides, and the value at which it does.
@@ -244,6 +227,11 @@ function EffectRackBase({
   disabled = false,
   sampleRate,
 }: EffectRackProps) {
+  const { language, t } = useLanguage();
+
+  /** A control's display name: translated where it was a word, kept where it is a term. */
+  const nameOf = (parameter: ParameterDescriptor) =>
+    parameterLabel(language, effectType(effect.id), parameter.id, parameter.label);
   const accent = EFFECT_ACCENTS[effectType(effect.id)] ?? '#4da3ff';
   const inactive = disabled || !effect.enabled;
 
@@ -299,7 +287,7 @@ function EffectRackBase({
   const primaryKnobId = visibleParameters.find(
     (parameter) =>
       parameter.type === 'float' &&
-      ENUM_OPTIONS[`${effectType(effect.id)}.${parameter.id}`] === undefined,
+      !ENUM_PARAMETERS.has(`${effectType(effect.id)}.${parameter.id}`),
   )?.id;
 
   return (
@@ -326,8 +314,8 @@ function EffectRackBase({
                   <span
                     className="rack__grip"
                     role="button"
-                    aria-label={`Seret ${effect.label} untuk menata ulang rantai`}
-                    title="Seret untuk menata ulang — atau Enter lalu panah"
+                    aria-label={t('rack.dragHint')}
+                    title={t('rack.dragHint')}
                     {...dragHandleProps}
                   >
                     <svg viewBox="0 0 10 16" aria-hidden="true" focusable="false">
@@ -369,8 +357,8 @@ function EffectRackBase({
                 className="rack__move-locked"
                 title={
                   effectType(effect.id) === 'master'
-                    ? 'Selalu terakhir — membawa limiter pengaman'
-                    : 'Selalu pertama — meter input mengandalkan posisinya'
+                    ? t('rack.lockedLast')
+                    : t('rack.lockedFirst')
                 }
                 aria-label="Posisi terkunci"
               >
@@ -388,7 +376,7 @@ function EffectRackBase({
           </div>
         ) : null}
         {bus && onBusChange ? (
-          <div className="rack__bus" role="group" aria-label={`Jalur ${effect.label}`}>
+          <div className="rack__bus" role="group" aria-label={t('rack.runOnPath', { name: effect.label, bus: '' })}>
             {(['A', 'B'] as const).map((option) => (
               <button
                 key={option}
@@ -396,8 +384,8 @@ function EffectRackBase({
                 className={`rack__bus-btn${bus === option ? ' rack__bus-btn--active' : ''}`}
                 disabled={disabled}
                 aria-pressed={bus === option}
-                aria-label={`Jalankan ${effect.label} di jalur ${option}`}
-                title={`Jalur ${option}`}
+                aria-label={t('rack.runOnPath', { name: effect.label, bus: option })}
+                title={t(option === 'A' ? 'board.pathA' : 'board.pathB')}
                 onClick={() => onBusChange(effect.id, option)}
               >
                 {option}
@@ -414,15 +402,17 @@ function EffectRackBase({
             ) : null}
             {effect.label}
           </h2>
-          <p className="rack__subtitle">{effect.description}</p>
+          <p className="rack__subtitle">
+            {effectDescription(language, effectType(effect.id), effect.description)}
+          </p>
         </div>
         {onRemove ? (
           <button
             type="button"
             className="rack__remove"
             disabled={disabled}
-            title={`Buang ${effect.label} dari board`}
-            aria-label={`Buang ${effect.label} dari board`}
+            title={t('board.remove', { name: effect.label })}
+            aria-label={t('board.remove', { name: effect.label })}
             onClick={() => onRemove(effect.id)}
           >
             <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
@@ -478,7 +468,7 @@ function EffectRackBase({
           // Keyed by type, not id: `overdrive2` shares every table with
           // `overdrive`, and looking it up raw would drop the lot.
           const enumKey = `${effectType(effect.id)}.${parameter.id}`;
-          const options = ENUM_OPTIONS[enumKey];
+          const options = enumLabels(language, enumKey);
 
           // A text parameter (an impulse response, say) picks from whatever the
           // engine reports is on disk, so the list is never hardcoded here.
@@ -487,7 +477,7 @@ function EffectRackBase({
 
             return (
               <label key={parameter.id} className="rack__select">
-                <span className="rack__select-label">{parameter.label}</span>
+                <span className="rack__select-label">{nameOf(parameter)}</span>
                 <select
                   value={String(parameter.value ?? '')}
                   disabled={inactive}
@@ -496,7 +486,7 @@ function EffectRackBase({
                   }
                 >
                   <option value="">
-                    {choices.length === 0 ? 'Belum ada berkas' : 'Tidak dipakai'}
+                    {choices.length === 0 ? t('rack.noFiles') : t('rack.notUsed')}
                   </option>
                   {choices.map((choice) => (
                     <option key={choice} value={choice}>
@@ -511,7 +501,7 @@ function EffectRackBase({
           if (options) {
             return (
               <label key={parameter.id} className="rack__select">
-                <span className="rack__select-label">{parameter.label}</span>
+                <span className="rack__select-label">{nameOf(parameter)}</span>
                 <select
                   value={String(Math.round(Number(parameter.value)))}
                   disabled={inactive}
@@ -548,11 +538,11 @@ function EffectRackBase({
                 <Toggle
                   checked={Number(parameter.value) >= 0.5}
                   accent={accent}
-                  label={parameter.label}
+                  label={nameOf(parameter)}
                   disabled={inactive}
                   onChange={(next) => onParameterChange(effect.id, parameter.id, next ? 1 : 0)}
                 />
-                <span className="rack__switch-label">{parameter.label}</span>
+                <span className="rack__switch-label">{nameOf(parameter)}</span>
               </div>
             );
           }
@@ -586,7 +576,7 @@ function EffectRackBase({
               max={parameter.max}
               step={parameter.step}
               defaultValue={parameter.default}
-              label={parameter.label}
+              label={nameOf(parameter)}
               accent={accent}
               disabled={inactive || overridden}
               format={(value) => formatValue(parameter, value)}
@@ -599,7 +589,7 @@ function EffectRackBase({
               max={parameter.max}
               step={parameter.step}
               defaultValue={parameter.default}
-              label={parameter.label}
+              label={nameOf(parameter)}
               unit={parameter.unit}
               accent={accent}
               disabled={inactive || overridden}
