@@ -17,10 +17,16 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v7
 
+      # 24 is the current LTS. Measured across 20/22/24/26 before picking it:
+      # 20, 22 and 24 are green, and **26 fails all 341 tests** -- the jsdom
+      # environment Vitest 0.34 sets up has no `localStorage` there, so the
+      # shared setup file throws before any test body runs. That is the 2023
+      # toolchain meeting a runtime it predates, not a bug here, and it is why
+      # this tracks LTS rather than Current.
       - name: Use Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -55,7 +61,7 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
