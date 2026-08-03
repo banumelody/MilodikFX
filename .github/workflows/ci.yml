@@ -13,6 +13,14 @@ jobs:
       run:
         working-directory: frontend
 
+    # TEMPORARY, for this PR only: which Node versions the 2023-era toolchain
+    # (Vite 4.5, Vitest 0.34) actually still runs on. 24 is the current LTS,
+    # 26 is Current. Collapses back to a single version before merge.
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22, 24, 26]
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v7
@@ -20,7 +28,7 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: ${{ matrix.node }}
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
